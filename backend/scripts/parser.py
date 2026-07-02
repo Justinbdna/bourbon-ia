@@ -1,6 +1,9 @@
 import json
+import logging
 import argparse
 from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 def clean_amendement(amendement_brut):
     """
@@ -33,30 +36,43 @@ def clean_amendement(amendement_brut):
     }
 
 def process_file(input_path, output_path):
-    print(f"Lecture du fichier massif : {input_path}")
+    logging.info(f"Lecture du fichier massif : {input_path}")
+
+    # 1. Vérifier que le fichier source existe
+    if not Path(input_path).is_file():
+        logging.error(f"Fichier introuvable : {input_path}")
+        return None
+
+    # 2. Charger le JSON avec gestion d'erreur ciblée
     try:
         with open(input_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            
-        # Gère la structure selon si c'est une liste directe ou un dictionnaire contenant "amendements"
-        if isinstance(data, dict):
-            amendements_bruts = data.get("amendements", [])
-        else:
-            amendements_bruts = data
-        
-        amendements_nettoyes = []
-        for amendement in amendements_bruts:
-            amendements_nettoyes.append(clean_amendement(amendement))
-            
-        print(f"Nettoyage terminé : {len(amendements_nettoyes)} amendements traités.")
-        
+    except json.JSONDecodeError as e:
+        logging.error(f"JSON invalide ou corrompu dans {input_path} : {e}")
+        return None
+    except OSError as e:
+        logging.error(f"Erreur de lecture du fichier {input_path} : {e}")
+        return None
+
+    # 3. Extraire la liste d'amendements
+    if isinstance(data, dict):
+        amendements_bruts = data.get("amendements", [])
+    else:
+        amendements_bruts = data
+
+    amendements_nettoyes = [clean_amendement(a) for a in amendements_bruts]
+    logging.info(f"Nettoyage terminé : {len(amendements_nettoyes)} amendements traités.")
+
+    # 4. Sauvegarder le résultat allégé
+    try:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(amendements_nettoyes, f, ensure_ascii=False, indent=2)
-            
-        print(f"Fichier allégé sauvegardé avec succès : {output_path}")
-        
-    except Exception as e:
-        print(f"Erreur lors du traitement : {e}")
+    except OSError as e:
+        logging.error(f"Impossible d'écrire dans {output_path} : {e}")
+        return None
+
+    logging.info(f"Fichier allégé sauvegardé : {output_path}")
+    return amendements_nettoyes
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Parser et alléger les JSON d'amendements de l'Assemblée nationale")
