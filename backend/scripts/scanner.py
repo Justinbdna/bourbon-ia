@@ -108,6 +108,66 @@ def resumer_amendement(amendement_clean: dict) -> dict:
     }
 
 
+CHAT_SYSTEM_PROMPT = (
+    "Tu es Bourbon.IA, un assistant législatif expert de l'Assemblée nationale française. "
+    "Tu analyses les amendements, articles de loi et textes juridiques avec rigueur et neutralité. "
+    "Tu utilises un vocabulaire juridique irréprochable mais accessible. "
+    "Si l'utilisateur te fournit un texte ou un document, analyse-le en profondeur. "
+    "Si une information est absente de tes sources, réponds strictement : "
+    "\"Information non disponible dans les sources fournies.\""
+)
+
+
+def chat_libre(message: str, context_text: str = "") -> str | None:
+    """
+    Mode conversationnel libre avec le LLM local.
+
+    Args:
+        message: La question ou consigne de l'utilisateur.
+        context_text: Texte brut optionnel (amendement collé, JSON extrait, etc.)
+
+    Returns:
+        La réponse du LLM en texte libre, ou None en cas d'erreur.
+    """
+    user_content = message
+    if context_text:
+        user_content = (
+            f"{message}\n\n"
+            f"--- DOCUMENT FOURNI ---\n"
+            f"{context_text}\n"
+            f"--- FIN DU DOCUMENT ---"
+        )
+
+    full_prompt = f"[INSTRUCTION SYSTÈME] {CHAT_SYSTEM_PROMPT}\n\n[REQUÊTE]\n{user_content}"
+
+    logging.info(f"💬 Chat libre — message reçu ({len(message)} car.)")
+
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_ID,
+            messages=[
+                {"role": "user", "content": full_prompt},
+            ],
+            temperature=0.4,
+            max_tokens=1024,
+            timeout=60.0,
+        )
+    except ConnectionError:
+        logging.error("Connexion refusée. LM Studio est-il démarré ?")
+        return None
+    except Exception as e:
+        logging.error(f"Erreur lors de l'appel chat au LLM : {e}")
+        return None
+
+    contenu = response.choices[0].message.content
+    if not contenu or not contenu.strip():
+        logging.warning("Réponse vide du LLM en mode chat.")
+        return None
+
+    logging.info("✅ Réponse chat reçue du LLM.")
+    return contenu.strip()
+
+
 if __name__ == "__main__":
     # Test rapide avec un amendement factice
     test_amendement = {

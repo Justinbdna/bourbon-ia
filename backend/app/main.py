@@ -5,6 +5,7 @@ API REST locale pour le MVP du hackathon.
 Endpoints :
   GET  /api/amendements       → Liste les amendements nettoyés
   POST /api/scan              → Scanne un amendement via le LLM local
+  POST /api/chat              → Chat conversationnel libre avec le LLM
 """
 import json
 import logging
@@ -14,7 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from backend.scripts.scanner import resumer_amendement
+from backend.scripts.scanner import resumer_amendement, chat_libre
 
 # --- Configuration ---
 DATA_CLEAN = Path(__file__).resolve().parent.parent.parent / "data" / "clean" / "amendements_clean.json"
@@ -72,6 +73,18 @@ class ScanResponse(BaseModel):
     enjeux_politiques: str
     points_de_vigilance: str
     source: str
+
+
+class ChatRequest(BaseModel):
+    """Corps de la requête POST /api/chat."""
+    message: str
+    context_text: str = ""  # Texte collé ou extrait d'un JSON (optionnel)
+
+
+class ChatResponse(BaseModel):
+    """Réponse du chat conversationnel."""
+    role: str = "assistant"
+    content: str
 
 
 # --- Endpoints ---
@@ -132,6 +145,33 @@ def scanner_amendement(request: ScanRequest):
 
     print("✅ Résumé généré avec succès !")
     return ScanResponse(**resultat)
+
+
+@app.post("/api/chat", response_model=ChatResponse)
+def chat_endpoint(request: ChatRequest):
+    """
+    Chat conversationnel libre avec le LLM local.
+
+    Body JSON : { "message": "Ma question", "context_text": "(optionnel)" }
+    """
+    print(f"💬 Message chat reçu : {request.message[:80]}...")
+
+    if request.context_text:
+        print(f"📎 Document joint détecté ({len(request.context_text)} caractères)")
+
+    reponse = chat_libre(
+        message=request.message,
+        context_text=request.context_text,
+    )
+
+    if not reponse:
+        raise HTTPException(
+            status_code=502,
+            detail="Le LLM local n'a pas répondu. Vérifiez que LM Studio est démarré avec un modèle chargé."
+        )
+
+    print("✅ Réponse chat générée avec succès !")
+    return ChatResponse(content=reponse)
 
 
 # --- Health check ---
