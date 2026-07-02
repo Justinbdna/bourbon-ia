@@ -259,15 +259,15 @@ function App() {
               <optgroup label="💻 100% Local (Mac - Rapide)">
                 <option value="mac_mistral">⚡ Mistral 7B Instruct : Idéal pour les résumés rapides.</option>
                 <option value="mac_llama">🦙 Llama 3 8B Instruct : Parfait pour le multitâche.</option>
-                <option value="mac_qwen">🧠 Qwen 2.5 7B : Précis pour l'extraction de données.</option>
-                <option value="mac_gemma">💎 Gemma 2 2B : Modèle léger et instantané.</option>
+                <option value="mac_qwen">🧠 Qwen 3.5 9B : Précis pour l'extraction de données.</option>
+                <option value="mac_gemma">💎 Gemma 4 E2B : Modèle léger et instantané.</option>
               </optgroup>
               <optgroup label="🚀 Réseau Privé (PC Gamer - Deep Research)">
                 <option value="pc_mistral_7b">⚡ Mistral 7B Instruct : Idéal pour les résumés rapides.</option>
-                <option value="pc_ministral_8b">💡 Ministral 8B Instruct : Raisonnement et logique avancée.</option>
-                <option value="pc_gemma_9b">💎 Gemma 2 9B : Équilibre et précision.</option>
-                <option value="pc_qwen_32b">👑 Qwen 2.5 32B : Expertise juridique absolue.</option>
-                <option value="pc_qwq_32b">🧐 QwQ 32B : Recherche approfondie.</option>
+                <option value="pc_mistral_14b">💡 Ministral 14B Reasoning : Raisonnement et logique avancée.</option>
+                <option value="pc_gemma_12b">💎 Gemma 4 12B : Équilibre et précision.</option>
+                <option value="pc_qwen_35b">👑 Qwen 3.6 35B : Expertise absolue (⭐ RECOMMANDÉ).</option>
+                <option value="pc_qwq_32b">🧐 QwQ 32B : Recherche ultra-approfondie.</option>
               </optgroup>
             </select>
 

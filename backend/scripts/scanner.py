@@ -19,12 +19,12 @@ MAC_URL = "http://127.0.0.1:1234/v1"
 MODEL_MAP = {
     "mac_mistral": "mistralai/mistral-7b-instruct-v0.3",
     "mac_llama": "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF",
-    "mac_qwen": "qwen/qwen2.5-7b-instruct",
-    "mac_gemma": "google/gemma-2-2b-it",
+    "mac_qwen": "qwen/qwen3.5-9b",
+    "mac_gemma": "google/gemma-4-e2b",
     "pc_mistral_7b": "mistralai/mistral-7b-instruct-v0.3",
-    "pc_ministral_8b": "mistralai/ministral-8b-instruct-2410",
-    "pc_gemma_9b": "google/gemma-2-9b-it",
-    "pc_qwen_32b": "qwen/qwen2.5-32b-instruct",
+    "pc_mistral_14b": "mistralai/ministral-3-14b-reasoning",
+    "pc_gemma_12b": "google/gemma-4-12b",
+    "pc_qwen_35b": "qwen/qwen3.6-35b-a3b",
     "pc_qwq_32b": "qwen/qwq-32b"
 }
 DEFAULT_MODEL_ID = "mistralai/mistral-7b-instruct-v0.3"
