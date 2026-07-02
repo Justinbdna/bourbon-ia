@@ -7,13 +7,11 @@ from openai import OpenAI
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 # --- Configuration LM Studio ---
-# Mac local : 127.0.0.1 (défaut)
-# PC Gamer distant via Tailscale
-LM_STUDIO_HOST = os.environ.get("LM_STUDIO_HOST", "100.78.180.81")
-LM_STUDIO_PORT = os.environ.get("LM_STUDIO_PORT", "1234")
+# L'URL est récupérée depuis le fichier .env pour des raisons de sécurité
+base_url = os.environ.get("LLM_API_URL", "http://127.0.0.1:1234/v1")
 
 client = OpenAI(
-    base_url=f"http://{LM_STUDIO_HOST}:{LM_STUDIO_PORT}/v1",
+    base_url=base_url,
     api_key="lm-studio"
 )
 
