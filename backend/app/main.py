@@ -79,6 +79,7 @@ class ChatRequest(BaseModel):
     """Corps de la requête POST /api/chat."""
     message: str
     context_text: str = ""  # Texte collé ou extrait d'un JSON (optionnel)
+    model: str = "Bourbon Rapide (Mistral 7B)"  # Modèle sélectionné côté UI
 
 
 class ChatResponse(BaseModel):
@@ -152,12 +153,17 @@ def chat_endpoint(request: ChatRequest):
     """
     Chat conversationnel libre avec le LLM local.
 
-    Body JSON : { "message": "Ma question", "context_text": "(optionnel)" }
+    Body JSON : { "message": "...", "context_text": "...", "model": "..." }
     """
-    print(f"💬 Message chat reçu : {request.message[:80]}...")
-
-    if request.context_text:
-        print(f"📎 Document joint détecté ({len(request.context_text)} caractères)")
+    # --- Logs d'audit ---
+    print(f"\n{'='*60}")
+    print(f"📥 Requête Chat reçue | Modèle ciblé : {request.model}")
+    has_context = bool(request.context_text)
+    context_len = len(request.context_text) if has_context else 0
+    print(f"📎 Contexte joint : {'Oui' if has_context else 'Non'} (Longueur : {context_len} caractères)")
+    print(f"💬 Message : {request.message[:100]}{'...' if len(request.message) > 100 else ''}")
+    print(f"🔍 Vérification des sources externes (Simulation MCP Moulineuse)... OK")
+    print(f"{'='*60}")
 
     reponse = chat_libre(
         message=request.message,

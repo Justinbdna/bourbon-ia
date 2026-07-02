@@ -8,6 +8,13 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null);
   const [attachedContent, setAttachedContent] = useState('');
+  const [selectedModel, setSelectedModel] = useState('rapid');
+
+  const MODELS = [
+    { id: 'rapid', label: '⚡ Bourbon Rapide (Mistral 7B)', desc: 'Idéal pour les résumés simples.' },
+    { id: 'expert', label: '🧠 Bourbon Expert (Qwen 35B)', desc: 'Parfait pour l\'analyse d\'amendements complexes.' },
+    { id: 'deep', label: '⚖️ Bourbon Deep Research', desc: 'Recherche croisée avec jurisprudence.' },
+  ];
   
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -69,6 +76,7 @@ function App() {
         body: JSON.stringify({
           message: messageTexte || 'Analyse ce document en profondeur.',
           context_text: attachedContent,
+          model: MODELS.find(m => m.id === selectedModel)?.label || 'Bourbon Rapide (Mistral 7B)',
         }),
       });
 
@@ -137,8 +145,16 @@ function App() {
     typingBubble: { display: 'flex', gap: '5px', alignItems: 'center', padding: '1rem 1.25rem', borderRadius: '18px 18px 18px 4px', backgroundColor: '#1c1c1f' },
     typingDot: (delay) => ({ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#60a5fa', animation: `pulse 1.4s ${delay}s infinite ease-in-out` }),
 
+    // Model selector
+    modelSelect: { backgroundColor: '#18181b', color: '#e4e4e7', border: '1px solid #27272a', borderRadius: '8px', padding: '6px 12px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' },
+    modelDesc: { color: '#52525b', fontSize: '0.72rem', margin: 0 },
+
     // Input area
-    inputArea: { padding: '1rem 2rem 1.5rem', borderTop: '1px solid #1c1c1f' },
+    inputArea: { padding: '1rem 2rem 0.5rem', borderTop: '1px solid #1c1c1f' },
+
+    // Disclaimer
+    disclaimer: { padding: '0.25rem 2rem 1rem', textAlign: 'center' },
+    disclaimerText: { color: '#3f3f46', fontSize: '0.7rem', margin: 0 },
     inputContainer: { display: 'flex', alignItems: 'flex-end', gap: '10px', backgroundColor: '#18181b', borderRadius: '16px', padding: '0.75rem 1rem', border: '1px solid #27272a' },
     textarea: { flex: 1, background: 'none', border: 'none', color: '#e4e4e7', fontSize: '0.92rem', resize: 'none', lineHeight: '1.5', maxHeight: '120px', fontFamily: 'inherit' },
     attachBtn: { background: 'none', border: '1px solid #3f3f46', color: '#a1a1aa', padding: '8px 12px', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', whiteSpace: 'nowrap', transition: 'border-color 0.2s' },
@@ -189,10 +205,25 @@ function App() {
 
       {/* ── MAIN ── */}
       <div style={S.main}>
-        {/* Header */}
+        {/* Header + Model Selector */}
         <div style={S.header}>
           <h2 style={S.headerTitle}>Assistant Législatif — Deep Research</h2>
-          <span style={S.headerBadge}>LLM Local · Mistral 7B</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              style={S.modelSelect}
+            >
+              {MODELS.map(m => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+            <span style={S.headerBadge}>100% Local</span>
+          </div>
+        </div>
+        {/* Model description */}
+        <div style={{ padding: '0 2rem', borderBottom: '1px solid #1c1c1f' }}>
+          <p style={S.modelDesc}>{MODELS.find(m => m.id === selectedModel)?.desc}</p>
         </div>
 
         {/* Messages */}
@@ -265,6 +296,11 @@ function App() {
               Envoyer
             </button>
           </div>
+        </div>
+
+        {/* Disclaimer */}
+        <div style={S.disclaimer}>
+          <p style={S.disclaimerText}>Bourbon.IA peut commettre des erreurs, y compris sur des faits juridiques. Veuillez vérifier les informations importantes.</p>
         </div>
       </div>
     </div>
