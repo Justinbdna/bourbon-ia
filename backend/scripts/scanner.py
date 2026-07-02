@@ -1,12 +1,18 @@
 import json
+import os
 import logging
 from openai import OpenAI
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-# Connexion au LLM local via LM Studio (API compatible OpenAI)
+# --- Configuration LM Studio ---
+# Mac local : 127.0.0.1 (défaut)
+# PC Gamer distant : export LM_STUDIO_HOST=192.168.1.XX
+LM_STUDIO_HOST = os.environ.get("LM_STUDIO_HOST", "127.0.0.1")
+LM_STUDIO_PORT = os.environ.get("LM_STUDIO_PORT", "1234")
+
 client = OpenAI(
-    base_url="http://127.0.0.1:1234/v1",
+    base_url=f"http://{LM_STUDIO_HOST}:{LM_STUDIO_PORT}/v1",
     api_key="lm-studio"
 )
 
@@ -14,10 +20,17 @@ client = OpenAI(
 MODEL_ID = "mistralai/mistral-7b-instruct-v0.3"
 
 SYSTEM_PROMPT = (
-    "Tu es Bourbon.IA, un assistant législatif expert de l'Assemblée nationale française. "
-    "Tu résumes les amendements de manière structurée et factuelle. "
-    "Tu ne dois JAMAIS inventer d'information. Si une donnée est absente, "
-    "réponds strictement : 'Information non disponible dans les sources'."
+    "Tu es Bourbon.IA, un assistant législatif conçu pour les députés et collaborateurs "
+    "de l'Assemblée nationale française.\n\n"
+    "TES RÈGLES ABSOLUES :\n"
+    "1. ZÉRO HALLUCINATION : ne cite que les informations présentes dans l'amendement fourni. "
+    "Si une donnée manque, réponds : « Information non disponible dans les sources ».\n"
+    "2. VULGARISE : explique comme si tu briefais un député pressé entre deux séances. "
+    "Pas de jargon juridique inutile, mais garde la rigueur du droit.\n"
+    "3. ALERTE SUR LES PIÈGES : signale les effets de bord, les incompatibilités possibles "
+    "avec le droit existant, ou les formulations ambiguës.\n"
+    "4. SOIS ULTRA-SYNTHÉTIQUE : 5 phrases maximum pour le résumé.\n"
+    "5. CITE TA SOURCE : termine toujours par le numéro exact de l'amendement analysé."
 )
 
 

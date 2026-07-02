@@ -1,9 +1,19 @@
 import json
+import html
+import re
 import logging
 import argparse
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+
+def strip_html(texte: str) -> str:
+    """Supprime les balises HTML et décode les entités (ex: &#x00E8; → è)."""
+    if not texte:
+        return ""
+    sans_balises = re.sub(r"<[^>]+>", "", texte)
+    return html.unescape(sans_balises).strip()
 
 def clean_amendement(amendement_brut):
     """
@@ -17,16 +27,16 @@ def clean_amendement(amendement_brut):
     signataires = amendement_brut.get("signataires", {})
     auteur = "Auteur inconnu"
     if "libelle" in signataires:
-        auteur = signataires.get("libelle", "Auteur inconnu")
+        auteur = strip_html(signataires.get("libelle", "")) or "Auteur inconnu"
     elif "auteur" in signataires:
-        auteur = signataires["auteur"].get("acteurRef", "Auteur inconnu")
+        auteur = strip_html(signataires["auteur"].get("acteurRef", "")) or "Auteur inconnu"
 
     # 3. Textes (Dispositif = le changement de loi, Exposé sommaire = la justification)
     corps = amendement_brut.get("corps", {})
     contenu_auteur = corps.get("contenuAuteur", {})
     
-    dispositif = contenu_auteur.get("dispositif", "Texte non disponible")
-    expose_sommaire = contenu_auteur.get("exposeSommaire", "Exposé des motifs non disponible")
+    dispositif = strip_html(contenu_auteur.get("dispositif", "")) or "Texte non disponible"
+    expose_sommaire = strip_html(contenu_auteur.get("exposeSommaire", "")) or "Exposé des motifs non disponible"
 
     return {
         "numero": numero,
@@ -35,49 +45,70 @@ def clean_amendement(amendement_brut):
         "motif": expose_sommaire
     }
 
-def process_file(input_path, output_path):
-    logging.info(f"Lecture du fichier massif : {input_path}")
-
-    # 1. Vérifier que le fichier source existe
-    if not Path(input_path).is_file():
-        logging.error(f"Fichier introuvable : {input_path}")
-        return None
-
-    # 2. Charger le JSON avec gestion d'erreur ciblée
+def load_single_json(filepath: str) -> dict | None:
+    """Charge un fichier JSON unique et retourne l'amendement nettoyé, ou None."""
     try:
-        with open(input_path, 'r', encoding='utf-8') as f:
+        with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
     except json.JSONDecodeError as e:
-        logging.error(f"JSON invalide ou corrompu dans {input_path} : {e}")
+        logging.error(f"JSON corrompu — {filepath} : {e}")
         return None
     except OSError as e:
-        logging.error(f"Erreur de lecture du fichier {input_path} : {e}")
+        logging.error(f"Lecture impossible — {filepath} : {e}")
         return None
 
-    # 3. Extraire la liste d'amendements
-    if isinstance(data, dict):
-        amendements_bruts = data.get("amendements", [])
-    else:
-        amendements_bruts = data
+    # L'Open Data wrape chaque amendement dans {"amendement": {...}}
+    if "amendement" in data:
+        return clean_amendement(data["amendement"])
+    # Fallback : fichier plat
+    return clean_amendement(data)
 
-    amendements_nettoyes = [clean_amendement(a) for a in amendements_bruts]
-    logging.info(f"Nettoyage terminé : {len(amendements_nettoyes)} amendements traités.")
 
-    # 4. Sauvegarder le résultat allégé
+def process_directory(input_dir: str, output_path: str) -> list | None:
+    """
+    Parcourt récursivement un dossier de JSON (1 fichier = 1 amendement).
+    Retourne la liste des amendements nettoyés et la sauvegarde dans output_path.
+    """
+    input_dir = Path(input_dir)
+    if not input_dir.is_dir():
+        logging.error(f"Dossier introuvable : {input_dir}")
+        return None
+
+    fichiers = sorted(input_dir.rglob("*.json"))
+    logging.info(f"{len(fichiers)} fichiers JSON trouvés dans {input_dir}")
+
+    if not fichiers:
+        logging.warning("Aucun fichier JSON trouvé.")
+        return []
+
+    resultats = []
+    erreurs = 0
+    for f in fichiers:
+        amendement = load_single_json(str(f))
+        if amendement:
+            resultats.append(amendement)
+        else:
+            erreurs += 1
+
+    logging.info(f"Nettoyage terminé : {len(resultats)} ok, {erreurs} erreurs.")
+
+    # Sauvegarder
     try:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(amendements_nettoyes, f, ensure_ascii=False, indent=2)
+            json.dump(resultats, f, ensure_ascii=False, indent=2)
     except OSError as e:
-        logging.error(f"Impossible d'écrire dans {output_path} : {e}")
+        logging.error(f"Écriture impossible — {output_path} : {e}")
         return None
 
     logging.info(f"Fichier allégé sauvegardé : {output_path}")
-    return amendements_nettoyes
+    return resultats
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Parser et alléger les JSON d'amendements de l'Assemblée nationale")
-    parser.add_argument("--input", required=True, help="Chemin vers le JSON source massif")
-    parser.add_argument("--output", required=True, help="Chemin vers le JSON de destination allégé")
-    
-    args = parser.parse_args()
-    process_file(args.input, args.output)
+    p = argparse.ArgumentParser(description="Parser les JSON d'amendements de l'Assemblée nationale")
+    p.add_argument("--input-dir", required=True, help="Dossier racine contenant les JSON bruts")
+    p.add_argument("--output", required=True, help="Chemin vers le JSON de destination allégé")
+
+    args = p.parse_args()
+    process_directory(args.input_dir, args.output)
