@@ -8,8 +8,8 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 # --- Configuration LM Studio ---
 # Mac local : 127.0.0.1 (défaut)
-# PC Gamer distant : export LM_STUDIO_HOST=192.168.1.XX
-LM_STUDIO_HOST = os.environ.get("LM_STUDIO_HOST", "127.0.0.1")
+# PC Gamer distant via Tailscale
+LM_STUDIO_HOST = os.environ.get("LM_STUDIO_HOST", "100.78.180.81")
 LM_STUDIO_PORT = os.environ.get("LM_STUDIO_PORT", "1234")
 
 client = OpenAI(
