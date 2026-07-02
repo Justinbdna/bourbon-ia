@@ -172,6 +172,7 @@ def chat_endpoint(request: ChatRequest):
     reponse = chat_libre(
         message=request.message,
         context_text=request.context_text,
+        model_name=request.model,
     )
 
     if not reponse:

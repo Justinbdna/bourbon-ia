@@ -17,11 +17,29 @@ print(f"\n🔗 Configuration LLM chargée — URL cible : {base_url}")
 
 client = OpenAI(
     base_url=base_url,
-    api_key="lm-studio"
+    api_key="lm-studio",
+    timeout=300.0,  # Timeout global 300s pour les gros modèles (Qwen 35B)
 )
 
-# Identifiant du modèle chargé dans LM Studio
-MODEL_ID = "mistralai/mistral-7b-instruct-v0.3"
+# --- Mapping des modèles commerciaux → ID LM Studio ---
+MODEL_MAP = {
+    "rapid": "mistralai/mistral-7b-instruct-v0.3",
+    "expert": "qwen/qwen3.6-35b-a3b",
+    "deep": "qwen/qwen3.6-35b-a3b",
+}
+DEFAULT_MODEL_ID = "mistralai/mistral-7b-instruct-v0.3"
+
+
+def resolve_model_id(model_name: str = "") -> str:
+    """Traduit le nom commercial du front-end en ID LM Studio."""
+    name = model_name.lower()
+    if "expert" in name or "qwen" in name:
+        return MODEL_MAP["expert"]
+    if "deep" in name or "research" in name:
+        return MODEL_MAP["deep"]
+    if "rapide" in name or "mistral" in name:
+        return MODEL_MAP["rapid"]
+    return DEFAULT_MODEL_ID
 
 SYSTEM_PROMPT = (
     "Tu es un administrateur chevronné de l'Assemblée nationale française, expert en droit constitutionnel. "
@@ -65,15 +83,15 @@ def resumer_amendement(amendement_clean: dict) -> dict:
         # On injecte le rôle système en tête du message utilisateur.
         full_prompt = f"[INSTRUCTION SYSTÈME] {SYSTEM_PROMPT}\n\n[REQUÊTE]\n{user_prompt}"
 
-        print(f"🔗 Tentative de connexion au LLM sur l'URL : {base_url}")
+        model_id = DEFAULT_MODEL_ID
+        print(f"🔗 Tentative de connexion au LLM sur l'URL : {base_url} | Modèle : {model_id}")
         response = client.chat.completions.create(
-            model=MODEL_ID,
+            model=model_id,
             messages=[
                 {"role": "user", "content": full_prompt},
             ],
             temperature=0.3,  # Bas pour rester factuel
             max_tokens=512,
-            timeout=30.0,     # Timeout robuste de 30s
         )
     except ConnectionError:
         logging.error(f"❌ Connexion refusée sur {base_url}. Vérifiez le pare-feu Windows et Tailscale.")
@@ -124,13 +142,14 @@ CHAT_SYSTEM_PROMPT = (
 )
 
 
-def chat_libre(message: str, context_text: str = "") -> str | None:
+def chat_libre(message: str, context_text: str = "", model_name: str = "") -> str | None:
     """
     Mode conversationnel libre avec le LLM local.
 
     Args:
         message: La question ou consigne de l'utilisateur.
         context_text: Texte brut optionnel (amendement collé, JSON extrait, etc.)
+        model_name: Nom commercial du modèle choisi par l'utilisateur.
 
     Returns:
         La réponse du LLM en texte libre, ou None en cas d'erreur.
@@ -146,18 +165,18 @@ def chat_libre(message: str, context_text: str = "") -> str | None:
 
     full_prompt = f"[INSTRUCTION SYSTÈME] {CHAT_SYSTEM_PROMPT}\n\n[REQUÊTE]\n{user_content}"
 
-    logging.info(f"💬 Chat libre — message reçu ({len(message)} car.)")
+    model_id = resolve_model_id(model_name)
+    logging.info(f"💬 Chat libre — message reçu ({len(message)} car.) | Modèle résolu : {model_id}")
 
     try:
-        print(f"🔗 Tentative de connexion au LLM sur l'URL : {base_url}")
+        print(f"🔗 Tentative de connexion au LLM sur l'URL : {base_url} | Modèle : {model_id}")
         response = client.chat.completions.create(
-            model=MODEL_ID,
+            model=model_id,
             messages=[
                 {"role": "user", "content": full_prompt},
             ],
             temperature=0.4,
             max_tokens=1024,
-            timeout=60.0,
         )
     except ConnectionError:
         logging.error(f"❌ Connexion refusée sur {base_url}. Vérifiez le pare-feu Windows et Tailscale.")
