@@ -74,6 +74,9 @@ class ScanResponse(BaseModel):
     """Réponse du scanner LLM."""
     numero: str
     resume: str
+    comparatif: str
+    enjeux_politiques: str
+    points_de_vigilance: str
     source: str
 
 
@@ -105,6 +108,8 @@ def scanner_amendement(request: ScanRequest):
     
     Body JSON : { "numero": "AMANR5L17PO59051B0149P0D1N000001" }
     """
+    print(f"📥 Requête reçue pour l'amendement n° {request.numero}")
+    
     # 1. Trouver l'amendement dans les données chargées
     amendement = None
     for am in AMENDEMENTS:
@@ -113,10 +118,14 @@ def scanner_amendement(request: ScanRequest):
             break
 
     if not amendement:
+        print("🔍 Recherche dans la base... (Non trouvé)")
         raise HTTPException(
             status_code=404,
             detail=f"Amendement '{request.numero}' introuvable dans les {len(AMENDEMENTS)} amendements chargés."
         )
+        
+    print("🔍 Recherche dans la base... (Trouvé)")
+    print("🧠 Envoi du texte à Mistral (LM Studio)...")
 
     # 2. Envoyer au LLM via scanner.py
     resultat = resumer_amendement(amendement)
@@ -127,6 +136,7 @@ def scanner_amendement(request: ScanRequest):
             detail="Le LLM local n'a pas répondu. Vérifiez que LM Studio est démarré avec un modèle chargé."
         )
 
+    print("✅ Résumé généré avec succès !")
     return ScanResponse(**resultat)
 
 

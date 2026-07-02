@@ -1,4 +1,5 @@
 import json
+import re
 import os
 import logging
 from openai import OpenAI
@@ -20,17 +21,10 @@ client = OpenAI(
 MODEL_ID = "mistralai/mistral-7b-instruct-v0.3"
 
 SYSTEM_PROMPT = (
-    "Tu es Bourbon.IA, un assistant législatif conçu pour les députés et collaborateurs "
-    "de l'Assemblée nationale française.\n\n"
-    "TES RÈGLES ABSOLUES :\n"
-    "1. ZÉRO HALLUCINATION : ne cite que les informations présentes dans l'amendement fourni. "
-    "Si une donnée manque, réponds : « Information non disponible dans les sources ».\n"
-    "2. VULGARISE : explique comme si tu briefais un député pressé entre deux séances. "
-    "Pas de jargon juridique inutile, mais garde la rigueur du droit.\n"
-    "3. ALERTE SUR LES PIÈGES : signale les effets de bord, les incompatibilités possibles "
-    "avec le droit existant, ou les formulations ambiguës.\n"
-    "4. SOIS ULTRA-SYNTHÉTIQUE : 5 phrases maximum pour le résumé.\n"
-    "5. CITE TA SOURCE : termine toujours par le numéro exact de l'amendement analysé."
+    "Tu es un administrateur chevronné de l'Assemblée nationale française, expert en droit constitutionnel. "
+    "Ton rôle est de décrypter les amendements pour les parlementaires. "
+    "Tu dois être ultra-concis, neutre, et utiliser un vocabulaire juridique irréprochable. "
+    "Ne fais aucune phrase d'introduction."
 )
 
 
@@ -54,10 +48,11 @@ def resumer_amendement(amendement_clean: dict) -> dict:
         f"**Auteur** : {amendement_clean.get('auteur', 'Non renseigné')}\n\n"
         f"**Dispositif (texte de loi modifié)** :\n{amendement_clean.get('texte', 'Non disponible')}\n\n"
         f"**Exposé des motifs** :\n{amendement_clean.get('motif', 'Non disponible')}\n\n"
-        "Fournis un résumé structuré avec :\n"
-        "1. **Résumé** : 2-3 phrases claires sans jargon.\n"
-        "2. **Enjeux** : les implications juridiques et politiques principales.\n"
-        "3. **Source** : rappelle le numéro de l'amendement analysé."
+        "Exigence stricte : ta réponse DOIT être un objet JSON valide avec EXACTEMENT ces 4 clés :\n"
+        "- \"resume\" (Explication claire de l'action de l'amendement, max 2 phrases)\n"
+        "- \"comparatif\" (Explication explicite de ce que l'amendement MODIFIE, AJOUTE ou SUPPRIME par rapport à la loi initiale)\n"
+        "- \"enjeux_politiques\" (L'impact réel et les débats potentiels générés)\n"
+        "- \"points_de_vigilance\" (Risques constitutionnels ou budgétaires, type Article 40)"
     )
 
     logging.info(f"Envoi de l'amendement n°{numero} au LLM...")
@@ -74,6 +69,7 @@ def resumer_amendement(amendement_clean: dict) -> dict:
             ],
             temperature=0.3,  # Bas pour rester factuel
             max_tokens=512,
+            timeout=30.0,     # Timeout robuste de 30s
         )
     except ConnectionError:
         logging.error("Connexion refusée. LM Studio est-il démarré ?")
@@ -88,11 +84,26 @@ def resumer_amendement(amendement_clean: dict) -> dict:
         logging.warning(f"Réponse vide du LLM pour l'amendement n°{numero}.")
         return None
 
+    # Sécurisation du parsing JSON (fallback si markdown)
+    contenu_propre = contenu.strip()
+    match = re.search(r"```(?:json)?(.*?)```", contenu_propre, re.DOTALL | re.IGNORECASE)
+    if match:
+        contenu_propre = match.group(1).strip()
+
+    try:
+        data_json = json.loads(contenu_propre)
+    except json.JSONDecodeError as e:
+        logging.error(f"Le LLM n'a pas renvoyé un JSON valide pour l'amendement n°{numero} : {e}\nContenu brut : {contenu}")
+        return None
+
     logging.info(f"Résumé reçu pour l'amendement n°{numero}.")
 
     return {
         "numero": numero,
-        "resume": contenu.strip(),
+        "resume": data_json.get("resume", "Non renseigné"),
+        "comparatif": data_json.get("comparatif", "Non renseigné"),
+        "enjeux_politiques": data_json.get("enjeux_politiques", "Non renseigné"),
+        "points_de_vigilance": data_json.get("points_de_vigilance", "Aucun"),
         "source": f"Amendement n°{numero}",
     }
 
@@ -111,7 +122,10 @@ if __name__ == "__main__":
         print("\n" + "=" * 50)
         print("RÉSULTAT DU SCANNER")
         print("=" * 50)
-        print(resultat["resume"])
-        print(f"\n📌 Source : {resultat['source']}")
+        print(f"\n📌 Résumé : {resultat['resume']}")
+        print(f"🔄 Comparatif : {resultat['comparatif']}")
+        print(f"🏛️ Enjeux : {resultat['enjeux_politiques']}")
+        print(f"⚠️ Vigilance : {resultat['points_de_vigilance']}")
+        print(f"🔗 Source : {resultat['source']}")
     else:
         print("❌ Le scan a échoué.")
