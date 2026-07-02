@@ -7,7 +7,6 @@ Endpoints :
   POST /api/scan              → Scanne un amendement via le LLM local
 """
 import json
-import sys
 import logging
 from pathlib import Path
 
@@ -15,12 +14,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# --- Résolution des imports internes ---
-# Ajoute backend/scripts/ au path pour importer scanner.py
-SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
-
-from scanner import resumer_amendement  # noqa: E402
+from backend.scripts.scanner import resumer_amendement
 
 # --- Configuration ---
 DATA_CLEAN = Path(__file__).resolve().parent.parent.parent / "data" / "clean" / "amendements_clean.json"
