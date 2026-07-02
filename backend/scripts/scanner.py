@@ -2,13 +2,18 @@ import json
 import re
 import os
 import logging
+from dotenv import load_dotenv
 from openai import OpenAI
+
+# Charger les variables d'environnement depuis .env AVANT toute utilisation
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 # --- Configuration LM Studio ---
 # L'URL est récupérée depuis le fichier .env pour des raisons de sécurité
 base_url = os.environ.get("LLM_API_URL", "http://127.0.0.1:1234/v1")
+print(f"\n🔗 Configuration LLM chargée — URL cible : {base_url}")
 
 client = OpenAI(
     base_url=base_url,
@@ -60,6 +65,7 @@ def resumer_amendement(amendement_clean: dict) -> dict:
         # On injecte le rôle système en tête du message utilisateur.
         full_prompt = f"[INSTRUCTION SYSTÈME] {SYSTEM_PROMPT}\n\n[REQUÊTE]\n{user_prompt}"
 
+        print(f"🔗 Tentative de connexion au LLM sur l'URL : {base_url}")
         response = client.chat.completions.create(
             model=MODEL_ID,
             messages=[
@@ -70,10 +76,10 @@ def resumer_amendement(amendement_clean: dict) -> dict:
             timeout=30.0,     # Timeout robuste de 30s
         )
     except ConnectionError:
-        logging.error("Connexion refusée. LM Studio est-il démarré ?")
+        logging.error(f"❌ Connexion refusée sur {base_url}. Vérifiez le pare-feu Windows et Tailscale.")
         return None
     except Exception as e:
-        logging.error(f"Erreur lors de l'appel au LLM : {e}")
+        logging.error(f"❌ Erreur lors de l'appel au LLM ({base_url}) : {e}")
         return None
 
     # Extraire la réponse
@@ -143,6 +149,7 @@ def chat_libre(message: str, context_text: str = "") -> str | None:
     logging.info(f"💬 Chat libre — message reçu ({len(message)} car.)")
 
     try:
+        print(f"🔗 Tentative de connexion au LLM sur l'URL : {base_url}")
         response = client.chat.completions.create(
             model=MODEL_ID,
             messages=[
@@ -153,10 +160,10 @@ def chat_libre(message: str, context_text: str = "") -> str | None:
             timeout=60.0,
         )
     except ConnectionError:
-        logging.error("Connexion refusée. LM Studio est-il démarré ?")
+        logging.error(f"❌ Connexion refusée sur {base_url}. Vérifiez le pare-feu Windows et Tailscale.")
         return None
     except Exception as e:
-        logging.error(f"Erreur lors de l'appel chat au LLM : {e}")
+        logging.error(f"❌ Erreur lors de l'appel chat au LLM ({base_url}) : {e}")
         return None
 
     contenu = response.choices[0].message.content

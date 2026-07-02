@@ -10,6 +10,10 @@ Endpoints :
 import json
 import logging
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Charger le .env AVANT tout import interne (scanner.py lit LLM_API_URL au chargement)
+load_dotenv()
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
