@@ -8,13 +8,10 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null);
   const [attachedContent, setAttachedContent] = useState('');
-  const [selectedModel, setSelectedModel] = useState('rapid');
+  const [selectedModel, setSelectedModel] = useState('pc_mistral_7b');
 
-  const MODELS = [
-    { id: 'rapid', label: '⚡ Bourbon Rapide (Mistral 7B)', desc: 'Idéal pour les résumés simples.' },
-    { id: 'expert', label: '🧠 Bourbon Expert (Qwen 35B)', desc: 'Parfait pour l\'analyse d\'amendements complexes.' },
-    { id: 'deep', label: '⚖️ Bourbon Deep Research', desc: 'Recherche croisée avec jurisprudence.' },
-  ];
+  // Initialiser la ref pour l'AbortController
+  const abortControllerRef = useRef(null);
   
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -69,14 +66,18 @@ function App() {
     setInput('');
     setLoading(true);
 
+    // Initialiser le contrôleur d'annulation
+    abortControllerRef.current = new AbortController();
+
     try {
       const response = await fetch('http://127.0.0.1:8000/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: abortControllerRef.current.signal,
         body: JSON.stringify({
           message: messageTexte || 'Analyse ce document en profondeur.',
           context_text: attachedContent,
-          model: MODELS.find(m => m.id === selectedModel)?.label || 'Bourbon Rapide (Mistral 7B)',
+          model: selectedModel,
         }),
       });
 
@@ -87,10 +88,21 @@ function App() {
       const data = await response.json();
       setMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: `❌ Erreur : ${err.message}. Vérifiez que le serveur FastAPI et LM Studio sont actifs.` }]);
+      if (err.name === 'AbortError') {
+        setMessages(prev => [...prev, { role: 'assistant', content: '🛑 Analyse interrompue.' }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: `❌ Erreur : ${err.message}. Vérifiez que le serveur FastAPI et LM Studio sont actifs.` }]);
+      }
     } finally {
       setLoading(false);
       removeAttachment();
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   };
 
@@ -151,14 +163,11 @@ function App() {
 
     // Input area
     inputArea: { padding: '1rem 2rem 0.5rem', borderTop: '1px solid #1c1c1f' },
-
-    // Disclaimer
-    disclaimer: { padding: '0.25rem 2rem 1rem', textAlign: 'center' },
-    disclaimerText: { color: '#3f3f46', fontSize: '0.7rem', margin: 0 },
     inputContainer: { display: 'flex', alignItems: 'flex-end', gap: '10px', backgroundColor: '#18181b', borderRadius: '16px', padding: '0.75rem 1rem', border: '1px solid #27272a' },
     textarea: { flex: 1, background: 'none', border: 'none', color: '#e4e4e7', fontSize: '0.92rem', resize: 'none', lineHeight: '1.5', maxHeight: '120px', fontFamily: 'inherit' },
     attachBtn: { background: 'none', border: '1px solid #3f3f46', color: '#a1a1aa', padding: '8px 12px', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', whiteSpace: 'nowrap', transition: 'border-color 0.2s' },
     sendBtn: (active) => ({ background: active ? '#2563eb' : '#27272a', color: active ? '#fff' : '#52525b', border: 'none', padding: '8px 18px', borderRadius: '10px', cursor: active ? 'pointer' : 'default', fontWeight: '600', fontSize: '0.9rem', transition: 'background 0.2s' }),
+    stopBtn: { background: '#ef4444', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: '10px', cursor: 'pointer', fontWeight: '600', fontSize: '0.9rem', transition: 'background 0.2s' },
     attachmentPreview: { display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 1rem', margin: '0 2rem 0.5rem', backgroundColor: '#1c1c1f', borderRadius: '8px', border: '1px solid #27272a' },
     attachmentName: { flex: 1, color: '#a1a1aa', fontSize: '0.82rem' },
     attachmentRemove: { background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.85rem', padding: '2px 6px' },
@@ -180,18 +189,9 @@ function App() {
         </div>
 
         <div style={S.sideSection}>
-          <div style={S.sideLabel}>Sources MCP Connectées</div>
-          <div style={S.mcpBadge}>
-            <div style={S.mcpDot}></div>
-            <span style={S.mcpText}>Moulineuse (Tricoteuses)</span>
-          </div>
-          <div style={S.mcpBadge}>
-            <div style={S.mcpDot}></div>
-            <span style={S.mcpText}>Parlement (Tricoteuses)</span>
-          </div>
-          <div style={S.mcpBadge}>
-            <div style={S.mcpDot}></div>
-            <span style={S.mcpText}>Open Data Assemblée</span>
+          <div style={S.sideLabel}>Historique</div>
+          <div style={{...S.historyItem, backgroundColor: '#27272a', color: '#e4e4e7'}}>
+            💬 Nouvelle conversation
           </div>
         </div>
 
@@ -205,25 +205,10 @@ function App() {
 
       {/* ── MAIN ── */}
       <div style={S.main}>
-        {/* Header + Model Selector */}
+        {/* Header */}
         <div style={S.header}>
           <h2 style={S.headerTitle}>Assistant Législatif — Deep Research</h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              style={S.modelSelect}
-            >
-              {MODELS.map(m => (
-                <option key={m.id} value={m.id}>{m.label}</option>
-              ))}
-            </select>
-            <span style={S.headerBadge}>100% Local</span>
-          </div>
-        </div>
-        {/* Model description */}
-        <div style={{ padding: '0 2rem', borderBottom: '1px solid #1c1c1f' }}>
-          <p style={S.modelDesc}>{MODELS.find(m => m.id === selectedModel)?.desc}</p>
+          <span style={S.headerBadge}>100% Local</span>
         </div>
 
         {/* Messages */}
@@ -272,12 +257,33 @@ function App() {
               style={{ display: 'none' }}
               onChange={handleFileAttach}
             />
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              style={S.modelSelect}
+              title="Choisir le modèle d'analyse"
+            >
+              <optgroup label="🖥️ 100% Local (Mac - Rapide)">
+                <option value="mac_mistral">⚡ Mistral 7B Instruct</option>
+                <option value="mac_llama">🦙 Llama 3 8B Instruct</option>
+                <option value="mac_qwen">🧠 Qwen 3.5</option>
+                <option value="mac_gemma">💎 Gemma 4B</option>
+              </optgroup>
+              <optgroup label="🚀 Réseau Privé (PC Gamer - Deep Research)">
+                <option value="pc_mistral_7b">⚡ Mistral 7B Instruct</option>
+                <option value="pc_mistral_14b">💡 Mistral 14B Reasoning</option>
+                <option value="pc_gemma_12b">💎 Gemma 12B</option>
+                <option value="pc_qwen_35b">👑 Qwen 3.6 (35B)</option>
+                <option value="pc_qwq_32b">🧐 QwQ 32B</option>
+              </optgroup>
+            </select>
+
             <button
               style={S.attachBtn}
               onClick={() => fileInputRef.current?.click()}
               title="Joindre un fichier JSON, TXT ou PDF"
             >
-              📎 Fichier
+              📎
             </button>
             <textarea
               rows={1}
@@ -288,13 +294,19 @@ function App() {
               onKeyDown={handleKeyDown}
               disabled={loading}
             />
-            <button
-              style={S.sendBtn(!loading && (input.trim() || attachedContent))}
-              onClick={envoyerMessage}
-              disabled={loading || (!input.trim() && !attachedContent)}
-            >
-              Envoyer
-            </button>
+            {loading ? (
+              <button style={S.stopBtn} onClick={handleStop}>
+                🛑 Stop
+              </button>
+            ) : (
+              <button
+                style={S.sendBtn(input.trim() || attachedContent)}
+                onClick={envoyerMessage}
+                disabled={!input.trim() && !attachedContent}
+              >
+                Envoyer
+              </button>
+            )}
           </div>
         </div>
 

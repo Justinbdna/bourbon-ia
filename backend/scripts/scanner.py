@@ -11,35 +11,36 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 # --- Configuration LM Studio ---
-# L'URL est récupérée depuis le fichier .env pour des raisons de sécurité
-base_url = os.environ.get("LLM_API_URL", "http://127.0.0.1:1234/v1")
-print(f"\n🔗 Configuration LLM chargée — URL cible : {base_url}")
-
-client = OpenAI(
-    base_url=base_url,
-    api_key="lm-studio",
-    timeout=300.0,  # Timeout global 300s pour les gros modèles (Qwen 35B)
-)
+# L'URL du PC distant est récupérée depuis le fichier .env
+PC_URL = os.environ.get("LLM_API_URL", "http://100.78.180.81:1234/v1")
+MAC_URL = "http://127.0.0.1:1234/v1"
 
 # --- Mapping des modèles commerciaux → ID LM Studio ---
 MODEL_MAP = {
-    "rapid": "mistralai/mistral-7b-instruct-v0.3",
-    "expert": "qwen/qwen3.6-35b-a3b",
-    "deep": "qwen/qwen3.6-35b-a3b",
+    "mac_mistral": "mistralai/mistral-7b-instruct-v0.3",
+    "mac_llama": "meta-llama/Meta-Llama-3-8B-Instruct-GGUF",
+    "mac_qwen": "qwen/qwen-3.5",
+    "mac_gemma": "google/gemma-2b",
+    "pc_mistral_7b": "mistralai/mistral-7b-instruct-v0.3",
+    "pc_mistral_14b": "mistralai/mistral-14b-reasoning",
+    "pc_gemma_12b": "google/gemma-12b",
+    "pc_qwen_35b": "qwen/qwen3.6-35b-a3b",
+    "pc_qwq_32b": "qwen/qwq-32b"
 }
 DEFAULT_MODEL_ID = "mistralai/mistral-7b-instruct-v0.3"
 
 
-def resolve_model_id(model_name: str = "") -> str:
-    """Traduit le nom commercial du front-end en ID LM Studio."""
+def resolve_model_and_url(model_name: str = ""):
+    """Traduit la clé du front-end en (URL_CIBLE, ID_LM_STUDIO)."""
     name = model_name.lower()
-    if "expert" in name or "qwen" in name:
-        return MODEL_MAP["expert"]
-    if "deep" in name or "research" in name:
-        return MODEL_MAP["deep"]
-    if "rapide" in name or "mistral" in name:
-        return MODEL_MAP["rapid"]
-    return DEFAULT_MODEL_ID
+    
+    # Routage
+    target_url = MAC_URL if name.startswith("mac_") else PC_URL
+    
+    # Mapping exact
+    model_id = MODEL_MAP.get(name, DEFAULT_MODEL_ID)
+    
+    return target_url, model_id
 
 SYSTEM_PROMPT = (
     "Tu es un administrateur chevronné de l'Assemblée nationale française, expert en droit constitutionnel. "
@@ -84,7 +85,9 @@ def resumer_amendement(amendement_clean: dict) -> dict:
         full_prompt = f"[INSTRUCTION SYSTÈME] {SYSTEM_PROMPT}\n\n[REQUÊTE]\n{user_prompt}"
 
         model_id = DEFAULT_MODEL_ID
-        print(f"🔗 Tentative de connexion au LLM sur l'URL : {base_url} | Modèle : {model_id}")
+        client = OpenAI(base_url=PC_URL, api_key="lm-studio", timeout=300.0)
+        
+        print(f"🔗 Tentative de connexion au LLM sur l'URL : {PC_URL} | Modèle : {model_id}")
         response = client.chat.completions.create(
             model=model_id,
             messages=[
@@ -94,10 +97,10 @@ def resumer_amendement(amendement_clean: dict) -> dict:
             max_tokens=512,
         )
     except ConnectionError:
-        logging.error(f"❌ Connexion refusée sur {base_url}. Vérifiez le pare-feu Windows et Tailscale.")
+        logging.error(f"❌ Connexion refusée sur {PC_URL}. Vérifiez le pare-feu Windows et Tailscale.")
         return None
     except Exception as e:
-        logging.error(f"❌ Erreur lors de l'appel au LLM ({base_url}) : {e}")
+        logging.error(f"❌ Erreur lors de l'appel au LLM ({PC_URL}) : {e}")
         return None
 
     # Extraire la réponse
@@ -131,10 +134,11 @@ def resumer_amendement(amendement_clean: dict) -> dict:
 
 
 CHAT_SYSTEM_PROMPT = (
-    "Tu es Bourbon.IA, un assistant législatif expert de l'Assemblée nationale française. "
-    "Tu analyses les amendements, articles de loi et textes juridiques avec rigueur et neutralité. "
-    "Tu utilises un vocabulaire juridique irréprochable mais accessible. "
-    "Si l'utilisateur te fournit un texte ou un document, analyse-le en profondeur. "
+    "Tu es Bourbon.IA. Lors de l'analyse d'un amendement (texte ou JSON), tu DOIS structurer le début de ta réponse ainsi :\n"
+    "- 👤 Auteur(s) / Gouvernement : [Extraire l'info]\n"
+    "- 📅 Date de dépôt : [Extraire l'info]\n"
+    "- 📜 Article visé : [Extraire l'info]\n"
+    "Ensuite, rédige ton résumé et liste les risques.\n\n"
     "RÈGLE ABSOLUE : Tu ne dois JAMAIS inventer de faits juridiques ou politiques. "
     "Si la réponse ne se trouve pas dans les textes fournis, réponds EXACTEMENT : "
     "'Je n'ai pas cette information. Veuillez me fournir le texte via le trombone pour une analyse sécurisée.' "
@@ -165,11 +169,13 @@ def chat_libre(message: str, context_text: str = "", model_name: str = "") -> st
 
     full_prompt = f"[INSTRUCTION SYSTÈME] {CHAT_SYSTEM_PROMPT}\n\n[REQUÊTE]\n{user_content}"
 
-    model_id = resolve_model_id(model_name)
-    logging.info(f"💬 Chat libre — message reçu ({len(message)} car.) | Modèle résolu : {model_id}")
+    target_url, model_id = resolve_model_and_url(model_name)
+    logging.info(f"💬 Chat libre — message reçu ({len(message)} car.) | Modèle résolu : {model_id} sur {target_url}")
+
+    client = OpenAI(base_url=target_url, api_key="lm-studio", timeout=300.0)
 
     try:
-        print(f"🔗 Tentative de connexion au LLM sur l'URL : {base_url} | Modèle : {model_id}")
+        print(f"🔗 Tentative de connexion au LLM sur l'URL : {target_url} | Modèle : {model_id}")
         response = client.chat.completions.create(
             model=model_id,
             messages=[
@@ -179,10 +185,10 @@ def chat_libre(message: str, context_text: str = "", model_name: str = "") -> st
             max_tokens=2048,
         )
     except ConnectionError:
-        logging.error(f"❌ Connexion refusée sur {base_url}. Vérifiez le pare-feu Windows et Tailscale.")
+        logging.error(f"❌ Connexion refusée sur {target_url}. Vérifiez le pare-feu Windows et Tailscale.")
         return None
     except Exception as e:
-        logging.error(f"❌ Erreur lors de l'appel chat au LLM ({base_url}) : {e}")
+        logging.error(f"❌ Erreur lors de l'appel chat au LLM ({target_url}) : {e}")
         return None
 
     contenu = response.choices[0].message.content
