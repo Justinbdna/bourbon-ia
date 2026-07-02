@@ -163,7 +163,7 @@ function App() {
 
     // Input area
     inputArea: { padding: '1rem 2rem 0.5rem', borderTop: '1px solid #1c1c1f' },
-    inputContainer: { display: 'flex', alignItems: 'flex-end', gap: '10px', backgroundColor: '#18181b', borderRadius: '16px', padding: '0.75rem 1rem', border: '1px solid #27272a' },
+    inputContainer: { display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '12px', backgroundColor: '#18181b', borderRadius: '16px', padding: '0.75rem 1rem', border: '1px solid #27272a' },
     textarea: { flex: 1, background: 'none', border: 'none', color: '#e4e4e7', fontSize: '0.92rem', resize: 'none', lineHeight: '1.5', maxHeight: '120px', fontFamily: 'inherit' },
     attachBtn: { background: 'none', border: '1px solid #3f3f46', color: '#a1a1aa', padding: '8px 12px', borderRadius: '10px', cursor: 'pointer', fontSize: '0.85rem', whiteSpace: 'nowrap', transition: 'border-color 0.2s' },
     sendBtn: (active) => ({ background: active ? '#2563eb' : '#27272a', color: active ? '#fff' : '#52525b', border: 'none', padding: '8px 18px', borderRadius: '10px', cursor: active ? 'pointer' : 'default', fontWeight: '600', fontSize: '0.9rem', transition: 'background 0.2s' }),
@@ -179,13 +179,6 @@ function App() {
       <div style={S.sidebar}>
         <div style={S.logo}>
           Bourbon<span style={S.logoAccent}>.IA</span>
-        </div>
-
-        <div style={S.sideSection}>
-          <div style={S.sideLabel}>Historique</div>
-          <div style={{...S.historyItem, backgroundColor: '#27272a', color: '#e4e4e7'}}>
-            💬 Nouvelle conversation
-          </div>
         </div>
 
         <div style={S.sideSection}>
@@ -263,18 +256,18 @@ function App() {
               style={S.modelSelect}
               title="Choisir le modèle d'analyse"
             >
-              <optgroup label="🖥️ 100% Local (Mac - Rapide)">
-                <option value="mac_mistral">⚡ Mistral 7B Instruct</option>
-                <option value="mac_llama">🦙 Llama 3 8B Instruct</option>
-                <option value="mac_qwen">🧠 Qwen 3.5</option>
-                <option value="mac_gemma">💎 Gemma 4B</option>
+              <optgroup label="💻 100% Local (Mac - Rapide)">
+                <option value="mac_mistral">⚡ Mistral 7B Instruct : Idéal pour les résumés rapides.</option>
+                <option value="mac_llama">🦙 Llama 3 8B Instruct : Parfait pour le multitâche.</option>
+                <option value="mac_qwen">🧠 Qwen 3.5 9B : Précis pour l'extraction de données.</option>
+                <option value="mac_gemma">💎 Gemma 4.3B : Modèle léger et instantané.</option>
               </optgroup>
               <optgroup label="🚀 Réseau Privé (PC Gamer - Deep Research)">
-                <option value="pc_mistral_7b">⚡ Mistral 7B Instruct</option>
-                <option value="pc_mistral_14b">💡 Mistral 14B Reasoning</option>
-                <option value="pc_gemma_12b">💎 Gemma 12B</option>
-                <option value="pc_qwen_35b">👑 Qwen 3.6 (35B)</option>
-                <option value="pc_qwq_32b">🧐 QwQ 32B</option>
+                <option value="pc_mistral_7b">⚡ Mistral 7B Instruct : Généraliste puissant.</option>
+                <option value="pc_mistral_14b">💡 Mistral 14B Reasoning : Logique complexe.</option>
+                <option value="pc_gemma_12b">💎 Gemma 12B : Équilibre et précision.</option>
+                <option value="pc_qwen_35b">👑 Qwen 3.6 35B : Expertise juridique absolue.</option>
+                <option value="pc_qwq_32b">🧐 QwQ 32B : Recherche approfondie.</option>
               </optgroup>
             </select>
 
