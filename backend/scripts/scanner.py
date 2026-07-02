@@ -175,8 +175,8 @@ def chat_libre(message: str, context_text: str = "", model_name: str = "") -> st
             messages=[
                 {"role": "user", "content": full_prompt},
             ],
-            temperature=0.4,
-            max_tokens=1024,
+            temperature=0.3,
+            max_tokens=2048,
         )
     except ConnectionError:
         logging.error(f"❌ Connexion refusée sur {base_url}. Vérifiez le pare-feu Windows et Tailscale.")
@@ -188,7 +188,7 @@ def chat_libre(message: str, context_text: str = "", model_name: str = "") -> st
     contenu = response.choices[0].message.content
     if not contenu or not contenu.strip():
         logging.warning("Réponse vide du LLM en mode chat.")
-        return None
+        return "L'IA a traité la demande mais n'a généré aucun texte. Veuillez reformuler ou réduire la taille du document."
 
     logging.info("✅ Réponse chat reçue du LLM.")
     return contenu.strip()
