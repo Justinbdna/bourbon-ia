@@ -8,20 +8,11 @@ Usage :
 import json
 import logging
 import argparse
-import os
 from pathlib import Path
 
-# Import des modules Bourbon.IA
-from parser import process_directory
 from scanner import resumer_amendement
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-
-# --- Configuration LM Studio ---
-# Par défaut : localhost (Mac). Pour appeler un PC distant, change LM_STUDIO_HOST.
-# Ex: export LM_STUDIO_HOST=192.168.1.50
-LM_STUDIO_HOST = os.environ.get("LM_STUDIO_HOST", "127.0.0.1")
-LM_STUDIO_PORT = os.environ.get("LM_STUDIO_PORT", "1234")
 
 
 def run_pipeline(clean_path: str, output_path: str, limit: int | None = None):
@@ -60,9 +51,13 @@ def run_pipeline(clean_path: str, output_path: str, limit: int | None = None):
     # 3. Sauvegarder les résultats
     logging.info(f"Scan terminé : {len(resultats)}/{len(amendements)} résumés générés.")
 
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(resultats, f, ensure_ascii=False, indent=2)
+    try:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(resultats, f, ensure_ascii=False, indent=2)
+    except OSError as e:
+        logging.error(f"Écriture impossible — {output_path} : {e}")
+        return None
 
     logging.info(f"Résultats sauvegardés : {output_path}")
     return resultats

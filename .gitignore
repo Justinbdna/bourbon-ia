@@ -22,3 +22,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python
+__pycache__/
+*.pyc
+backend/venv/
+
+# Données (trop lourdes pour Git)
+data/raw/
+data/clean/
+
+# Variables d'environnement
+.env
