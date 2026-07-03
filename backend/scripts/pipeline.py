@@ -2,15 +2,15 @@
 Pipeline Bourbon.IA — Chaîne complète : Parser → Scanner
 Charge les amendements nettoyés et les envoie au LLM un par un.
 
-Usage :
-  python3 pipeline.py --clean data/clean/amendements_clean.json --limit 3
+Usage (depuis la racine du dépôt, comme le backend) :
+  python3 -m backend.scripts.pipeline --clean data/clean/amendements_clean.json --limit 3
 """
 import json
 import logging
 import argparse
 from pathlib import Path
 
-from scanner import resumer_amendement
+from backend.scripts.scanner import resumer_amendement
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 

@@ -1,0 +1,10 @@
+# Bourbon.IA — dépendances Back-End (Python 3.10+)
+# Installation :  pip install -r backend/requirements.txt
+
+fastapi>=0.110
+uvicorn[standard]>=0.29      # Serveur ASGI pour lancer l'API FastAPI
+pydantic>=2.0                # Modèles de données (fourni avec FastAPI, épinglé ici pour clarté)
+python-dotenv>=1.0           # Chargement du fichier .env (LLM_API_URL, etc.)
+openai>=1.0                  # Client compatible OpenAI utilisé pour parler à LM Studio / Ollama en local
+httpx>=0.27                  # Appels HTTP vers le serveur MCP
+requests>=2.31              # Utilisé par les scripts de test (test_qwen_auto.py)
