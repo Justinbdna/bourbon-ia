@@ -172,107 +172,50 @@ def chat_libre(message: str, context_text: str = "", model_name: str = ""):
     """
     Mode conversationnel libre avec le LLM local (Streaming).
     """
+    # 1. Gestion de l'interrogation MCP de manière autonome
+    mcp_result = ""
+    if not context_text:
+        yield f"\n\n> 🔍 *Recherche dans la base parlementaire MCP pour : {message}...*\n\n"
+        print(f"📡 ÉTAPE 1 : Aucun document fourni. Recherche automatique via MCP pour : {message}")
+        mcp_result = call_mcp_tool(message)
+        print(f"✅ ÉTAPE 2 : Réponse MCP reçue ({len(mcp_result)} caractères). Injection dans le contexte...")
+        
+        # Injection silencieuse du résultat dans le contexte
+        context_text = mcp_result
+
+    # 2. Construction du prompt utilisateur final avec le contexte (fourni ou trouvé)
     user_content = message
     if context_text:
         user_content = (
             f"{message}\n\n"
-            f"--- DOCUMENT FOURNI ---\n"
+            f"--- DOCUMENT FOURNI / RÉSULTAT DE RECHERCHE ---\n"
             f"{context_text}\n"
             f"--- FIN DU DOCUMENT ---"
         )
 
+    # 3. Instruction système avec protection anti-hallucination
     full_prompt = f"[INSTRUCTION SYSTÈME] {CHAT_SYSTEM_PROMPT}\n\n[REQUÊTE]\n{user_content}"
-
+    
     target_url, model_id = resolve_model_and_url(model_name)
-    logging.info(f"💬 Chat libre (stream/tools) — message reçu ({len(message)} car.) | Modèle résolu : {model_id} sur {target_url}")
+    logging.info(f"💬 Chat libre (stream) — message reçu ({len(message)} car.) | Modèle résolu : {model_id} sur {target_url}")
 
     client = OpenAI(base_url=target_url, api_key="lm-studio", timeout=300.0)
-    
-    messages = [{"role": "user", "content": full_prompt}]
-    tools = [{
-        "type": "function",
-        "function": {
-            "name": "recherche_mcp",
-            "description": "Recherche dans la base de données de l'Assemblée nationale",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "La requête de recherche (ex: 'réforme des retraites', numéro de l'amendement)."
-                    }
-                },
-                "required": ["query"]
-            }
-        }
-    }]
 
     try:
-        print("📡 ÉTAPE 1 : Requête envoyée au LLM...")
-        # Étape 1 : Appel sans stream pour voir s'il veut utiliser un outil
+        print(f"🔗 Tentative de connexion au LLM sur l'URL : {target_url} | Modèle : {model_id} (Streaming Direct)")
+        print("✍️ ÉTAPE 3 : Streaming de la réponse finale en cours...")
+        
         response = client.chat.completions.create(
             model=model_id,
-            messages=messages,
+            messages=[{"role": "user", "content": full_prompt}],
             temperature=0.3,
             max_tokens=2048,
-            tools=tools if not context_text else None, # Pas d'outil si le doc est fourni
-            stream=False
+            stream=True
         )
-        
-        response_message = response.choices[0].message
-        
-        if response_message.tool_calls:
-            tool_call = response_message.tool_calls[0]
-            query = ""
-            if tool_call.function.arguments:
-                try:
-                    args = json.loads(tool_call.function.arguments)
-                    query = args.get("query", "")
-                except json.JSONDecodeError:
-                    pass
-            
-            print(f"🛠️ ÉTAPE 2 : Le LLM demande l'outil MCP pour la requête : {query}")
-            yield f"\n\n> 🔍 *Appel de la base parlementaire MCP pour : {query}...*\n\n"
-            
-            mcp_result = call_mcp_tool(query)
-            print(f"✅ ÉTAPE 3 : Réponse du serveur MCP reçue ({len(mcp_result)} caractères). Renvoi au LLM...")
-            
-            # Ajouter le message assistant (appel) et le message tool (résultat)
-            messages.append(response_message)
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call.id,
-                "name": tool_call.function.name,
-                "content": mcp_result
-            })
-            
-            print("✍️ ÉTAPE 4 : Streaming de la réponse finale en cours...")
-            second_response = client.chat.completions.create(
-                model=model_id,
-                messages=messages,
-                temperature=0.3,
-                max_tokens=2048,
-                stream=True
-            )
-            for chunk in second_response:
-                delta = chunk.choices[0].delta
-                if hasattr(delta, 'content') and delta.content:
-                    yield delta.content
-        else:
-            print("✍️ ÉTAPE 4 : Streaming de la réponse finale en cours... (sans outil)")
-            # Relancer avec stream=True puisqu'il n'a pas utilisé d'outil
-            # On passe None aux outils pour forcer la réponse
-            stream_response = client.chat.completions.create(
-                model=model_id,
-                messages=messages,
-                temperature=0.3,
-                max_tokens=2048,
-                stream=True
-            )
-            for chunk in stream_response:
-                delta = chunk.choices[0].delta
-                if hasattr(delta, 'content') and delta.content:
-                    yield delta.content
+
+        for chunk in response:
+            if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
 
     except ConnectionError:
         logging.error(f"❌ Connexion refusée sur {target_url}. Vérifiez le pare-feu Windows et Tailscale.")
