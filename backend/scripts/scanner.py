@@ -135,6 +135,59 @@ def resumer_amendement(amendement_clean: dict) -> dict:
     }
 
 
+def analyser_amendement_statut(amendement_brut: dict, model_name: str = "") -> dict:
+    """
+    Analyse un amendement pour déterminer son statut selon le contrat de données Front/Back.
+    Retourne { "id": ..., "statut": ..., "justification": ..., "alerte_couleur": ... }
+    """
+    amend_id = str(amendement_brut.get("id", amendement_brut.get("numero", "Inconnu")))
+    texte = amendement_brut.get("texte", "")
+    motif = amendement_brut.get("motif", "")
+    
+    user_prompt = (
+        f"Analyse l'amendement suivant :\n"
+        f"Texte : {texte}\n"
+        f"Motif : {motif}\n\n"
+        "Exigence stricte : ta réponse DOIT être un objet JSON valide avec EXACTEMENT ces clés :\n"
+        '- "statut" (Valeur exacte parmi : "Doublon", "Identique", "Incompatible", "Nouveau")\n'
+        '- "justification" (Explication courte d\'1 phrase)\n'
+        '- "alerte_couleur" (Valeur exacte parmi : "rouge", "orange", "vert")'
+    )
+    
+    target_url, model_id = resolve_model_and_url(model_name)
+    client = OpenAI(base_url=target_url, api_key="lm-studio", timeout=300.0)
+    
+    full_prompt = f"[INSTRUCTION SYSTÈME] Tu es un assistant juridique strict. Réponds uniquement en JSON sans aucun autre texte.\n\n[REQUÊTE]\n{user_prompt}"
+    
+    try:
+        response = client.chat.completions.create(
+            model=model_id,
+            messages=[{"role": "user", "content": full_prompt}],
+            temperature=0.1,
+            max_tokens=256,
+        )
+        contenu = response.choices[0].message.content.strip()
+        match = re.search(r"```(?:json)?(.*?)```", contenu, re.DOTALL | re.IGNORECASE)
+        if match:
+            contenu = match.group(1).strip()
+        data_json = json.loads(contenu)
+        
+        return {
+            "id": amend_id,
+            "statut": data_json.get("statut", "Nouveau"),
+            "justification": data_json.get("justification", "Analyse non concluante"),
+            "alerte_couleur": data_json.get("alerte_couleur", "vert")
+        }
+    except Exception as e:
+        logging.error(f"❌ Erreur lors de l'analyse statut pour {amend_id} : {e}")
+        return {
+            "id": amend_id,
+            "statut": "Erreur",
+            "justification": f"Échec de l'analyse : {e}",
+            "alerte_couleur": "rouge"
+        }
+
+
 CHAT_SYSTEM_PROMPT = (
     "Tu agis comme un outil d'analyse juridique de pointe. Ta réponse doit être structurée avec des puces (bullet points) percutantes. "
     "Va droit au but : contexte, article visé, risques, conclusion. N'extrapole jamais.\n"

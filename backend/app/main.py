@@ -20,7 +20,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from backend.scripts.scanner import resumer_amendement, chat_libre
+from backend.scripts.scanner import resumer_amendement, chat_libre, analyser_amendement_statut
 
 # --- Configuration ---
 DATA_CLEAN = Path(__file__).resolve().parent.parent.parent / "data" / "clean" / "amendements_clean.json"
@@ -93,6 +93,17 @@ class ChatResponse(BaseModel):
     content: str
 
 
+class AnalyzeRequest(BaseModel):
+    amendements: list[dict]
+    model: str = "mac_mistral"
+
+class AnalyzeResult(BaseModel):
+    id: str
+    statut: str
+    justification: str
+    alerte_couleur: str
+
+
 # --- Endpoints ---
 @app.get("/api/amendements")
 def lister_amendements(limit: int = 20, offset: int = 0):
@@ -130,6 +141,19 @@ def tricoteuses_mock(request: dict):
     return {"result": {"content": [{"text": "Aucune donnée disponible"}]}}
 
 # === ENDPOINTS API ===
+@app.post("/api/analyze", response_model=list[AnalyzeResult])
+def analyze_endpoint(request: AnalyzeRequest):
+    """
+    Contrat de Données Front/Back (Yassine).
+    Reçoit un tableau d'amendements bruts et retourne pour chacun son statut structuré.
+    """
+    resultats = []
+    for amend in request.amendements:
+        res = analyser_amendement_statut(amend, request.model)
+        resultats.append(res)
+    return resultats
+
+
 @app.post("/api/scan", response_model=ScanResponse)
 def scanner_amendement(request: ScanRequest):
     """
