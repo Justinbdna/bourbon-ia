@@ -12,14 +12,13 @@ const markdownStyles = `
 
 function App() {
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Bienvenue sur Bourbon.IA, votre assistant législatif 100 % local.\n\nJe suis connecté aux sources MCP Tricoteuses et à l\'open data de l\'Assemblée nationale.\n\nVous pouvez me poser une question, coller un texte d\'amendement, ou joindre un fichier JSON pour une analyse approfondie.' }
+    { role: 'assistant', content: 'Bonjour ! Je suis Bourbon.IA, votre assistant législatif 100% local. Prêt à mouliner de l\'amendement (sans jamais envoyer vos données à OpenAI). Que souhaitez-vous analyser ?' }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [attachedFile, setAttachedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [attachedContent, setAttachedContent] = useState('');
   const [selectedModel, setSelectedModel] = useState('pc_mistral_7b');
-  const [thinkStatus, setThinkStatus] = useState("");
 
   // Initialiser la ref pour l'AbortController
   const abortControllerRef = useRef(null);
@@ -45,20 +44,23 @@ function App() {
     document.head.appendChild(style);
   }, []);
 
-  const handleFileAttach = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
 
-    setAttachedFile(file);
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      setAttachedContent(evt.target.result);
-    };
-    reader.readAsText(file);
+    setSelectedFiles(prev => [...prev, ...files]);
+
+    for (const file of files) {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        setAttachedContent(prev => prev + `\n\n--- Fichier : ${file.name} ---\n${evt.target.result}`);
+      };
+      reader.readAsText(file);
+    }
   };
 
   const removeAttachment = () => {
-    setAttachedFile(null);
+    setSelectedFiles([]);
     setAttachedContent('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -70,23 +72,13 @@ function App() {
     // Ajouter le message utilisateur à l'historique
     const userMessage = {
       role: 'user',
-      content: messageTexte || '(Document joint pour analyse)',
-      attachment: attachedFile?.name || null,
+      content: messageTexte || '(Documents joints pour analyse)',
+      attachment: selectedFiles.length > 0 ? selectedFiles.map(f => f.name).join(', ') : null,
     };
     // Ajouter une bulle vide pour l'assistant
     setMessages(prev => [...prev, userMessage, { role: 'assistant', content: '' }]);
     setInput('');
     setLoading(true); // Ce loading affichera "Recherche et rédaction en cours..."
-    setThinkStatus("🔍 Analyse du contexte juridique...");
-
-    // Logique de fausse réflexion visuelle basée sur le temps
-    const thinkInterval = setInterval(() => {
-      setThinkStatus(prev => {
-        if (prev.includes("Analyse")) return "⚖️ Recherche de contradictions...";
-        if (prev.includes("Recherche")) return "✍️ Rédaction de la synthèse...";
-        return prev;
-      });
-    }, 2000);
 
     // Initialiser le contrôleur d'annulation
     abortControllerRef.current = new AbortController();
@@ -160,8 +152,6 @@ function App() {
         });
       }
     } finally {
-      clearInterval(thinkInterval);
-      setThinkStatus("");
       setLoading(false);
       removeAttachment();
       abortControllerRef.current = null;
@@ -261,19 +251,6 @@ function App() {
       padding: '8px 12px',
       borderRadius: '4px'
     },
-    thinkStatusBadge: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: '8px',
-      backgroundColor: '#27272a',
-      color: '#a1a1aa',
-      padding: '6px 12px',
-      borderRadius: '12px',
-      fontSize: '0.85em',
-      marginBottom: '1rem',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-      animation: 'pulse 2s infinite ease-in-out'
-    },
     spinner: {
       width: '12px',
       height: '12px',
@@ -345,33 +322,23 @@ function App() {
             </div>
           ))}
 
-          {/* Indicateur de réflexion UX */}
-          {thinkStatus && (
-            <div style={S.thinkStatusBadge}>
-              <span style={S.spinner}></span> {thinkStatus}
-            </div>
-          )}
-
           {/* Indicateur de frappe */}
           {loading && (
             <div style={S.typingRow}>
-              <div style={S.typingBubble}>
-                <div style={S.typingDot(0)}></div>
-                <div style={S.typingDot(0.2)}></div>
-                <div style={S.typingDot(0.4)}></div>
-                <span style={{ marginLeft: '10px', fontSize: '0.85em', color: '#a1a1aa' }}>Recherche et rédaction en cours...</span>
-              </div>
+              <span style={{ fontSize: '0.85em', color: '#a1a1aa' }}>Recherche en cours...</span>
             </div>
           )}
 
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Fichier joint preview */}
-        {attachedFile && (
+        {/* Fichiers joints preview */}
+        {selectedFiles.length > 0 && (
           <div style={S.attachmentPreview}>
             <span>📎</span>
-            <span style={S.attachmentName}>{attachedFile.name} ({(attachedFile.size / 1024).toFixed(1)} Ko)</span>
+            <span style={S.attachmentName}>
+              {selectedFiles.map(f => f.name).join(', ')} ({selectedFiles.length} fichier{selectedFiles.length > 1 ? 's' : ''})
+            </span>
             <button style={S.attachmentRemove} onClick={removeAttachment}>✕</button>
           </div>
         )}
@@ -383,8 +350,9 @@ function App() {
               type="file"
               ref={fileInputRef}
               accept=".json,.txt,.pdf,.md"
+              multiple
               style={{ display: 'none' }}
-              onChange={handleFileAttach}
+              onChange={handleFileSelect}
             />
             <select
               value={selectedModel}

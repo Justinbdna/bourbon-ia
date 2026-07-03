@@ -192,8 +192,8 @@ def chat_libre(message: str, context_text: str = "", model_name: str = ""):
     tools = [{
         "type": "function",
         "function": {
-            "name": "recherche_base_parlementaire",
-            "description": "Recherche dans la base de données de l'Assemblée nationale (amendements, articles, lois).",
+            "name": "recherche_mcp",
+            "description": "Recherche dans la base de données de l'Assemblée nationale",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -208,76 +208,71 @@ def chat_libre(message: str, context_text: str = "", model_name: str = ""):
     }]
 
     try:
-        print(f"🔗 Tentative de connexion au LLM sur l'URL : {target_url} | Modèle : {model_id} (Streaming & Tools)")
+        print("📡 ÉTAPE 1 : Requête envoyée au LLM...")
+        # Étape 1 : Appel sans stream pour voir s'il veut utiliser un outil
         response = client.chat.completions.create(
             model=model_id,
             messages=messages,
             temperature=0.3,
             max_tokens=2048,
-            tools=tools if not context_text else None, # Pas besoin d'outil si le document est déjà fourni
-            stream=True
+            tools=tools if not context_text else None, # Pas d'outil si le doc est fourni
+            stream=False
         )
         
-        is_tool_call = False
-        tool_call_name = ""
-        tool_call_args = ""
-        tool_call_id = ""
-
-        for chunk in response:
-            delta = chunk.choices[0].delta
-            if hasattr(delta, 'tool_calls') and delta.tool_calls:
-                is_tool_call = True
-                tc = delta.tool_calls[0]
-                if getattr(tc, 'id', None):
-                    tool_call_id = tc.id
-                if getattr(tc.function, 'name', None):
-                    tool_call_name = tc.function.name
-                if getattr(tc.function, 'arguments', None):
-                    tool_call_args += tc.function.arguments
-            elif hasattr(delta, 'content') and delta.content and not is_tool_call:
-                yield delta.content
-
-        if is_tool_call:
-            yield f"\n\n> 🔍 *Appel de la base parlementaire MCP ({tool_call_name})...*\n\n"
-            try:
-                args = json.loads(tool_call_args)
-                query = args.get("query", "")
-                
-                mcp_result = call_mcp_tool(query)
-                
-                messages.append({
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [{
-                        "id": tool_call_id,
-                        "type": "function",
-                        "function": {
-                            "name": tool_call_name,
-                            "arguments": tool_call_args
-                        }
-                    }]
-                })
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "name": tool_call_name,
-                    "content": mcp_result
-                })
-                
-                # Deuxième passe (streaming final)
-                second_response = client.chat.completions.create(
-                    model=model_id,
-                    messages=messages,
-                    temperature=0.3,
-                    max_tokens=2048,
-                    stream=True
-                )
-                for chunk2 in second_response:
-                    delta2 = chunk2.choices[0].delta
-                    if hasattr(delta2, 'content') and delta2.content:
-                        yield delta2.content
-            except Exception as e:
-                yield f"\n\n❌ L'outil a échoué: {str(e)}\n"
+        response_message = response.choices[0].message
+        
+        if response_message.tool_calls:
+            tool_call = response_message.tool_calls[0]
+            query = ""
+            if tool_call.function.arguments:
+                try:
+                    args = json.loads(tool_call.function.arguments)
+                    query = args.get("query", "")
+                except json.JSONDecodeError:
+                    pass
+            
+            print(f"🛠️ ÉTAPE 2 : Le LLM demande l'outil MCP pour la requête : {query}")
+            yield f"\n\n> 🔍 *Appel de la base parlementaire MCP pour : {query}...*\n\n"
+            
+            mcp_result = call_mcp_tool(query)
+            print(f"✅ ÉTAPE 3 : Réponse du serveur MCP reçue ({len(mcp_result)} caractères). Renvoi au LLM...")
+            
+            # Ajouter le message assistant (appel) et le message tool (résultat)
+            messages.append(response_message)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "name": tool_call.function.name,
+                "content": mcp_result
+            })
+            
+            print("✍️ ÉTAPE 4 : Streaming de la réponse finale en cours...")
+            second_response = client.chat.completions.create(
+                model=model_id,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=2048,
+                stream=True
+            )
+            for chunk in second_response:
+                delta = chunk.choices[0].delta
+                if hasattr(delta, 'content') and delta.content:
+                    yield delta.content
+        else:
+            print("✍️ ÉTAPE 4 : Streaming de la réponse finale en cours... (sans outil)")
+            # Relancer avec stream=True puisqu'il n'a pas utilisé d'outil
+            # On passe None aux outils pour forcer la réponse
+            stream_response = client.chat.completions.create(
+                model=model_id,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=2048,
+                stream=True
+            )
+            for chunk in stream_response:
+                delta = chunk.choices[0].delta
+                if hasattr(delta, 'content') and delta.content:
+                    yield delta.content
 
     except ConnectionError:
         logging.error(f"❌ Connexion refusée sur {target_url}. Vérifiez le pare-feu Windows et Tailscale.")
