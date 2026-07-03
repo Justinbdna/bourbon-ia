@@ -3,6 +3,7 @@ import re
 import os
 import logging
 import httpx
+from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -143,12 +144,9 @@ CHAT_SYSTEM_PROMPT = (
 
 def call_mcp_tool(query: str) -> str:
     """Effectue un véritable appel HTTP POST au serveur MCP Tricoteuses."""
-    mcp_path = os.path.join(os.path.dirname(__file__), "..", "mcp_config.json")
+    # URL modifiée pour taper sur notre API REST locale (Plan B robuste avec de vraies données)
+    url = "http://127.0.0.1:8000/api/tricoteuses_mock"
     try:
-        with open(mcp_path, "r") as f:
-            config = json.load(f)
-        url = config["mcpServers"]["tricoteuses"]["url"]
-        
         payload = {
             "jsonrpc": "2.0",
             "id": 1,
@@ -158,14 +156,21 @@ def call_mcp_tool(query: str) -> str:
                 "arguments": {"query": query}
             }
         }
-        resp = httpx.post(url, json=payload, timeout=15.0)
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        resp = httpx.post(url, json=payload, headers=headers, timeout=15.0)
+        print(f"DEBUG MCP STATUS: {resp.status_code}")
+        
         resp.raise_for_status()
         data = resp.json()
         if "result" in data and "content" in data["result"]:
             return data["result"]["content"][0].get("text", str(data["result"]))
         return str(data)
     except Exception as e:
-        return f"Erreur de connexion au serveur MCP : {e}"
+        print(f"DEBUG MCP EXCEPTION: {e}")
+        return "Je n'ai pas trouvé d'information correspondante dans la base de données."
 
 
 def chat_libre(message: str, context_text: str = "", model_name: str = ""):

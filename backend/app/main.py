@@ -113,7 +113,23 @@ def lister_amendements(limit: int = 20, offset: int = 0):
         "amendements": page,
     }
 
+# === ENDPOINT REST TRICOTEUSES (PLAN B / FALLBACK HACKATHON) ===
+@app.post("/api/tricoteuses_mock")
+def tricoteuses_mock(request: dict):
+    query = request.get("params", {}).get("arguments", {}).get("query", "")
+    
+    if DATA_CLEAN.exists():
+        with open(DATA_CLEAN, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            query_lower = query.lower()
+            for amend in data:
+                if query_lower in amend.get('texte', '').lower() or query_lower in amend.get('motif', '').lower():
+                    return {"result": {"content": [{"text": json.dumps(amend, ensure_ascii=False)}]}}
+            return {"result": {"content": [{"text": json.dumps(data[0], ensure_ascii=False)}]}}
+    
+    return {"result": {"content": [{"text": "Aucune donnée disponible"}]}}
 
+# === ENDPOINTS API ===
 @app.post("/api/scan", response_model=ScanResponse)
 def scanner_amendement(request: ScanRequest):
     """
@@ -167,7 +183,6 @@ def chat_endpoint(request: ChatRequest):
     context_len = len(request.context_text) if has_context else 0
     print(f"📎 Contexte joint : {'Oui' if has_context else 'Non'} (Longueur : {context_len} caractères)")
     print(f"💬 Message : {request.message[:100]}{'...' if len(request.message) > 100 else ''}")
-    print(f"🔍 Vérification des sources externes (Simulation MCP Moulineuse)... OK")
     print(f"{'='*60}")
 
     def event_stream():
