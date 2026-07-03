@@ -1,4 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+
+// Styles globaux pour le Markdown
+const markdownStyles = `
+  .markdown-body ul { list-style-type: disc; padding-left: 1.5rem; margin: 0.5rem 0; }
+  .markdown-body ol { list-style-type: decimal; padding-left: 1.5rem; margin: 0.5rem 0; }
+  .markdown-body li { margin-bottom: 0.25rem; }
+  .markdown-body strong { font-weight: bold; color: #fff; }
+  .markdown-body p { margin-bottom: 0.75rem; }
+`;
 
 function App() {
   const [messages, setMessages] = useState([
@@ -66,7 +76,7 @@ function App() {
     // Ajouter une bulle vide pour l'assistant
     setMessages(prev => [...prev, userMessage, { role: 'assistant', content: '' }]);
     setInput('');
-    setLoading(true);
+    setLoading(true); // Ce loading affichera "Recherche et rédaction en cours..."
     setThinkStatus("🔍 Analyse du contexte juridique...");
 
     // Logique de fausse réflexion visuelle basée sur le temps
@@ -119,10 +129,15 @@ function App() {
               try {
                 const dataObj = JSON.parse(dataStr);
                 fullContent += dataObj.content;
-                // Mettre à jour le dernier message de l'assistant en temps réel
+                
+                // Dès qu'on a du contenu, on peut cacher le loading state global
+                if (fullContent.length > 0) setLoading(false);
+
+                // Mettre à jour le dernier message (copie propre pour React)
                 setMessages(prev => {
                   const newMessages = [...prev];
-                  newMessages[newMessages.length - 1].content = fullContent;
+                  const lastIndex = newMessages.length - 1;
+                  newMessages[lastIndex] = { ...newMessages[lastIndex], content: fullContent };
                   return newMessages;
                 });
               } catch (e) {}
@@ -154,7 +169,7 @@ function App() {
   };
 
   const renderAssistantMessage = (text) => {
-    if (!text.includes('<think>')) return <span style={{ whiteSpace: 'pre-wrap' }}>{text}</span>;
+    if (!text.includes('<think>')) return <div className="markdown-body"><ReactMarkdown>{text}</ReactMarkdown></div>;
     const parts = text.split('<think>');
     const beforeThink = parts[0];
     const rest = parts[1];
@@ -162,18 +177,18 @@ function App() {
     if (rest.includes('</think>')) {
       const [thinkContent, afterThink] = rest.split('</think>');
       return (
-        <>
-          <span style={{ whiteSpace: 'pre-wrap' }}>{beforeThink}</span>
+        <div className="markdown-body">
+          <ReactMarkdown>{beforeThink}</ReactMarkdown>
           <div style={S.thinkBlock}>{thinkContent}</div>
-          <span style={{ whiteSpace: 'pre-wrap' }}>{afterThink}</span>
-        </>
+          <ReactMarkdown>{afterThink}</ReactMarkdown>
+        </div>
       );
     } else {
       return (
-        <>
-          <span style={{ whiteSpace: 'pre-wrap' }}>{beforeThink}</span>
+        <div className="markdown-body">
+          <ReactMarkdown>{beforeThink}</ReactMarkdown>
           <div style={S.thinkBlock}>{rest}</div>
-        </>
+        </div>
       );
     }
   };
@@ -286,6 +301,8 @@ function App() {
 
   return (
     <div style={S.app}>
+      <style>{markdownStyles}</style>
+      
       {/* ── SIDEBAR ── */}
       <div style={S.sidebar}>
         <div style={S.logo}>
@@ -342,6 +359,7 @@ function App() {
                 <div style={S.typingDot(0)}></div>
                 <div style={S.typingDot(0.2)}></div>
                 <div style={S.typingDot(0.4)}></div>
+                <span style={{ marginLeft: '10px', fontSize: '0.85em', color: '#a1a1aa' }}>Recherche et rédaction en cours...</span>
               </div>
             </div>
           )}

@@ -2,6 +2,7 @@ import json
 import re
 import os
 import logging
+import httpx
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -135,8 +136,36 @@ def resumer_amendement(amendement_clean: dict) -> dict:
 
 CHAT_SYSTEM_PROMPT = (
     "Tu agis comme un outil d'analyse juridique de pointe. Ta réponse doit être structurée avec des puces (bullet points) percutantes. "
-    "Va droit au but : contexte, article visé, risques, conclusion. N'extrapole jamais."
+    "Va droit au but : contexte, article visé, risques, conclusion. N'extrapole jamais.\n"
+    "RÈGLE ABSOLUE : Si l'outil de recherche de la base de données de l'Assemblée nationale ne renvoie aucun résultat pertinent, ne simule aucune information. "
+    "Réponds exactement ceci : 'Je n'ai pas trouvé d'information correspondante dans la base de données. Pourriez-vous préciser le numéro de l'amendement ou de l'article s'il vous plaît ?'"
 )
+
+def call_mcp_tool(query: str) -> str:
+    """Effectue un véritable appel HTTP POST au serveur MCP Tricoteuses."""
+    mcp_path = os.path.join(os.path.dirname(__file__), "..", "mcp_config.json")
+    try:
+        with open(mcp_path, "r") as f:
+            config = json.load(f)
+        url = config["mcpServers"]["tricoteuses"]["url"]
+        
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "recherche_base_parlementaire",
+                "arguments": {"query": query}
+            }
+        }
+        resp = httpx.post(url, json=payload, timeout=15.0)
+        resp.raise_for_status()
+        data = resp.json()
+        if "result" in data and "content" in data["result"]:
+            return data["result"]["content"][0].get("text", str(data["result"]))
+        return str(data)
+    except Exception as e:
+        return f"Erreur de connexion au serveur MCP : {e}"
 
 
 def chat_libre(message: str, context_text: str = "", model_name: str = ""):
@@ -155,25 +184,100 @@ def chat_libre(message: str, context_text: str = "", model_name: str = ""):
     full_prompt = f"[INSTRUCTION SYSTÈME] {CHAT_SYSTEM_PROMPT}\n\n[REQUÊTE]\n{user_content}"
 
     target_url, model_id = resolve_model_and_url(model_name)
-    logging.info(f"💬 Chat libre (stream) — message reçu ({len(message)} car.) | Modèle résolu : {model_id} sur {target_url}")
+    logging.info(f"💬 Chat libre (stream/tools) — message reçu ({len(message)} car.) | Modèle résolu : {model_id} sur {target_url}")
 
     client = OpenAI(base_url=target_url, api_key="lm-studio", timeout=300.0)
+    
+    messages = [{"role": "user", "content": full_prompt}]
+    tools = [{
+        "type": "function",
+        "function": {
+            "name": "recherche_base_parlementaire",
+            "description": "Recherche dans la base de données de l'Assemblée nationale (amendements, articles, lois).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "La requête de recherche (ex: 'réforme des retraites', numéro de l'amendement)."
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    }]
 
     try:
-        print(f"🔗 Tentative de connexion au LLM sur l'URL : {target_url} | Modèle : {model_id} (Streaming)")
+        print(f"🔗 Tentative de connexion au LLM sur l'URL : {target_url} | Modèle : {model_id} (Streaming & Tools)")
         response = client.chat.completions.create(
             model=model_id,
-            messages=[
-                {"role": "user", "content": full_prompt},
-            ],
+            messages=messages,
             temperature=0.3,
             max_tokens=2048,
+            tools=tools if not context_text else None, # Pas besoin d'outil si le document est déjà fourni
             stream=True
         )
         
+        is_tool_call = False
+        tool_call_name = ""
+        tool_call_args = ""
+        tool_call_id = ""
+
         for chunk in response:
-            if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+            delta = chunk.choices[0].delta
+            if hasattr(delta, 'tool_calls') and delta.tool_calls:
+                is_tool_call = True
+                tc = delta.tool_calls[0]
+                if getattr(tc, 'id', None):
+                    tool_call_id = tc.id
+                if getattr(tc.function, 'name', None):
+                    tool_call_name = tc.function.name
+                if getattr(tc.function, 'arguments', None):
+                    tool_call_args += tc.function.arguments
+            elif hasattr(delta, 'content') and delta.content and not is_tool_call:
+                yield delta.content
+
+        if is_tool_call:
+            yield f"\n\n> 🔍 *Appel de la base parlementaire MCP ({tool_call_name})...*\n\n"
+            try:
+                args = json.loads(tool_call_args)
+                query = args.get("query", "")
+                
+                mcp_result = call_mcp_tool(query)
+                
+                messages.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [{
+                        "id": tool_call_id,
+                        "type": "function",
+                        "function": {
+                            "name": tool_call_name,
+                            "arguments": tool_call_args
+                        }
+                    }]
+                })
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "name": tool_call_name,
+                    "content": mcp_result
+                })
+                
+                # Deuxième passe (streaming final)
+                second_response = client.chat.completions.create(
+                    model=model_id,
+                    messages=messages,
+                    temperature=0.3,
+                    max_tokens=2048,
+                    stream=True
+                )
+                for chunk2 in second_response:
+                    delta2 = chunk2.choices[0].delta
+                    if hasattr(delta2, 'content') and delta2.content:
+                        yield delta2.content
+            except Exception as e:
+                yield f"\n\n❌ L'outil a échoué: {str(e)}\n"
 
     except ConnectionError:
         logging.error(f"❌ Connexion refusée sur {target_url}. Vérifiez le pare-feu Windows et Tailscale.")
