@@ -9,6 +9,7 @@ function App() {
   const [attachedFile, setAttachedFile] = useState(null);
   const [attachedContent, setAttachedContent] = useState('');
   const [selectedModel, setSelectedModel] = useState('pc_mistral_7b');
+  const [thinkStatus, setThinkStatus] = useState("");
 
   // Initialiser la ref pour l'AbortController
   const abortControllerRef = useRef(null);
@@ -62,9 +63,20 @@ function App() {
       content: messageTexte || '(Document joint pour analyse)',
       attachment: attachedFile?.name || null,
     };
-    setMessages(prev => [...prev, userMessage]);
+    // Ajouter une bulle vide pour l'assistant
+    setMessages(prev => [...prev, userMessage, { role: 'assistant', content: '' }]);
     setInput('');
     setLoading(true);
+    setThinkStatus("🔍 Analyse du contexte juridique...");
+
+    // Logique de fausse réflexion visuelle basée sur le temps
+    const thinkInterval = setInterval(() => {
+      setThinkStatus(prev => {
+        if (prev.includes("Analyse")) return "⚖️ Recherche de contradictions...";
+        if (prev.includes("Recherche")) return "✍️ Rédaction de la synthèse...";
+        return prev;
+      });
+    }, 2000);
 
     // Initialiser le contrôleur d'annulation
     abortControllerRef.current = new AbortController();
@@ -85,18 +97,84 @@ function App() {
         throw new Error(`Erreur API : ${response.status}`);
       }
 
-      const data = await response.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
+      // Lecture du flux SSE
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      let fullContent = "";
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const dataStr = line.replace('data: ', '').trim();
+              if (dataStr === '[DONE]') {
+                done = true;
+                break;
+              }
+              try {
+                const dataObj = JSON.parse(dataStr);
+                fullContent += dataObj.content;
+                // Mettre à jour le dernier message de l'assistant en temps réel
+                setMessages(prev => {
+                  const newMessages = [...prev];
+                  newMessages[newMessages.length - 1].content = fullContent;
+                  return newMessages;
+                });
+              } catch (e) {}
+            }
+          }
+        }
+      }
     } catch (err) {
       if (err.name === 'AbortError') {
-        setMessages(prev => [...prev, { role: 'assistant', content: '🛑 Analyse interrompue.' }]);
+        setMessages(prev => {
+          const newMsg = [...prev];
+          newMsg[newMsg.length - 1].content += '\n\n🛑 Analyse interrompue.';
+          return newMsg;
+        });
       } else {
-        setMessages(prev => [...prev, { role: 'assistant', content: `❌ Erreur : ${err.message}. Vérifiez que le serveur FastAPI et LM Studio sont actifs.` }]);
+        setMessages(prev => {
+          const newMsg = [...prev];
+          newMsg[newMsg.length - 1].content = `❌ Erreur : ${err.message}. Vérifiez que le serveur FastAPI et LM Studio sont actifs.`;
+          return newMsg;
+        });
       }
     } finally {
+      clearInterval(thinkInterval);
+      setThinkStatus("");
       setLoading(false);
       removeAttachment();
       abortControllerRef.current = null;
+    }
+  };
+
+  const renderAssistantMessage = (text) => {
+    if (!text.includes('<think>')) return <span style={{ whiteSpace: 'pre-wrap' }}>{text}</span>;
+    const parts = text.split('<think>');
+    const beforeThink = parts[0];
+    const rest = parts[1];
+    
+    if (rest.includes('</think>')) {
+      const [thinkContent, afterThink] = rest.split('</think>');
+      return (
+        <>
+          <span style={{ whiteSpace: 'pre-wrap' }}>{beforeThink}</span>
+          <div style={S.thinkBlock}>{thinkContent}</div>
+          <span style={{ whiteSpace: 'pre-wrap' }}>{afterThink}</span>
+        </>
+      );
+    } else {
+      return (
+        <>
+          <span style={{ whiteSpace: 'pre-wrap' }}>{beforeThink}</span>
+          <div style={S.thinkBlock}>{rest}</div>
+        </>
+      );
     }
   };
 
@@ -155,7 +233,40 @@ function App() {
     // Typing indicator
     typingRow: { display: 'flex', justifyContent: 'flex-start', padding: '0.4rem 2rem' },
     typingBubble: { display: 'flex', gap: '5px', alignItems: 'center', padding: '1rem 1.25rem', borderRadius: '18px 18px 18px 4px', backgroundColor: '#1c1c1f' },
-    typingDot: (delay) => ({ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#60a5fa', animation: `pulse 1.4s ${delay}s infinite ease-in-out` }),
+    typingDot: (delay) => ({ width: '6px', height: '6px', backgroundColor: '#a1a1aa', borderRadius: '50%', animation: 'pulse 1.4s infinite ease-in-out both', animationDelay: `${delay}s` }),
+    thinkBlock: {
+      color: '#a1a1aa',
+      fontStyle: 'italic',
+      borderLeft: '3px solid #3f3f46',
+      paddingLeft: '12px',
+      margin: '12px 0',
+      fontSize: '0.9em',
+      whiteSpace: 'pre-wrap',
+      backgroundColor: '#18181b',
+      padding: '8px 12px',
+      borderRadius: '4px'
+    },
+    thinkStatusBadge: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '8px',
+      backgroundColor: '#27272a',
+      color: '#a1a1aa',
+      padding: '6px 12px',
+      borderRadius: '12px',
+      fontSize: '0.85em',
+      marginBottom: '1rem',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+      animation: 'pulse 2s infinite ease-in-out'
+    },
+    spinner: {
+      width: '12px',
+      height: '12px',
+      border: '2px solid #52525b',
+      borderTopColor: '#a1a1aa',
+      borderRadius: '50%',
+      animation: 'spin 1s linear infinite'
+    },
 
     // Model selector
     modelSelect: { backgroundColor: '#18181b', color: '#e4e4e7', border: '1px solid #27272a', borderRadius: '8px', padding: '6px 12px', fontSize: '0.82rem', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' },
@@ -212,10 +323,17 @@ function App() {
                 {msg.attachment && (
                   <div style={S.attachTag}>📎 {msg.attachment}</div>
                 )}
-                {msg.content}
+                {msg.role === 'assistant' ? renderAssistantMessage(msg.content) : <span style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</span>}
               </div>
             </div>
           ))}
+
+          {/* Indicateur de réflexion UX */}
+          {thinkStatus && (
+            <div style={S.thinkStatusBadge}>
+              <span style={S.spinner}></span> {thinkStatus}
+            </div>
+          )}
 
           {/* Indicateur de frappe */}
           {loading && (

@@ -134,30 +134,14 @@ def resumer_amendement(amendement_clean: dict) -> dict:
 
 
 CHAT_SYSTEM_PROMPT = (
-    "Tu es Bourbon.IA. Lors de l'analyse d'un amendement (texte ou JSON), tu DOIS structurer le début de ta réponse ainsi :\n"
-    "- 👤 Auteur(s) / Gouvernement : [Extraire l'info]\n"
-    "- 📅 Date de dépôt : [Extraire l'info]\n"
-    "- 📜 Article visé : [Extraire l'info]\n"
-    "- ⚠️ Risques juridiques : [Extraire l'info]\n"
-    "Ensuite, rédige ton résumé et tes observations.\n\n"
-    "RÈGLE ABSOLUE : Tu ne dois JAMAIS inventer de faits juridiques ou politiques. "
-    "Si la réponse ne se trouve pas dans les textes fournis, réponds EXACTEMENT : "
-    "'Je n'ai pas cette information. Veuillez me fournir le texte via le trombone pour une analyse sécurisée.' "
-    "N'extrapole jamais."
+    "Tu agis comme un outil d'analyse juridique de pointe. Ta réponse doit être structurée avec des puces (bullet points) percutantes. "
+    "Va droit au but : contexte, article visé, risques, conclusion. N'extrapole jamais."
 )
 
 
-def chat_libre(message: str, context_text: str = "", model_name: str = "") -> str | None:
+def chat_libre(message: str, context_text: str = "", model_name: str = ""):
     """
-    Mode conversationnel libre avec le LLM local.
-
-    Args:
-        message: La question ou consigne de l'utilisateur.
-        context_text: Texte brut optionnel (amendement collé, JSON extrait, etc.)
-        model_name: Nom commercial du modèle choisi par l'utilisateur.
-
-    Returns:
-        La réponse du LLM en texte libre, ou None en cas d'erreur.
+    Mode conversationnel libre avec le LLM local (Streaming).
     """
     user_content = message
     if context_text:
@@ -171,12 +155,12 @@ def chat_libre(message: str, context_text: str = "", model_name: str = "") -> st
     full_prompt = f"[INSTRUCTION SYSTÈME] {CHAT_SYSTEM_PROMPT}\n\n[REQUÊTE]\n{user_content}"
 
     target_url, model_id = resolve_model_and_url(model_name)
-    logging.info(f"💬 Chat libre — message reçu ({len(message)} car.) | Modèle résolu : {model_id} sur {target_url}")
+    logging.info(f"💬 Chat libre (stream) — message reçu ({len(message)} car.) | Modèle résolu : {model_id} sur {target_url}")
 
     client = OpenAI(base_url=target_url, api_key="lm-studio", timeout=300.0)
 
     try:
-        print(f"🔗 Tentative de connexion au LLM sur l'URL : {target_url} | Modèle : {model_id}")
+        print(f"🔗 Tentative de connexion au LLM sur l'URL : {target_url} | Modèle : {model_id} (Streaming)")
         response = client.chat.completions.create(
             model=model_id,
             messages=[
@@ -184,21 +168,19 @@ def chat_libre(message: str, context_text: str = "", model_name: str = "") -> st
             ],
             temperature=0.3,
             max_tokens=2048,
+            stream=True
         )
+        
+        for chunk in response:
+            if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+
     except ConnectionError:
         logging.error(f"❌ Connexion refusée sur {target_url}. Vérifiez le pare-feu Windows et Tailscale.")
-        return None
+        yield "❌ Erreur : Connexion refusée."
     except Exception as e:
         logging.error(f"❌ Erreur lors de l'appel chat au LLM ({target_url}) : {e}")
-        return None
-
-    contenu = response.choices[0].message.content
-    if not contenu or not contenu.strip():
-        logging.warning("Réponse vide du LLM en mode chat.")
-        return "L'IA a traité la demande mais n'a généré aucun texte. Veuillez reformuler ou réduire la taille du document."
-
-    logging.info("✅ Réponse chat reçue du LLM.")
-    return contenu.strip()
+        yield f"❌ Erreur lors de la génération : {str(e)}"
 
 
 if __name__ == "__main__":

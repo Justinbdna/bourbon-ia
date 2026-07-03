@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -152,10 +153,10 @@ def scanner_amendement(request: ScanRequest):
     return ScanResponse(**resultat)
 
 
-@app.post("/api/chat", response_model=ChatResponse)
+@app.post("/api/chat")
 def chat_endpoint(request: ChatRequest):
     """
-    Chat conversationnel libre avec le LLM local.
+    Chat conversationnel libre avec le LLM local (Streaming SSE).
 
     Body JSON : { "message": "...", "context_text": "...", "model": "..." }
     """
@@ -169,20 +170,18 @@ def chat_endpoint(request: ChatRequest):
     print(f"🔍 Vérification des sources externes (Simulation MCP Moulineuse)... OK")
     print(f"{'='*60}")
 
-    reponse = chat_libre(
-        message=request.message,
-        context_text=request.context_text,
-        model_name=request.model,
-    )
+    def event_stream():
+        for chunk in chat_libre(
+            message=request.message,
+            context_text=request.context_text,
+            model_name=request.model,
+        ):
+            if chunk:
+                # Format Server-Sent Events
+                yield f"data: {json.dumps({'content': chunk})}\n\n"
+        yield "data: [DONE]\n\n"
 
-    if not reponse:
-        raise HTTPException(
-            status_code=502,
-            detail="Le LLM local n'a pas répondu. Vérifiez que LM Studio est démarré avec un modèle chargé."
-        )
-
-    print("✅ Réponse chat générée avec succès !")
-    return ChatResponse(content=reponse)
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 # --- Health check ---
