@@ -1,8 +1,32 @@
-import json
-import time
 import re
-from openai import OpenAI
-from backend.scripts.scanner import resolve_model_and_url
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# --- Configuration LM Studio ---
+PC_URL = os.environ.get("LLM_API_URL", "http://100.78.180.81:1234/v1")
+MAC_URL = "http://127.0.0.1:1234/v1"
+
+MODEL_MAP = {
+    "mac_mistral": "mistralai/mistral-7b-instruct-v0.3",
+    "mac_llama": "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF",
+    "mac_qwen": "qwen/qwen3.5-9b",
+    "mac_gemma": "google/gemma-4-e2b",
+    "pc_mistral_7b": "mistralai/mistral-7b-instruct-v0.3",
+    "pc_mistral_14b": "mistralai/ministral-3-14b-reasoning",
+    "pc_gemma_12b": "google/gemma-4-12b",
+    "pc_qwen_35b": "qwen/qwen3.6-35b-a3b",
+    "pc_qwq_32b": "qwen/qwq-32b"
+}
+DEFAULT_MODEL_ID = "mistralai/mistral-7b-instruct-v0.3"
+
+def resolve_model_and_url(model_name: str = ""):
+    """Traduit la clé du front-end en (URL_CIBLE, ID_LM_STUDIO)."""
+    name = model_name.lower()
+    target_url = MAC_URL if name.startswith("mac_") else PC_URL
+    model_id = MODEL_MAP.get(name, DEFAULT_MODEL_ID)
+    return target_url, model_id
 
 def extraire_texte_brut(amendement: dict) -> dict:
     """
@@ -29,90 +53,14 @@ def extraire_texte_brut(amendement: dict) -> dict:
         dispositif = contenu.get("dispositif", dispositif)
         expose = contenu.get("exposeSommaire", expose)
         
-    # Nettoyage des balises HTML parasites potentielles
+    # Nettoyage des balises HTML parasites
     dispositif = re.sub(r'<[^>]+>', '', dispositif)
     expose = re.sub(r'<[^>]+>', '', expose)
     
     return {
-        "auteur": auteur[:100],  # Sécurité sur la longueur
+        "auteur": auteur[:100], 
         "texte": f"Dispositif: {dispositif[:1000]}\nExposé: {expose[:500]}"
     }
 
-def analyser_doublons_identiques(lot_amendements: list[dict], model_name: str = "mac_mistral") -> list[dict]:
-    """
-    Étape 2 du pipeline : Détecte les Doublons, Identiques ou Incompatibles.
-    """
-    target_url, model_id = resolve_model_and_url(model_name)
-    client = OpenAI(base_url=target_url, api_key="lm-studio", timeout=300.0)
-    
-    resultats = []
-    
-    system_prompt = (
-        "Tu es un assistant juridique. Compare ces amendements en ignorant le 'chapeau'. "
-        "Réponds UNIQUEMENT en JSON avec les clés : id, statut (Doublon, Identique, Nouveau, Incompatible), justification."
-    )
-    
-    # Réinitialisé à chaque lot pour éviter l'accumulation
-    amendement_precedent = None
-    
-    for i, amendement in enumerate(lot_amendements):
-        amend_id = amendement.get("numero", f"ID_{i}")
-        donnees_propres = extraire_texte_brut(amendement)
-        
-        if amendement_precedent is None:
-            resultats.append({
-                "id": amend_id, "statut": "Nouveau", 
-                "justification": "Premier du lot (Référence).", "alerte_couleur": "vert"
-            })
-            amendement_precedent = donnees_propres
-            continue
-            
-        user_prompt = (
-            f"REF - Auteur: {amendement_precedent['auteur']}\nTexte: {amendement_precedent['texte']}\n"
-            f"TEST - Auteur: {donnees_propres['auteur']}\nTexte: {donnees_propres['texte']}"
-        )
-        
-        try:
-            response = client.chat.completions.create(
-                model=model_id,
-                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                temperature=0.1,
-                max_tokens=200,
-            )
-            contenu = response.choices[0].message.content.strip()
-            match = re.search(r"```(?:json)?(.*?)```", contenu, re.DOTALL | re.IGNORECASE)
-            if match:
-                contenu = match.group(1).strip()
-                
-            # Extraction stricte de ce qui ressemble à un objet ou tableau JSON
-            json_match = re.search(r'\[.*\]|\{.*\}', contenu, re.DOTALL)
-            if json_match:
-                contenu = json_match.group(0)
-                
-            try:
-                data_json = json.loads(contenu)
-            except json.JSONDecodeError:
-                data_json = {"statut": "Erreur", "justification": "Erreur de formatage du modèle."}
-            
-            statut = data_json.get("statut", "Nouveau")
-            couleur = "rouge" if statut == "Doublon" else "orange" if statut in ["Identique", "Incompatible"] else "vert"
-                
-            resultats.append({
-                "id": amend_id, "statut": statut,
-                "justification": data_json.get("justification", ""),
-                "alerte_couleur": couleur
-            })
-            
-            if statut == "Nouveau":
-                amendement_precedent = donnees_propres
-                
-        except Exception as e:
-            resultats.append({
-                "id": amend_id, "statut": "Erreur",
-                "justification": str(e), "alerte_couleur": "rouge"
-            })
-            
-        if i < len(lot_amendements) - 1:
-            time.sleep(1.5)
-        
-    return resultats
+# NOTE: La fonction analyser_doublons_identiques a été fusionnée dans 
+# backend/app/main.py pour permettre l'interruption asynchrone (Bouton Stop).

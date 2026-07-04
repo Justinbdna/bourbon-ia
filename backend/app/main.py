@@ -1,97 +1,32 @@
 """
 Bourbon.IA — Serveur FastAPI
 API REST locale pour le MVP du hackathon.
-
-Endpoints :
-  GET  /api/amendements       → Liste les amendements nettoyés
-  POST /api/scan              → Scanne un amendement via le LLM local
-  POST /api/chat              → Chat conversationnel libre avec le LLM
 """
 import json
 import logging
-from pathlib import Path
-from dotenv import load_dotenv
-
-# Charger le .env AVANT tout import interne (scanner.py lit LLM_API_URL au chargement)
-load_dotenv()
-
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from dotenv import load_dotenv
 
-from backend.scripts.scanner import resumer_amendement, chat_libre, analyser_amendement_statut
+load_dotenv()
 
-# --- Configuration ---
-DATA_CLEAN = Path(__file__).resolve().parent.parent.parent / "data" / "clean" / "amendements_clean.json"
+from backend.sorting_engine import trier_amendements
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-# --- Chargement des données au démarrage ---
-def charger_amendements() -> list[dict]:
-    """Charge les amendements nettoyés depuis le JSON. Appelé une seule fois au boot."""
-    if not DATA_CLEAN.is_file():
-        logging.error(f"Fichier de données introuvable : {DATA_CLEAN}")
-        logging.error("Lance d'abord : python3 backend/scripts/parser.py --input-dir data/raw/DLR5L11N19503 --output data/clean/amendements_clean.json")
-        return []
-
-    try:
-        with open(DATA_CLEAN, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        logging.info(f"{len(data)} amendements chargés depuis {DATA_CLEAN.name}")
-        return data
-    except (json.JSONDecodeError, OSError) as e:
-        logging.error(f"Erreur chargement données : {e}")
-        return []
-
-
-# --- Application FastAPI ---
 app = FastAPI(
     title="Bourbon.IA",
     description="Assistant législatif 100% local — API du hackathon AN 2026",
     version="0.1.0",
 )
 
-# CORS : autorise le front-end React (Vite tourne sur le port 5173)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Données chargées en mémoire au démarrage
-AMENDEMENTS: list[dict] = charger_amendements()
-
-
-# --- Modèles Pydantic ---
-class ScanRequest(BaseModel):
-    """Corps de la requête POST /api/scan."""
-    numero: str  # Numéro (uid) de l'amendement à scanner
-
-
-class ScanResponse(BaseModel):
-    """Réponse du scanner LLM."""
-    numero: str
-    resume: str
-    comparatif: str
-    enjeux_politiques: str
-    points_de_vigilance: str
-    source: str
-
-
-class ChatRequest(BaseModel):
-    """Corps de la requête POST /api/chat."""
-    message: str
-    context_text: str = ""  # Texte collé ou extrait d'un JSON (optionnel)
-    model: str = "Bourbon Rapide (Mistral 7B)"  # Modèle sélectionné côté UI
-
-
-class ChatResponse(BaseModel):
-    """Réponse du chat conversationnel."""
-    role: str = "assistant"
-    content: str
-
 
 class AnalyzeRequest(BaseModel):
     amendements: list[dict]
@@ -103,135 +38,98 @@ class AnalyzeResult(BaseModel):
     justification: str
     alerte_couleur: str
 
-
-# --- Endpoints ---
-@app.get("/api/amendements")
-def lister_amendements(limit: int = 20, offset: int = 0):
-    """
-    Retourne la liste paginée des amendements nettoyés.
-    
-    Query params :
-      - limit  : nombre d'amendements par page (défaut 20, max 100)
-      - offset : position de départ (défaut 0)
-    """
-    limit = min(limit, 100)  # Cap à 100 pour ne pas surcharger
-    page = AMENDEMENTS[offset : offset + limit]
-
-    return {
-        "total": len(AMENDEMENTS),
-        "limit": limit,
-        "offset": offset,
-        "amendements": page,
-    }
-
-# === ENDPOINT REST TRICOTEUSES (PLAN B / FALLBACK HACKATHON) ===
-@app.post("/api/tricoteuses_mock")
-def tricoteuses_mock(request: dict):
-    query = request.get("params", {}).get("arguments", {}).get("query", "")
-    
-    if DATA_CLEAN.exists():
-        with open(DATA_CLEAN, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            query_lower = query.lower()
-            for amend in data:
-                if query_lower in amend.get('texte', '').lower() or query_lower in amend.get('motif', '').lower():
-                    return {"result": {"content": [{"text": json.dumps(amend, ensure_ascii=False)}]}}
-            return {"result": {"content": [{"text": json.dumps(data[0], ensure_ascii=False)}]}}
-    
-    return {"result": {"content": [{"text": "Aucune donnée disponible"}]}}
-
-# === ENDPOINTS API ===
 @app.post("/api/analyze", response_model=list[AnalyzeResult])
 async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
     """
     Contrat de Données Front/Back (Yassine).
     Reçoit un tableau d'amendements bruts et retourne pour chacun son statut structuré.
     """
+    # 1. Tri mécanique (Doctrine de l'Assemblée)
+    amendements_tries = trier_amendements(payload.amendements)
+    
+    # 2. Analyse LLM par lots (avec vérification d'interruption du front-end)
+    # L'implémentation originelle dans llm_processor.py était synchrone, 
+    # mais puisque nous devons gérer raw_request.is_disconnected() à chaque itération, 
+    # la boucle logique a été adaptée pour permettre l'interruption.
+    from backend.llm_processor import extraire_texte_brut, resolve_model_and_url
+    from openai import OpenAI
+    import re
+    import time
+    
+    target_url, model_id = resolve_model_and_url(payload.model)
+    client = OpenAI(base_url=target_url, api_key="lm-studio", timeout=300.0)
+    
     resultats = []
-    for amend in payload.amendements:
+    amendement_precedent = None
+    
+    system_prompt = (
+        "Tu es un assistant juridique. Compare ces amendements en ignorant le 'chapeau'. "
+        "Réponds UNIQUEMENT en JSON avec les clés : id, statut (Doublon, Identique, Nouveau, Incompatible), justification."
+    )
+    
+    for amend in amendements_tries:
+        # Vérifie si le front-end a cliqué sur "Stop"
         if await raw_request.is_disconnected():
             logging.warning("🛑 Analyse interrompue par le client (Bouton Stop).")
             break
-        res = analyser_amendement_statut(amend, payload.model)
-        resultats.append(res)
-    return resultats
-
-
-@app.post("/api/scan", response_model=ScanResponse)
-def scanner_amendement(request: ScanRequest):
-    """
-    Scanne un amendement par son numéro via le LLM local.
-    
-    Body JSON : { "numero": "AMANR5L17PO59051B0149P0D1N000001" }
-    """
-    print(f"📥 Requête reçue pour l'amendement n° {request.numero}")
-    
-    # 1. Trouver l'amendement dans les données chargées
-    amendement = None
-    for am in AMENDEMENTS:
-        if am.get("numero") == request.numero:
-            amendement = am
-            break
-
-    if not amendement:
-        print("🔍 Recherche dans la base... (Non trouvé)")
-        raise HTTPException(
-            status_code=404,
-            detail=f"Amendement '{request.numero}' introuvable dans les {len(AMENDEMENTS)} amendements chargés."
+            
+        amend_id = amend.get("numero", "Inconnu")
+        donnees_propres = extraire_texte_brut(amend)
+        
+        if amendement_precedent is None:
+            resultats.append({
+                "id": amend_id, "statut": "Nouveau", 
+                "justification": "Premier du lot (Référence).", "alerte_couleur": "vert"
+            })
+            amendement_precedent = donnees_propres
+            continue
+            
+        user_prompt = (
+            f"REF - Auteur: {amendement_precedent['auteur']}\nTexte: {amendement_precedent['texte']}\n"
+            f"TEST - Auteur: {donnees_propres['auteur']}\nTexte: {donnees_propres['texte']}"
         )
         
-    print("🔍 Recherche dans la base... (Trouvé)")
-    print("🧠 Envoi du texte à Mistral (LM Studio)...")
+        try:
+            response = client.chat.completions.create(
+                model=model_id,
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                temperature=0.1,
+                max_tokens=200,
+            )
+            contenu = response.choices[0].message.content.strip()
+            match = re.search(r"```(?:json)?(.*?)```", contenu, re.DOTALL | re.IGNORECASE)
+            if match:
+                contenu = match.group(1).strip()
+                
+            json_match = re.search(r'\[.*\]|\{.*\}', contenu, re.DOTALL)
+            if json_match:
+                contenu = json_match.group(0)
+                
+            try:
+                data_json = json.loads(contenu)
+            except json.JSONDecodeError:
+                data_json = {"statut": "Erreur", "justification": "Erreur de formatage du modèle."}
+            
+            statut = data_json.get("statut", "Nouveau")
+            couleur = "rouge" if statut == "Doublon" else "orange" if statut in ["Identique", "Incompatible"] else "vert"
+                
+            resultats.append({
+                "id": amend_id, "statut": statut,
+                "justification": data_json.get("justification", ""),
+                "alerte_couleur": couleur
+            })
+            
+            if statut == "Nouveau":
+                amendement_precedent = donnees_propres
+                
+        except Exception as e:
+            resultats.append({
+                "id": amend_id, "statut": "Erreur",
+                "justification": str(e), "alerte_couleur": "rouge"
+            })
+            
+    return resultats
 
-    # 2. Envoyer au LLM via scanner.py
-    resultat = resumer_amendement(amendement)
-
-    if not resultat:
-        raise HTTPException(
-            status_code=502,
-            detail="Le LLM local n'a pas répondu. Vérifiez que LM Studio est démarré avec un modèle chargé."
-        )
-
-    print("✅ Résumé généré avec succès !")
-    return ScanResponse(**resultat)
-
-
-@app.post("/api/chat")
-def chat_endpoint(request: ChatRequest):
-    """
-    Chat conversationnel libre avec le LLM local (Streaming SSE).
-
-    Body JSON : { "message": "...", "context_text": "...", "model": "..." }
-    """
-    # --- Logs d'audit ---
-    print(f"\n{'='*60}")
-    print(f"📥 Requête Chat reçue | Modèle ciblé : {request.model}")
-    has_context = bool(request.context_text)
-    context_len = len(request.context_text) if has_context else 0
-    print(f"📎 Contexte joint : {'Oui' if has_context else 'Non'} (Longueur : {context_len} caractères)")
-    print(f"💬 Message : {request.message[:100]}{'...' if len(request.message) > 100 else ''}")
-    print(f"{'='*60}")
-
-    def event_stream():
-        for chunk in chat_libre(
-            message=request.message,
-            context_text=request.context_text,
-            model_name=request.model,
-        ):
-            if chunk:
-                # Format Server-Sent Events
-                yield f"data: {json.dumps({'content': chunk})}\n\n"
-        yield "data: [DONE]\n\n"
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
-
-
-# --- Health check ---
 @app.get("/api/health")
 def health():
-    """Vérifie que l'API est vivante et que les données sont chargées."""
-    return {
-        "status": "ok",
-        "amendements_charges": len(AMENDEMENTS),
-        "data_source": str(DATA_CLEAN.name),
-    }
+    return {"status": "ok"}

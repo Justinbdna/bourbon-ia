@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "tricoteuses": {
-      "transport": "http",
-      "url": "https://mcp.code4code.eu/mcp",
-      "scopes": ["moulineuse:contribute", "moulineuse:read", "offline_access", "moulineuse:sql", "email", "moulineuse:script"]
-    }
-  }
-}
