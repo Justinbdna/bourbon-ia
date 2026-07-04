@@ -83,7 +83,16 @@ def analyser_doublons_identiques(lot_amendements: list[dict], model_name: str = 
             match = re.search(r"```(?:json)?(.*?)```", contenu, re.DOTALL | re.IGNORECASE)
             if match:
                 contenu = match.group(1).strip()
-            data_json = json.loads(contenu)
+                
+            # Extraction stricte de ce qui ressemble à un objet ou tableau JSON
+            json_match = re.search(r'\[.*\]|\{.*\}', contenu, re.DOTALL)
+            if json_match:
+                contenu = json_match.group(0)
+                
+            try:
+                data_json = json.loads(contenu)
+            except json.JSONDecodeError:
+                data_json = {"statut": "Erreur", "justification": "Erreur de formatage du modèle."}
             
             statut = data_json.get("statut", "Nouveau")
             couleur = "rouge" if statut == "Doublon" else "orange" if statut in ["Identique", "Incompatible"] else "vert"
