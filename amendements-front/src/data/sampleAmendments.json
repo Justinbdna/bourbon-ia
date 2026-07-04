@@ -1,0 +1,122 @@
+[
+  {
+    "id": "amdt-185",
+    "article": "28",
+    "numero": "185",
+    "rectification": null,
+    "date_depot": "2006-11-30",
+    "texte_examine": {
+      "titre": "EAU ET MILIEUX AQUATIQUES",
+      "lecture": "Deuxième lecture",
+      "numero_texte": "3303"
+    },
+    "auteurs": ["Mme Pécresse", "M. Chatel"],
+    "rapporteur": false,
+    "avis_commission": null,
+    "avis_gouvernement": null,
+    "dispositif": "Rédiger ainsi cet article :\n\n« Après l'article L. 3232-1 du code général des collectivités territoriales, il est inséré un article L. 3232-1-1 ainsi rédigé :\n\n« Art. L. 3232-1-1. – Pour des raisons de solidarité, d'aménagement du territoire et de protection de la ressource en eau, le département met à la disposition des communes, des établissements publics de coopération intercommunale et s'il le souhaite, auprès d'autres partenaires, une animation technique dénommée service d'animation technique à l'épuration et au suivi des eaux (S.A.T.E.S.E) dans le domaine de l'assainissement, de la qualité de la ressource en eau, des eaux de baignade et des milieux aquatiques.\n\n« Cette animation technique est renforcée dans les secteurs où s'appliquent les schémas d'aménagement et de gestion des eaux (S.AG.E.).\n\n« Le département tient également à jour un observatoire de l'assainissement sur l'ensemble des systèmes épuratoires et échange les données avec les partenaires.\n\n« Les actions d'animation dans le domaine de l'assainissement couvrent au minimum tous les ouvrages recevant une charge inférieure ou égale à 600 kg de demande biochimique en oxygène en 5 jours (DBO5).\n\n« Le département peut déléguer ses missions à un syndicat mixte constitué en application de l'article L. 5721-2 dont il est membre.\n\n« Dans les départements d'outre-mer, cette mise à disposition est exercée par les offices de l'eau prévus à l'article L. 213-13 du code de l'environnement.\n\n« En Corse, ces missions peuvent être exercées par la collectivité territoriale de Corse ou par un de ses établissements publics.\n\n« Un décret en Conseil d'État précise les modalités d'application du présent article, notamment les critères de détermination des communes et des établissements visés au premier alinéa et la nature du renforcement de l'animation technique dans les secteurs couverts par des schémas d'aménagement et de gestion des eaux (S.A.G.E.). »",
+    "expose_sommaire": "Suite à la motion de nombreux élus de terrain pour soutenir les missions remplies par les SATESE (Service d'animation technique à l'épuration et au suivi des eaux), la rédaction actuelle du texte pourrait être améliorée. Il s'agit de :\n\n- pérenniser les missions d'intérêt général exercées actuellement par les SATESE grâce à la transmission et à la diffusion des données objectives concernant l'ensemble du système épuratoire des collectivités, à savoir les réseaux et les stations.\n\n- conserver une base minimale commune d'action : le suivi des stations d'épuration inférieures à 10.000 EH (capacité équivalente au seuil d'autorisation de 600 Kg de DBO5). Les missions énoncées ci-dessus ne créent pas de charges nouvelles pour les collectivités car elles existent déjà. Ces dernières disposent en outre, pour les mener, du soutien financier des Agences de l'eau.\n\n- remplacer le terme d'assistance technique par celui d'animation, qui prend mieux en compte l'évolution des missions.\n\n- renforcer les schémas d'aménagement et de gestion des eaux approuvés et donner du poids à leurs recommandations.\n\n- donner explicitement la possibilité aux départements d'établir des partenariats avec les Agences de l'Eau, les Services déconcentrés de l'État ou les Chambres Consulaires.\n\n- supprimer l'obligation de recourir à une rémunération, s'agissant d'un motif de solidarité, d'aménagement du territoire et de protection de la ressource en eau.",
+    "point_impact": { "type": "article_entier", "alinea": null },
+    "categorie": null
+  },
+  {
+    "id": "amdt-7rect",
+    "article": "65 octies",
+    "numero": "7",
+    "rectification": "Rect.",
+    "date_depot": "2009-04-27",
+    "texte_examine": {
+      "titre": "SIMPLIFICATION DU DROIT",
+      "lecture": "Deuxième lecture",
+      "numero_texte": "1578"
+    },
+    "auteurs": ["M. Garraud", "M. Remiller", "Mme Barèges"],
+    "rapporteur": false,
+    "avis_commission": null,
+    "avis_gouvernement": null,
+    "dispositif": "Rédiger ainsi cet article :\n\n« Le dernier alinéa de l'article premier de la loi n° 2007-291 du 5 mars 2007, est ainsi rédigé :\n\n« Ce collège de l'instruction exerce les prérogatives confiées au juge d'instruction par le présent code. Les avis de fin d'information, les ordonnances de règlement et de non-lieu doivent être pris de manière collégiale. Les autres actes relevant de la compétence du juge d'instruction peuvent être effectués par un ou plusieurs des juges d'instruction composant le collège. ».",
+    "expose_sommaire": "Plutôt que de préparer une échéance connue depuis deux ans, l'amendement n°182 créant cet article 65 octies a préféré reporter d'un an la mise en place de la collégialité de l'instruction des affaires pénales. Les députés et les sénateurs avaient pourtant clairement alerté le pouvoir exécutif sur les moyens indispensables à la collégialité de l'instruction, votée à l'unanimité, après les importants travaux de la commission d'enquête parlementaire sur l'Affaire d'Outreau.\n\nAujourd'hui, dans le souci de respecter la volonté des parlementaires qui ont à l'unanimité souhaité la mise en oeuvre d'une instruction collégiale mais aussi en devant tenir compte de l'impréparation par le Ministère de la Justice de l'échéance du 1er janvier 2010, cet amendement propose une version allégée de la collégialité.\n\nIl s'agit d'instaurer le principe de la désignation de 3 juges mais de limiter les décisions collégiales à la fin de l'instruction.",
+    "point_impact": { "type": "redaction_globale_article", "alinea": null },
+    "categorie": null
+  },
+  {
+    "id": "amdt-16",
+    "article": "37",
+    "numero": "16",
+    "rectification": null,
+    "date_depot": "2006-11-23",
+    "texte_examine": {
+      "titre": "EAU ET MILIEUX AQUATIQUES",
+      "lecture": "Deuxième lecture",
+      "numero_texte": "3303"
+    },
+    "auteurs": ["M. Guillaume", "M. Sermier", "M. Raison"],
+    "rapporteur": false,
+    "avis_commission": null,
+    "avis_gouvernement": null,
+    "dispositif": "Rédiger ainsi l'alinéa 58 de cet article :\n\n« - de 1,5 euro par kilogramme pour les substances toxiques et très toxiques et de 3 euros par kilogramme pour les substances cancérigènes, mutagènes ou tératogènes. »",
+    "expose_sommaire": "Le dispositif tel que proposé dans le projet de loi aura pour conséquence de faire supporter une nouvelle taxe aux agriculteurs, et donc de peser sur leurs revenus, sur la compétitivité de leurs produits ainsi que sur l'équilibre de la filière de la protection des plantes. C'est pourquoi il est proposé de modérer le taux des prélèvements sur les utilisateurs de produits phytopharmaceutiques.",
+    "point_impact": { "type": "redaction_globale_alinea", "alinea": 58 },
+    "categorie": null
+  },
+  {
+    "id": "amdt-184rect",
+    "article": "11 ter",
+    "numero": "184",
+    "rectification": "Rect.",
+    "date_depot": "2006-11-16",
+    "texte_examine": {
+      "titre": "PRÉVENTION DE LA DÉLINQUANCE",
+      "lecture": null,
+      "numero_texte": "3338"
+    },
+    "auteurs": ["M. Houillon"],
+    "rapporteur": true,
+    "avis_commission": null,
+    "avis_gouvernement": null,
+    "dispositif": "Rédiger ainsi les alinéas 2 et 3 de cet article :\n\n« Art. L. 129-4-1. – Lorsque dans un local attenant ou compris dans un immeuble collectif à usage principal d'habitation sont entreposées des matières explosives ou inflammables (...) le maire peut mettre en demeure, par arrêté motivé, la personne responsable (...) de prendre toutes les mesures nécessaires.\n\n« Le fait de ne pas se conformer à l'arrêté pris en application de l'alinéa précédent est puni de 3 750 € d'amende. »",
+    "expose_sommaire": "Amendement rédactionnel.",
+    "point_impact": { "type": "redaction_globale_alinea", "alinea": 2 },
+    "categorie": null
+  },
+  {
+    "id": "amdt-2",
+    "article": "22 bis",
+    "numero": "2",
+    "rectification": null,
+    "date_depot": "2006-11-20",
+    "texte_examine": {
+      "titre": "EAU ET MILIEUX AQUATIQUES",
+      "lecture": "Deuxième lecture",
+      "numero_texte": "3303"
+    },
+    "auteurs": ["M. Pemezec"],
+    "rapporteur": false,
+    "avis_commission": null,
+    "avis_gouvernement": null,
+    "dispositif": "Supprimer cet article.",
+    "expose_sommaire": "On assiste actuellement à une inflation des diagnostics obligatoires dans le domaine de l'immobilier ; citons pour mémoire ceux concernant la superficie (loi Carrez), les termites, l'amiante, le plomb, l'installation intérieure de gaz naturel, l'installation intérieure d'électricité, les risques technologiques et naturels, et la performance énergétique.\n\nAjoutons à cette liste provisoire, le diagnostic des installations d'assainissement non collectif (fosses septiques), prévu par le projet de loi sur l'eau que vous examinez.\n\nL'obligation de procéder à ces différents diagnostics est un facteur déterminant d'augmentation du coût et des délais de réalisation des ventes immobilières, sans que la plupart d'entre eux ne soient réellement justifiés par un impératif absolu de sécurité ou de santé publique.\n\nPour ces raisons, nous demandons la suppression du texte.",
+    "point_impact": { "type": "suppression_article", "alinea": null },
+    "categorie": null
+  },
+  {
+    "id": "amdt-1",
+    "article": "22",
+    "numero": "1",
+    "rectification": null,
+    "date_depot": "2006-11-20",
+    "texte_examine": {
+      "titre": "EAU ET MILIEUX AQUATIQUES",
+      "lecture": "Deuxième lecture",
+      "numero_texte": "3303"
+    },
+    "auteurs": ["M. Pemezec"],
+    "rapporteur": false,
+    "avis_commission": null,
+    "avis_gouvernement": null,
+    "dispositif": "Supprimer les alinéas 31 à 33 de cet article.",
+    "expose_sommaire": "On assiste actuellement à une inflation des diagnostics obligatoires dans le domaine de l'immobilier. L'obligation de procéder à ces différents diagnostics est un facteur déterminant d'augmentation du coût et des délais de réalisation des ventes immobilières.\n\nPour ces raisons, nous demandons la suppression du texte.",
+    "point_impact": { "type": "suppression_alinea", "alinea": 31 },
+    "categorie": null
+  }
+]
