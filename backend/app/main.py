@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 # Charger le .env AVANT tout import interne (scanner.py lit LLM_API_URL au chargement)
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -142,14 +142,17 @@ def tricoteuses_mock(request: dict):
 
 # === ENDPOINTS API ===
 @app.post("/api/analyze", response_model=list[AnalyzeResult])
-def analyze_endpoint(request: AnalyzeRequest):
+async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
     """
     Contrat de Données Front/Back (Yassine).
     Reçoit un tableau d'amendements bruts et retourne pour chacun son statut structuré.
     """
     resultats = []
-    for amend in request.amendements:
-        res = analyser_amendement_statut(amend, request.model)
+    for amend in payload.amendements:
+        if await raw_request.is_disconnected():
+            logging.warning("🛑 Analyse interrompue par le client (Bouton Stop).")
+            break
+        res = analyser_amendement_statut(amend, payload.model)
         resultats.append(res)
     return resultats
 
