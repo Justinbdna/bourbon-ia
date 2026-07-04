@@ -18,6 +18,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [attachedContent, setAttachedContent] = useState('');
+  const [amendementsList, setAmendementsList] = useState([]);
   const [selectedModel, setSelectedModel] = useState('pc_mistral_7b');
 
   // Initialiser la ref pour l'AbortController
@@ -53,6 +54,14 @@ function App() {
     for (const file of files) {
       const reader = new FileReader();
       reader.onload = (evt) => {
+        if (file.name.endsWith('.json')) {
+          try {
+            const parsed = JSON.parse(evt.target.result);
+            setAmendementsList(prev => [...prev, ...(Array.isArray(parsed) ? parsed : [parsed])]);
+          } catch (e) {
+            console.error("Erreur parsing JSON:", e);
+          }
+        }
         setAttachedContent(prev => prev + `\n\n--- Fichier : ${file.name} ---\n${evt.target.result}`);
       };
       reader.readAsText(file);
@@ -62,6 +71,7 @@ function App() {
   const removeAttachment = () => {
     setSelectedFiles([]);
     setAttachedContent('');
+    setAmendementsList([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -89,8 +99,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         signal: abortControllerRef.current.signal,
         body: JSON.stringify({
-          message: messageTexte || 'Analyse ce document en profondeur.',
-          context_text: attachedContent,
+          amendements: amendementsList,
           model: selectedModel,
         }),
       });
@@ -99,44 +108,23 @@ function App() {
         throw new Error(`Erreur API : ${response.status}`);
       }
 
-      // Lecture du flux SSE
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let fullContent = "";
+      // /api/analyze retourne un JSON direct, pas un flux SSE
+      const resultats = await response.json();
+      
+      // Formater la réponse en Markdown pour l'affichage
+      let fullContent = "### Résultats de l'analyse :\n\n";
+      resultats.forEach(res => {
+        const emoji = res.alerte_couleur === 'rouge' ? '🔴' : res.alerte_couleur === 'orange' ? '🟠' : '🟢';
+        fullContent += `${emoji} **${res.id}** : ${res.statut}\n> ${res.justification}\n\n`;
+      });
 
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
-        if (value) {
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const dataStr = line.replace('data: ', '').trim();
-              if (dataStr === '[DONE]') {
-                done = true;
-                break;
-              }
-              try {
-                const dataObj = JSON.parse(dataStr);
-                fullContent += dataObj.content;
-                
-                // Dès qu'on a du contenu, on peut cacher le loading state global
-                if (fullContent.length > 0) setLoading(false);
-
-                // Mettre à jour le dernier message (copie propre pour React)
-                setMessages(prev => {
-                  const newMessages = [...prev];
-                  const lastIndex = newMessages.length - 1;
-                  newMessages[lastIndex] = { ...newMessages[lastIndex], content: fullContent };
-                  return newMessages;
-                });
-              } catch (e) {}
-            }
-          }
-        }
-      }
+      setMessages(prev => {
+        const newMessages = [...prev];
+        const lastIndex = newMessages.length - 1;
+        newMessages[lastIndex] = { ...newMessages[lastIndex], content: fullContent };
+        return newMessages;
+      });
+      
     } catch (err) {
       if (err.name === 'AbortError') {
         setMessages(prev => {
