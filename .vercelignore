@@ -1,0 +1,7 @@
+backend/
+amendements-backend/
+amendements-front/
+scripts/
+docs/
+presentation/
+*.py

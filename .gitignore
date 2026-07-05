@@ -34,3 +34,6 @@ data/clean/
 
 # Variables d'environnement
 .env
+
+# Présentation
+!docs/bourbon.ia.pdf
