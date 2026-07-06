@@ -2,13 +2,25 @@
 Bourbon.IA : L'Assistant Législatif 100 % Local
 
 ### Description courte
-Application web propulsée par un LLM open source 100% local et "Air-Gapped". Elle permet aux administrateurs de l'Assemblée de résumer, comparer et sourcer strictement les amendements sans compromettre la souveraineté des données.
+Bourbon.IA est l'assistant législatif 100% local qui résout le point de douleur n°1 des administrateurs : le tri et le classement des amendements avant leur publication, dans le respect absolu de la déontologie et de la souveraineté numérique.
 
 ### Porteur
 Justin Bandiola
 
 ### Description longue
-L'usage d'outils d'IA générative grand public par les équipes parlementaires pose un risque critique de souveraineté. Bourbon.IA est un assistant législatif fonctionnant de manière 100 % locale (hors-ligne). Connecté aux données ouvertes de l'Assemblée (fichiers JSON), le prototype se concentre sur l'assistance au traitement et au classement des amendements via 3 fonctions : Le Scanner, Le Comparateur, et Le Sourçage Strict (RAG).
+**Le Constat Terrain : L'enfer des 48 heures**
+En 2023, la réforme des retraites a généré un volume record de plus de 20 400 amendements (stratégie d'obstruction). Face à ce mur, un effectif extrêmement réduit d'administrateurs transpartisans doit accomplir un travail titanesque : traiter, trier et classer ce volume écrasant en moins de 48 heures pour alimenter le logiciel de l'Assemblée, *Éloi*.
+
+**La Faille de l'IA Actuelle (L'Insight Métier)**
+Grâce à un administrateur de l'Assemblée nationale présent dans notre équipe, nous avons identifié le vrai blocage métier. Pour des questions strictes de déontologie, les administrateurs **ne peuvent pas** utiliser d'IA cloud (ni même les IA publiques d'État) pendant ces 48h, car les amendements ne sont pas encore rendus publics. Les outils IA classiques sont donc inutilisables au moment précis où le besoin est le plus critique.
+
+**La Solution : Bourbon.IA**
+Bourbon.IA comble cette faille. C'est un copilote 100 % local (Air-Gapped) qui intervient *avant* la publication, transformant une tâche chronophage et rébarbative en un processus automatisé et souverain :
+- **Le Scanner & Le Comparateur :** L'outil classe, résume et identifie sémantiquement les relations complexes : discussions communes, amendements identiques, doublons et isolés.
+- **Action Directe (UI) :** L'interface permet de supprimer les doublons en un clic, nettoyant la base de données instantanément.
+
+**Roadmap Technique**
+Pour les besoins du Hackathon, le front-end est déployé, mais le backend nécessite de faire tourner un LLM en local sur la machine de l'utilisateur (le prototype actuel est un monolithe). Si la solution est adoptée par l'Assemblée, notre équipe s'engage à faire évoluer ce prototype vers une architecture de production professionnelle (Micro-services, conteneurisation Docker).
 
 ### Image principale
 ![Image principale](images/cover.png)
