@@ -1,34 +1,24 @@
-# Template DEFI.md
-
-Remplissez les sections ci-dessous puis publiez le fichier `hackathon-an-2026/DEFI.md` dans votre dépôt.
-
 ### Nom du défi
 Bourbon.IA : L'Assistant Législatif 100 % Local
 
 ### Description courte
-Face au risque de fuite des données de la Nation, Bourbon.IA est une application web propulsée par un grand modèle de langage (LLM) open source fonctionnant en 100% local. Dédié aux équipes parlementaires, ce copilote hors-ligne ingère le flux massif des amendements (JSON) pour offrir 3 fonctions : résumer, comparer, et sourcer strictement chaque réponse (RAG) vers le texte originel. L'objectif : un gain de productivité maximal sans aucun compromis sur la souveraineté technologique.
+Application web propulsée par un LLM open source 100% local et "Air-Gapped". Elle permet aux administrateurs de l'Assemblée de résumer, comparer et sourcer strictement les amendements sans compromettre la souveraineté des données.
 
 ### Porteur
 Justin Bandiola
 
 ### Description longue
-L'usage d'outils d'IA générative grand public par les équipes parlementaires pose un risque critique de souveraineté. Ce défi propose de créer Bourbon.IA, un assistant législatif fonctionnant de manière 100 % locale (hors-ligne), garantissant une confidentialité totale pour les données internes de l'Assemblée. 
-
-Propulsé par un modèle d'IA open source souverain et connecté aux données ouvertes de l'Assemblée (fichiers JSON), le prototype se concentrera sur la tâche la plus chronophage : l'assistance au traitement et au classement des amendements. 
-
-Trois fonctionnalités clés : 
-1. Le Scanner : Résumé instantané des enjeux d'un amendement. 
-2. Le Comparateur : Mise en évidence des nuances entre la proposition initiale et les amendements modificateurs. 
-3. Le Sourçage Strict (RAG) : Pour éliminer tout risque d'hallucination, chaque réponse génère un tag cliquable pointant vers la ligne exacte du texte source. L'outil refusera d'inventer une réponse s'il ne dispose pas de l'information.
+L'usage d'outils d'IA générative grand public par les équipes parlementaires pose un risque critique de souveraineté. Bourbon.IA est un assistant législatif fonctionnant de manière 100 % locale (hors-ligne). Connecté aux données ouvertes de l'Assemblée (fichiers JSON), le prototype se concentre sur l'assistance au traitement et au classement des amendements via 3 fonctions : Le Scanner, Le Comparateur, et Le Sourçage Strict (RAG).
 
 ### Image principale
 ![Image principale](images/cover.png)
 
 ### Contributeurs
 - Justin Bandiola
+- Yassine Yamani
+- Claudia
 
 ### Ressources utilisées
-Cochez les ressources utilisées en remplaçant `[ ]` par `[x]`.
 
 - [ ] `openfisca-france-parameters` — Base de données de paramètres ✺ OpenFisca
 - [ ] `an-dossiers-legislatifs` — Dossiers législatifs de l'Assemblée nationale (législature courante) ✺ Assemblée nationale
@@ -59,9 +49,11 @@ Cochez les ressources utilisées en remplaçant `[ ]` par `[x]`.
 - [ ] `legiwatch-serveur-mcp-parlement` — Serveur MCP Parlement ✺ LegiWatch
 
 ### Galerie
-- [Image 1](images/image-1.png)
-- [Image 2](images/image-2.png)
+![Capture principale - Interface Bourbon.IA](images/image-1.png)
+![Capture secondaire - Interface classement Yassine](images/image-2.png)
 
 ### Documents
-- [Image 1](docs/document-1.png)
-- [Image 2](docs/document-2.png)
+- [Diapositives de présentation Bourbon.IA](docs/bourbon.ia.pdf)
+
+### URL de démonstration
+https://de85f219-55ec-4ec4-94e0-ea61a4794dda.frp.hackathon2026.leximpact.dev

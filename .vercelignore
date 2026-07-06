@@ -2,6 +2,7 @@ backend/
 amendements-backend/
 amendements-front/
 scripts/
-docs/
+data/
 presentation/
+hackathon-an-2026/
 *.py
