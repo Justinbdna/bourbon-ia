@@ -53,7 +53,7 @@ L'usage d'outils d'IA générative grand public par les équipes parlementaires 
 ![Capture secondaire - Interface classement Yassine](images/image-2.png)
 
 ### Documents
-- [Diapositives de présentation Bourbon.IA](docs/bourbon.ia.pdf)
+- [Diapositives de présentation Bourbon.IA](../docs/bourbon.ia.pdf)
 
 ### URL de démonstration
 https://de85f219-55ec-4ec4-94e0-ea61a4794dda.frp.hackathon2026.leximpact.dev
