@@ -68,4 +68,6 @@ Pour les besoins du Hackathon, le front-end est déployé, mais le backend néce
 - [Diapositives de présentation Bourbon.IA](../docs/bourbon.ia.pdf)
 
 ### URL de démonstration
-https://de85f219-55ec-4ec4-94e0-ea61a4794dda.frp.hackathon2026.leximpact.dev
+https://bourbon-ia.vercel.app/
+
+**Note sur l'infrastructure :** Pour des raisons de puissance de calcul et d'accessibilité publique lors de l'évaluation, l'intelligence artificielle (Groq/Llama 3.3) est temporairement hébergée sur un Cloud sécurisé via une architecture Serverless Vercel. Toutefois, le code de Bourbon.IA est conçu pour être 100 % souverain et peut être exécuté intégralement en local.
