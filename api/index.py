@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from api.sorting_engine import trier_amendements
+from sorting_engine import trier_amendements
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -51,7 +51,7 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
     # L'implémentation originelle dans llm_processor.py était synchrone, 
     # mais puisque nous devons gérer raw_request.is_disconnected() à chaque itération, 
     # la boucle logique a été adaptée pour permettre l'interruption.
-    from api.llm_processor import extraire_texte_brut
+    from llm_processor import extraire_texte_brut
     from openai import AsyncOpenAI
     import re
     import time
