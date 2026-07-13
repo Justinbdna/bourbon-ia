@@ -22,19 +22,43 @@ export default function ImportPanel({ onImport }) {
     onImport(list, sourceLabel)
   }
 
-  function handleFileChange(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
+  async function handleFileChange(e) {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+
+    let allAmendments = []
+    let hasError = false
+
+    for (const file of files) {
       try {
-        const json = JSON.parse(reader.result)
-        handleParsed(json, file.name)
+        const text = await file.text()
+        const json = JSON.parse(text)
+        
+        // Détection robuste du format de l'Assemblée nationale ou générique
+        let list = null
+        if (Array.isArray(json)) list = json
+        else if (Array.isArray(json.amendments)) list = json.amendments
+        else if (Array.isArray(json.amendements)) list = json.amendements
+        else if (json.amendements?.amendement && Array.isArray(json.amendements.amendement)) list = json.amendements.amendement
+        else if (json.amendement && Array.isArray(json.amendement)) list = json.amendement
+
+        if (!list) {
+          hasError = true
+        } else {
+          allAmendments = [...allAmendments, ...list]
+        }
       } catch {
-        setError('Impossible de lire ce fichier : JSON invalide.')
+        hasError = true
       }
     }
-    reader.readAsText(file)
+
+    if (allAmendments.length > 0) {
+      setError(hasError ? 'Certains fichiers étaient invalides, mais les autres ont été chargés avec succès.' : null)
+      onImport(allAmendments, files.length > 1 ? `${files.length} fichiers JSON` : files[0].name)
+    } else {
+      setError('Impossible de lire les fichiers : Format JSON invalide ou aucun amendement trouvé.')
+    }
+
     e.target.value = ''
   }
 
@@ -71,6 +95,7 @@ export default function ImportPanel({ onImport }) {
             ref={fileInputRef}
             type="file"
             accept="application/json,.json"
+            multiple
             onChange={handleFileChange}
             className="hidden"
           />
