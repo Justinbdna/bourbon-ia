@@ -36,11 +36,24 @@ export default function ImportPanel({ onImport }) {
         
         // Détection robuste du format de l'Assemblée nationale ou générique
         let list = null
-        if (Array.isArray(json)) list = json
-        else if (Array.isArray(json.amendments)) list = json.amendments
-        else if (Array.isArray(json.amendements)) list = json.amendements
-        else if (json.amendements?.amendement && Array.isArray(json.amendements.amendement)) list = json.amendements.amendement
-        else if (json.amendement && Array.isArray(json.amendement)) list = json.amendement
+        if (Array.isArray(json)) {
+          list = json
+        } else if (json.amendments) {
+          list = Array.isArray(json.amendments) ? json.amendments : [json.amendments]
+        } else if (json.amendements) {
+          if (Array.isArray(json.amendements)) {
+            list = json.amendements
+          } else if (json.amendements.amendement) {
+            list = Array.isArray(json.amendements.amendement) ? json.amendements.amendement : [json.amendements.amendement]
+          } else {
+            list = [json.amendements]
+          }
+        } else if (json.amendement) {
+          list = Array.isArray(json.amendement) ? json.amendement : [json.amendement]
+        } else if (json.uid) {
+          // Cas où le fichier EST directement l'amendement
+          list = [json]
+        }
 
         if (!list) {
           hasError = true
