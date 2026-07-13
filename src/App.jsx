@@ -104,9 +104,9 @@ export default function App() {
   return (
     <div className="min-h-screen">
       <header className="bg-marine-950 text-white">
-        <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between flex-wrap gap-3">
+        <div className="max-w-[95%] mx-auto px-6 py-6 flex items-center justify-between flex-wrap gap-3">
           <div>
-            <img src="/bourdon_logo.svg" alt="Logo" className="h-20 w-auto" />
+            <img src="/bourdon_logo.svg" alt="Logo" className="h-24 w-auto" />
           </div>
           <div className="flex items-center gap-4">
             <ThemeToggle />
@@ -130,7 +130,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+      <main className="max-w-[95%] mx-auto px-6 py-8 space-y-6">
         <ImportPanel onImport={handleImport} />
 
         {amendments.length === 0 && (
@@ -169,9 +169,9 @@ export default function App() {
         </div>
       </main>
 
-      <footer className="max-w-7xl mx-auto px-6 pb-8 text-center">
-        <p className="text-xs text-ink-500 dark:text-ink-400 max-w-4xl mx-auto leading-relaxed">
-          ⚠️ Note technique : Pour garantir un accès public et fluide à cette démonstration, l'IA est temporairement déportée sur une infrastructure Cloud externe (Groq/Llama 3.3). En conditions réelles, Bourbon.IA est conçu pour une exécution 100 % souveraine, locale et hors-ligne, garantissant la confidentialité absolue des données législatives.
+      <footer className="max-w-[95%] mx-auto px-6 pb-8 text-center">
+        <p className="text-sm text-neutre dark:text-ink-400 max-w-5xl mx-auto leading-relaxed">
+          ⚠️ Note technique - Version Démo : Pour des raisons de logistique et de puissance de serveurs, l'IA de cette démonstration est temporairement déportée sur un Cloud externe sécurisé (Groq/Llama 3.3). L'architecture logicielle de Bourbon.IA reste conçue pour une exécution 100 % souveraine, locale et hors-ligne, garantissant la stricte confidentialité des données.
         </p>
       </footer>
     </div>
