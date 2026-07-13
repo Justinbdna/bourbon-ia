@@ -2,7 +2,6 @@ backend/
 amendements-backend/
 _archive_src/
 scripts/
-data/
+/data/
 presentation/
 hackathon-an-2026/
-*.py
