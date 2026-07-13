@@ -4,29 +4,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# --- Configuration LM Studio ---
-PC_URL = os.environ.get("LLM_API_URL", "http://100.78.180.81:1234/v1")
-MAC_URL = "http://127.0.0.1:1234/v1"
-
-MODEL_MAP = {
-    "mac_mistral": "mistralai/mistral-7b-instruct-v0.3",
-    "mac_llama": "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF",
-    "mac_qwen": "qwen/qwen3.5-9b",
-    "mac_gemma": "google/gemma-4-e2b",
-    "pc_mistral_7b": "mistralai/mistral-7b-instruct-v0.3",
-    "pc_mistral_14b": "mistralai/ministral-3-14b-reasoning",
-    "pc_gemma_12b": "google/gemma-4-12b",
-    "pc_qwen_35b": "qwen/qwen3.6-35b-a3b",
-    "pc_qwq_32b": "qwen/qwq-32b"
-}
-DEFAULT_MODEL_ID = "mistralai/mistral-7b-instruct-v0.3"
-
-def resolve_model_and_url(model_name: str = ""):
-    """Traduit la clé du front-end en (URL_CIBLE, ID_LM_STUDIO)."""
-    name = model_name.lower()
-    target_url = MAC_URL if name.startswith("mac_") else PC_URL
-    model_id = MODEL_MAP.get(name, DEFAULT_MODEL_ID)
-    return target_url, model_id
 
 def extraire_texte_brut(amendement: dict) -> dict:
     """
@@ -63,4 +40,4 @@ def extraire_texte_brut(amendement: dict) -> dict:
     }
 
 # NOTE: La fonction analyser_doublons_identiques a été fusionnée dans 
-# backend/app/main.py pour permettre l'interruption asynchrone (Bouton Stop).
+# api/index.py pour permettre l'interruption asynchrone (Bouton Stop).

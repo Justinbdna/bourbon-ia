@@ -168,6 +168,12 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      <footer className="max-w-7xl mx-auto px-6 pb-8 text-center">
+        <p className="text-xs text-ink-500 dark:text-ink-400 max-w-4xl mx-auto leading-relaxed">
+          ⚠️ Note technique : Pour garantir un accès public et fluide à cette démonstration, l'IA est temporairement déportée sur une infrastructure Cloud externe (Groq/Llama 3.3). En conditions réelles, Bourbon.IA est conçu pour une exécution 100 % souveraine, locale et hors-ligne, garantissant la confidentialité absolue des données législatives.
+        </p>
+      </footer>
     </div>
   )
 }

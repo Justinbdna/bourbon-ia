@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from backend.sorting_engine import trier_amendements
+from api.sorting_engine import trier_amendements
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -51,14 +51,14 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
     # L'implémentation originelle dans llm_processor.py était synchrone, 
     # mais puisque nous devons gérer raw_request.is_disconnected() à chaque itération, 
     # la boucle logique a été adaptée pour permettre l'interruption.
-    from backend.llm_processor import extraire_texte_brut, resolve_model_and_url
+    from api.llm_processor import extraire_texte_brut
     from openai import AsyncOpenAI
     import re
     import time
     import asyncio
+    import os
     
-    target_url, model_id = resolve_model_and_url(payload.model)
-    client = AsyncOpenAI(base_url=target_url, api_key="lm-studio", timeout=300.0)
+    client = AsyncOpenAI(base_url="https://api.groq.com/openai/v1", api_key=os.getenv("GROQ_API_KEY"), timeout=300.0)
     
     resultats = []
     amendement_precedent = None
@@ -92,7 +92,7 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
         
         try:
             response = await client.chat.completions.create(
-                model="local-model",
+                model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": f"{system_prompt}\n\n{user_prompt}"}],
                 temperature=0.1,
                 max_tokens=200,
