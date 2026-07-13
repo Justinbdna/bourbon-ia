@@ -5,6 +5,8 @@ import AmendmentDetail from './components/AmendmentDetail'
 import ClassifyButton from './components/ClassifyButton'
 import sampleAmendments from './data/sampleAmendments.json'
 import { classifyAmendments } from './api/classify'
+import ThemeToggle from './components/ThemeToggle'
+
 
 export default function App() {
   const [amendments, setAmendments] = useState([])
@@ -104,24 +106,27 @@ export default function App() {
       <header className="bg-marine-950 text-white">
         <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between flex-wrap gap-3">
           <div>
-            <img src="/bourdon_logo.svg" alt="Logo" className="h-10 w-auto" /> test
+            <img src="/bourdon_logo.svg" alt="Logo" className="h-20 w-auto" />
           </div>
-          {amendments.length > 0 && (
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-marine-100/80">
-                {amendments.length} amendement{amendments.length > 1 ? 's' : ''} chargé
-                {amendments.length > 1 ? 's' : ''}
-                {sourceLabel ? ` · ${sourceLabel}` : ''}
-              </span>
-              <button
-                type="button"
-                onClick={handleExport}
-                className="rounded-md border border-white/30 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/10 transition-colors"
-              >
-                Exporter en JSON
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-4">
+            <ThemeToggle />
+            {amendments.length > 0 && (
+              <>
+                <span className="text-sm text-marine-100/80">
+                  {amendments.length} amendement{amendments.length > 1 ? 's' : ''} chargé
+                  {amendments.length > 1 ? 's' : ''}
+                  {sourceLabel ? ` · ${sourceLabel}` : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  className="rounded-md border border-white/30 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/10 transition-colors"
+                >
+                  Exporter en JSON
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -133,7 +138,7 @@ export default function App() {
             <button
               type="button"
               onClick={handleLoadSample}
-              className="text-sm text-marine-700 underline underline-offset-2 hover:text-marine-900"
+              className="text-sm text-marine-700 dark:text-marine-300 underline underline-offset-2 hover:text-marine-900 dark:hover:text-marine-100"
             >
               Pas de fichier sous la main ? Charger le jeu de données d'exemple
             </button>

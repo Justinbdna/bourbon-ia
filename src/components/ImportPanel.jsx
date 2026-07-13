@@ -50,11 +50,11 @@ export default function ImportPanel({ onImport }) {
   }
 
   return (
-    <div className="rounded-lg border border-ink-300 bg-white p-5">
+    <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 p-5">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="font-display text-lg text-marine-900">Récupérer des amendements</h2>
-          <p className="text-sm text-ink-500 mt-0.5">
+          <h2 className="font-display text-lg text-marine-900 dark:text-plume">Récupérer des amendements</h2>
+          <p className="text-sm text-ink-500 dark:text-ink-300 mt-0.5">
             Importe un fichier JSON, ou colle directement les données.
           </p>
         </div>
@@ -77,7 +77,7 @@ export default function ImportPanel({ onImport }) {
           <button
             type="button"
             onClick={() => setPasteOpen((v) => !v)}
-            className="rounded-md border border-ink-300 px-4 py-2 text-sm font-medium text-ink-700 hover:bg-ink-100 transition-colors"
+            className="rounded-md border border-ink-300 px-4 py-2 text-sm font-medium text-ink-700 dark:text-plume dark:border-ink-500 dark:hover:bg-ink-800 hover:bg-ink-100 transition-colors"
           >
             Coller du JSON
           </button>
@@ -104,7 +104,7 @@ export default function ImportPanel({ onImport }) {
             <button
               type="button"
               onClick={() => { setPasteOpen(false); setPasteValue(''); setError(null) }}
-              className="rounded-md px-3 py-1.5 text-sm font-medium text-ink-500 hover:bg-ink-100"
+              className="rounded-md px-3 py-1.5 text-sm font-medium text-ink-500 dark:text-ink-300 hover:bg-ink-100 dark:hover:bg-ink-800"
             >
               Annuler
             </button>

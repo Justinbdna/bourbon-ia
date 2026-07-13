@@ -1,9 +1,11 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
     extend: {
       colors: {
+        bourbon: '#D91227', obsidienne: '#0B0C10', surface: '#1A1B22', plume: '#F8F9FA', neutre: '#8B8D98', or: '#D4AF37',
         marine: {
           950: '#0E1B2E',
           900: '#132743',

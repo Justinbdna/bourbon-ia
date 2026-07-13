@@ -1,10 +1,10 @@
 export default function ClassifyButton({ disabled, loading, error, warnings = [], onClick }) {
   return (
-    <div className="rounded-lg border border-ink-300 bg-white p-5">
+    <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 p-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="font-display text-lg text-marine-900">Classement automatique</h2>
-          <p className="text-sm text-ink-500 mt-0.5">
+          <h2 className="font-display text-lg text-marine-900 dark:text-plume">Classement automatique</h2>
+          <p className="text-sm text-ink-500 dark:text-ink-300 mt-0.5">
             Applique les règles de classement de l'Assemblée aux amendements chargés, via l'IA.
           </p>
         </div>
@@ -13,7 +13,7 @@ export default function ClassifyButton({ disabled, loading, error, warnings = []
           type="button"
           disabled={disabled || loading}
           onClick={onClick}
-          className="rounded-md bg-bronze-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-bronze-500 disabled:bg-ink-300 disabled:cursor-not-allowed transition-colors"
+          className="rounded-md bg-bourbon px-5 py-2.5 text-sm font-semibold text-white hover:bg-bourbon/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-[0_0_15px_rgba(217,18,39,0.5)] hover:shadow-[0_0_20px_rgba(217,18,39,0.7)]"
         >
           {loading ? 'Classement en cours…' : 'Lancer le classement IA'}
         </button>

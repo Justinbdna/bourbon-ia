@@ -19,7 +19,7 @@ export class ClassifyError extends Error {
 export async function classifyAmendments(amendements) {
   let response
   try {
-    response = await fetch(`${API_BASE_URL}/classify`, {
+    response = await fetch(`${API_BASE_URL}/api/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amendements }),
@@ -43,5 +43,9 @@ export async function classifyAmendments(amendements) {
     throw new ClassifyError(detail, response.status)
   }
 
+  // Traduction du tableau direct en objet attendu par le front
+  if (Array.isArray(data)) {
+    return { classement: data, avertissements: [], modele_utilise: 'Local' }
+  }
   return data
 }

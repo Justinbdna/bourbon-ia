@@ -68,8 +68,8 @@ function computeGroupSpans(amendments) {
 export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete }) {
   if (amendments.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-ink-300 bg-white p-10 text-center">
-        <p className="text-ink-500 text-sm">
+      <div className="rounded-lg border border-dashed border-ink-300 bg-white dark:bg-surface dark:border-ink-700 p-10 text-center">
+        <p className="text-ink-500 dark:text-ink-300 text-sm">
           Aucun amendement chargé pour l'instant. Importe un fichier JSON ci-dessus pour commencer.
         </p>
       </div>
@@ -97,21 +97,21 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
   }
 
   return (
-    <div className="rounded-lg border border-ink-300 bg-white overflow-hidden">
+    <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 overflow-hidden">
       <div className="overflow-y-auto scroll-thin" style={{ maxHeight: MAX_VISIBLE_HEIGHT }}>
         <table className="w-full text-sm table-fixed">
           <thead>
-            <tr className="bg-marine-50 text-marine-900 text-left">
-              <th className="sticky top-0 z-10 bg-marine-50 px-2 py-3 w-8"></th>
-              <th className="sticky top-0 z-10 bg-marine-50 px-1 py-3 w-10"></th>
-              <th className="sticky top-0 z-10 bg-marine-50 px-4 py-3 font-semibold w-16">Rang</th>
-              <th className="sticky top-0 z-10 bg-marine-50 px-4 py-3 font-semibold w-14">Art.</th>
-              <th className="sticky top-0 z-10 bg-marine-50 px-4 py-3 font-semibold w-20">N°</th>
-              <th className="sticky top-0 z-10 bg-marine-50 px-4 py-3 font-semibold w-46">Auteur(s)</th>
-              <th className="sticky top-0 z-10 bg-marine-50 px-4 py-3 font-semibold w-52">Point d'impact</th>
-              <th className="sticky top-0 z-10 bg-marine-50 px-4 py-3 font-semibold w-40">Extrait du dispositif</th>
-              <th className="sticky top-0 z-10 bg-marine-50 px-4 py-3 font-semibold w-42">Groupe</th>
-              <th className="sticky top-0 z-10 bg-marine-50 px-4 py-3 font-semibold w-28">Actions</th>
+            <tr className="bg-marine-50 dark:bg-obsidienne text-marine-900 dark:text-plume text-left border-b border-ink-200 dark:border-ink-700">
+              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-2 py-3 w-8"></th>
+              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-1 py-3 w-10"></th>
+              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-16">Rang</th>
+              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-14">Art.</th>
+              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-20">N°</th>
+              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-46">Auteur(s)</th>
+              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-52">Point d'impact</th>
+              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-40">Extrait du dispositif</th>
+              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-42">Groupe</th>
+              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-28">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -224,15 +224,15 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
         </table>
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-ink-100 bg-ink-50/50 px-4 py-3">
-        <p className="text-xs text-ink-500">
+      <div className="flex items-center justify-between gap-3 border-t border-ink-100 dark:border-ink-700 bg-ink-50/50 dark:bg-obsidienne/50 px-4 py-3">
+        <p className="text-xs text-ink-500 dark:text-ink-300">
           Export au format du préjaune de l'Assemblée (crochets Dc./Id. reconstruits à partir du classement).
         </p>
         <button
           type="button"
-          onClick={handleExportRtf}
-          disabled={!hasClassification}
-          className="rounded-md border border-marine-700 px-3 py-1.5 text-sm font-medium text-marine-800 hover:bg-marine-50 disabled:border-ink-300 disabled:text-ink-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+          disabled={amendments.length === 0}
+          onClick={() => downloadRtf(amendments)}
+          className="rounded-md border border-marine-700 dark:border-marine-100 px-3 py-1.5 text-sm font-medium text-marine-800 dark:text-plume hover:bg-marine-50 dark:hover:bg-marine-900/50 disabled:border-ink-300 disabled:text-ink-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
         >
           Exporter en préjaune (.rtf)
         </button>

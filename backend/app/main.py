@@ -52,12 +52,13 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
     # mais puisque nous devons gérer raw_request.is_disconnected() à chaque itération, 
     # la boucle logique a été adaptée pour permettre l'interruption.
     from backend.llm_processor import extraire_texte_brut, resolve_model_and_url
-    from openai import OpenAI
+    from openai import AsyncOpenAI
     import re
     import time
+    import asyncio
     
     target_url, model_id = resolve_model_and_url(payload.model)
-    client = OpenAI(base_url=target_url, api_key="lm-studio", timeout=300.0)
+    client = AsyncOpenAI(base_url=target_url, api_key="lm-studio", timeout=300.0)
     
     resultats = []
     amendement_precedent = None
@@ -73,7 +74,7 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
             logging.warning("🛑 Analyse interrompue par le client (Bouton Stop).")
             break
             
-        amend_id = amend.get("numero", "Inconnu")
+        amend_id = amend.get("id", amend.get("numero", "Inconnu"))
         donnees_propres = extraire_texte_brut(amend)
         
         if amendement_precedent is None:
@@ -90,9 +91,9 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
         )
         
         try:
-            response = client.chat.completions.create(
-                model=model_id,
-                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+            response = await client.chat.completions.create(
+                model="local-model",
+                messages=[{"role": "user", "content": f"{system_prompt}\n\n{user_prompt}"}],
                 temperature=0.1,
                 max_tokens=200,
             )
@@ -123,6 +124,8 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
                 amendement_precedent = donnees_propres
                 
         except Exception as e:
+            print(f"❌ ERREUR LLM sur l'amendement {amend_id} : {e}")
+            await asyncio.sleep(1)  # Laisse LM Studio respirer
             resultats.append({
                 "id": amend_id, "statut": "Erreur",
                 "justification": str(e), "alerte_couleur": "rouge"

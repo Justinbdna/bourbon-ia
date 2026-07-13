@@ -6,7 +6,7 @@ load_dotenv()
 
 # --- Configuration LM Studio ---
 PC_URL = os.environ.get("LLM_API_URL", "http://100.78.180.81:1234/v1")
-MAC_URL = "http://127.0.0.1:1234"
+MAC_URL = "http://127.0.0.1:1234/v1"
 
 MODEL_MAP = {
     "mac_mistral": "mistralai/mistral-7b-instruct-v0.3",
@@ -41,12 +41,12 @@ def extraire_texte_brut(amendement: dict) -> dict:
             auteur = auteurs.get("acteurRef", "Inconnu")
         elif isinstance(auteurs, list) and len(auteurs) > 0:
             auteur = auteurs[0].get("acteurRef", "Inconnu")
-    elif "auteur" in amendement:
-        auteur = amendement["auteur"]
+    elif "auteur" in amendement or "auteurs" in amendement:
+        auteur = amendement.get("auteur", ", ".join(amendement.get("auteurs", [])))
         
     # Extraction Dispositif & Exposé
-    dispositif = amendement.get("texte", "")
-    expose = amendement.get("motif", "")
+    dispositif = amendement.get("dispositif", amendement.get("texte", ""))
+    expose = amendement.get("expose_sommaire", amendement.get("motif", ""))
     
     if "corps" in amendement and "contenuAuteur" in amendement["corps"]:
         contenu = amendement["corps"]["contenuAuteur"]
