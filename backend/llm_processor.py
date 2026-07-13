@@ -6,7 +6,7 @@ load_dotenv()
 
 # --- Configuration LM Studio ---
 PC_URL = os.environ.get("LLM_API_URL", "http://100.78.180.81:1234/v1")
-MAC_URL = "http://127.0.0.1:1234/v1"
+MAC_URL = "http://127.0.0.1:1234"
 
 MODEL_MAP = {
     "mac_mistral": "mistralai/mistral-7b-instruct-v0.3",
