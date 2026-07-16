@@ -1,9 +1,15 @@
 """
 Bourbon.IA — Serveur FastAPI
-API REST locale pour le MVP du hackathon.
+API REST locale et Vercel Serverless pour le MVP du hackathon.
 """
 import json
 import logging
+import os
+import re
+import time
+import asyncio
+from typing import List, Dict, Any
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -11,11 +17,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from sorting_engine import trier_amendements
+# ==========================================
+# GESTION DES IMPORTS POUR VERCEL SERVERLESS
+# ==========================================
+try:
+    # Environnement Vercel (depuis la racine du projet)
+    from api.sorting_engine import trier_amendements
+    from api.llm_processor import extraire_texte_brut
+except ModuleNotFoundError:
+    # Environnement Local (exécution directe dans le dossier api/)
+    from sorting_engine import trier_amendements
+    from llm_processor import extraire_texte_brut
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -27,13 +39,13 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["*"], # Permettre toutes les origines pour le Vercel Serverless
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 class AnalyzeRequest(BaseModel):
-    amendements: list[dict]
+    amendements: List[Dict[str, Any]]
     model: str = "mac_mistral"
 
 class AnalyzeResult(BaseModel):
@@ -42,27 +54,27 @@ class AnalyzeResult(BaseModel):
     justification: str
     alerte_couleur: str
 
-@app.post("/api/analyze", response_model=list[AnalyzeResult])
+@app.post("/api/analyze", response_model=List[AnalyzeResult])
 async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
     """
-    Contrat de Données Front/Back (Yassine).
+    Contrat de Données Front/Back.
     Reçoit un tableau d'amendements bruts et retourne pour chacun son statut structuré.
     """
     # 1. Tri mécanique (Doctrine de l'Assemblée)
     amendements_tries = trier_amendements(payload.amendements)
     
-    # 2. Analyse LLM par lots (avec vérification d'interruption du front-end)
-    # L'implémentation originelle dans llm_processor.py était synchrone, 
-    # mais puisque nous devons gérer raw_request.is_disconnected() à chaque itération, 
-    # la boucle logique a été adaptée pour permettre l'interruption.
-    from llm_processor import extraire_texte_brut
+    # Lazy Load OpenAI pour éviter les plantages au build
     from openai import AsyncOpenAI
-    import re
-    import time
-    import asyncio
-    import os
     
-    client = AsyncOpenAI(base_url="https://api.groq.com/openai/v1", api_key=os.getenv("GROQ_API_KEY"), timeout=300.0)
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        logging.warning("Clé GROQ_API_KEY manquante. L'analyse LLM risque d'échouer.")
+        
+    client = AsyncOpenAI(
+        base_url="https://api.groq.com/openai/v1", 
+        api_key=api_key or "DUMMY_KEY", 
+        timeout=300.0
+    )
     
     resultats = []
     amendement_precedent = None
@@ -75,17 +87,19 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
     for amend in amendements_tries:
         # Vérifie si le front-end a cliqué sur "Stop"
         if await raw_request.is_disconnected():
-            logging.warning("🛑 Analyse interrompue par le client (Bouton Stop).")
+            logging.warning("🛑 Analyse interrompue par le client.")
             break
             
-        amend_id = amend.get("id", amend.get("numero", "Inconnu"))
+        amend_id = str(amend.get("id", amend.get("numero", "Inconnu")))
         donnees_propres = extraire_texte_brut(amend)
         
         if amendement_precedent is None:
-            resultats.append({
-                "id": amend_id, "statut": "Nouveau", 
-                "justification": "Premier du lot (Référence).", "alerte_couleur": "vert"
-            })
+            resultats.append(AnalyzeResult(
+                id=amend_id, 
+                statut="Nouveau", 
+                justification="Premier du lot (Référence).", 
+                alerte_couleur="vert"
+            ))
             amendement_precedent = donnees_propres
             continue
             
@@ -118,25 +132,29 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
             statut = data_json.get("statut", "Nouveau")
             couleur = "rouge" if statut == "Doublon" else "orange" if statut in ["Identique", "Incompatible"] else "vert"
                 
-            resultats.append({
-                "id": amend_id, "statut": statut,
-                "justification": data_json.get("justification", ""),
-                "alerte_couleur": couleur
-            })
+            resultats.append(AnalyzeResult(
+                id=amend_id, 
+                statut=statut,
+                justification=data_json.get("justification", ""),
+                alerte_couleur=couleur
+            ))
             
             if statut == "Nouveau":
                 amendement_precedent = donnees_propres
                 
         except Exception as e:
-            print(f"❌ ERREUR LLM sur l'amendement {amend_id} : {e}")
-            await asyncio.sleep(1)  # Laisse LM Studio respirer
-            resultats.append({
-                "id": amend_id, "statut": "Erreur",
-                "justification": str(e), "alerte_couleur": "rouge"
-            })
+            logging.error(f"❌ ERREUR LLM sur l'amendement {amend_id} : {e}")
+            await asyncio.sleep(1)
+            resultats.append(AnalyzeResult(
+                id=amend_id, 
+                statut="Erreur",
+                justification=str(e), 
+                alerte_couleur="rouge"
+            ))
             
     return resultats
 
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
