@@ -17,12 +17,15 @@ export class ClassifyError extends Error {
  * Renvoie { classement, avertissements, modele_utilise }.
  */
 export async function classifyAmendments(amendements) {
+  const payload = { amendements }
+  console.log("PAYLOAD ENVOYÉ:", payload)
+
   let response
   try {
     response = await fetch(`${API_BASE_URL}/api/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amendements }),
+      body: JSON.stringify(payload),
     })
   } catch (err) {
     throw new ClassifyError(
@@ -31,16 +34,17 @@ export async function classifyAmendments(amendements) {
     )
   }
 
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error("RÉPONSE BRUTE:", errorText)
+    throw new ClassifyError(`Erreur ${response.status}: ${errorText}`, response.status)
+  }
+
   let data = null
   try {
     data = await response.json()
   } catch {
     // pas de corps JSON exploitable
-  }
-
-  if (!response.ok) {
-    const detail = data?.detail || `Erreur serveur (${response.status})`
-    throw new ClassifyError(detail, response.status)
   }
 
   // Traduction du tableau direct en objet attendu par le front

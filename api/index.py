@@ -41,7 +41,7 @@ app.add_middleware(
 )
 
 class AnalyzeRequest(BaseModel):
-    amendements: List[Dict[str, Any]]
+    amendements: list
     model: str = "mac_mistral"
 
 class AnalyzeResult(BaseModel):
