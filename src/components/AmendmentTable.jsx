@@ -96,8 +96,29 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
     downloadRtf(amendments, `prejaune-${dateStr}.rtf`)
   }
 
+  const totalClasses = amendments.filter(a => a.resultat_ia).length
+  const countDC = amendments.filter(a => {
+    const s = a.resultat_ia?.statut
+    return s === 'Incompatible' || s === 'Discussion commune'
+  }).length
+  const countId = amendments.filter(a => {
+    const s = a.resultat_ia?.statut
+    return s === 'Identique' || s === 'Identiques'
+  }).length
+  const countIsole = amendments.filter(a => {
+    const s = a.resultat_ia?.statut
+    return s === 'Nouveau' || s === 'Isolé'
+  }).length
+
   return (
     <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 overflow-hidden">
+      {totalClasses > 0 && (
+        <div className="bg-marine-50/80 dark:bg-obsidienne border-b border-ink-200 dark:border-ink-700 px-4 py-3">
+          <p className="text-sm font-medium text-marine-800 dark:text-plume">
+            {totalClasses} amendements classés ({countDC} en discussion commune, {countId} identiques, {countIsole} isolés).
+          </p>
+        </div>
+      )}
       <div className="overflow-y-auto scroll-thin" style={{ maxHeight: MAX_VISIBLE_HEIGHT }}>
         <table className="w-full text-sm table-fixed">
           <thead>
@@ -198,24 +219,22 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   </td>
                   <td className="px-4 py-3 truncate whitespace-nowrap">
                     {res ? (
-                      <GroupeBadge type={res.groupe?.type} />
+                      <GroupeBadge type={res.statut} />
                     ) : (
                       <span className="text-ink-500 italic text-xs">Non classé</span>
                     )}
                   </td>
                   <td className="px-4 py-3 truncate whitespace-nowrap">
-                    {isDoublon && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onDelete(a.id)
-                        }}
-                        className="text-xs font-medium text-red-600 hover:text-red-800 underline underline-offset-2"
-                      >
-                        Retirer
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDelete(a.id)
+                      }}
+                      className="text-xs font-medium text-ink-500 hover:text-red-600 transition-colors"
+                    >
+                      Retirer
+                    </button>
                   </td>
                 </tr>
               )

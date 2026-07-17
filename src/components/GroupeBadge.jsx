@@ -1,16 +1,22 @@
 const LABELS = {
   discussion_commune: 'Discussion commune',
+  Incompatible: 'Discussion commune',
   identiques: 'Identiques',
+  Identique: 'Identiques',
   doublon: 'Doublon',
-  additionnel: 'Additionnel',
+  Doublon: 'Doublon',
+  Nouveau: 'Isolé',
   isole: 'Isolé',
 }
 
 const STYLES = {
   discussion_commune: 'bg-purple-50 text-purple-700 ring-purple-200',
+  Incompatible: 'bg-purple-50 text-purple-700 ring-purple-200',
   identiques: 'bg-blue-50 text-blue-700 ring-blue-200',
+  Identique: 'bg-blue-50 text-blue-700 ring-blue-200',
   doublon: 'bg-red-50 text-red-700 ring-red-200',
-  additionnel: 'bg-teal-50 text-teal-700 ring-teal-200',
+  Doublon: 'bg-red-50 text-red-700 ring-red-200',
+  Nouveau: 'bg-ink-100 text-ink-600 ring-ink-300',
   isole: 'bg-ink-100 text-ink-600 ring-ink-300',
 }
 
