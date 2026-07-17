@@ -56,7 +56,11 @@ export default function App() {
       setAmendments(misAJour)
       setWarnings(result.avertissements || [])
     } catch (err) {
-      setClassifyError(err.message || 'Erreur inconnue lors du classement.')
+      if (err.status === 504 || (err.message && err.message.includes('504'))) {
+        setClassifyError("Erreur serveur ou délai d'attente dépassé (Timeout Vercel). Essayez de réduire le nombre d'amendements.")
+      } else {
+        setClassifyError(err.message || 'Erreur inconnue lors du classement.')
+      }
     } finally {
       setIsClassifying(false)
     }

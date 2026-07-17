@@ -69,35 +69,31 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
             timeout=300.0
         )
         
-        resultats = []
-        amendement_precedent = None
-        
         system_prompt = (
             "Tu es un assistant juridique. Compare ces amendements en ignorant le 'chapeau'. "
             "Réponds UNIQUEMENT en JSON avec les clés : id, statut (Doublon, Identique, Nouveau, Incompatible), justification."
         )
         
-        for amend in amendements_tries:
-            # Vérifie si le front-end a cliqué sur "Stop"
-            if await raw_request.is_disconnected():
-                logging.warning("🛑 Analyse interrompue par le client.")
-                break
-                
+        if not amendements_tries:
+            return []
+
+        # Le premier amendement sert de référence absolue pour le lot
+        reference_brut = extraire_texte_brut(amendements_tries[0])
+        ref_id = str(amendements_tries[0].get("id", amendements_tries[0].get("numero", "Inconnu")))
+        
+        resultats = [AnalyzeResult(
+            id=ref_id, 
+            statut="Nouveau", 
+            justification="Premier du lot (Référence globale).", 
+            alerte_couleur="vert"
+        )]
+        
+        async def process_amendment(amend):
             amend_id = str(amend.get("id", amend.get("numero", "Inconnu")))
             donnees_propres = extraire_texte_brut(amend)
             
-            if amendement_precedent is None:
-                resultats.append(AnalyzeResult(
-                    id=amend_id, 
-                    statut="Nouveau", 
-                    justification="Premier du lot (Référence).", 
-                    alerte_couleur="vert"
-                ))
-                amendement_precedent = donnees_propres
-                continue
-                
             user_prompt = (
-                f"REF - Auteur: {amendement_precedent['auteur']}\nTexte: {amendement_precedent['texte']}\n"
+                f"REF - Auteur: {reference_brut['auteur']}\nTexte: {reference_brut['texte']}\n"
                 f"TEST - Auteur: {donnees_propres['auteur']}\nTexte: {donnees_propres['texte']}"
             )
             
@@ -125,25 +121,28 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
                 statut = data_json.get("statut", "Nouveau")
                 couleur = "rouge" if statut == "Doublon" else "orange" if statut in ["Identique", "Incompatible"] else "vert"
                     
-                resultats.append(AnalyzeResult(
+                return AnalyzeResult(
                     id=amend_id, 
                     statut=statut,
                     justification=data_json.get("justification", ""),
                     alerte_couleur=couleur
-                ))
-                
-                if statut == "Nouveau":
-                    amendement_precedent = donnees_propres
+                )
                     
             except Exception as e:
                 logging.error(f"❌ ERREUR LLM sur l'amendement {amend_id} : {e}")
-                await asyncio.sleep(1)
-                resultats.append(AnalyzeResult(
+                return AnalyzeResult(
                     id=amend_id, 
                     statut="Erreur",
                     justification=str(e), 
                     alerte_couleur="rouge"
-                ))
+                )
+
+        # Création des tâches asynchrones pour tous les amendements sauf le premier
+        tasks = [process_amendment(amend) for amend in amendements_tries[1:]]
+        
+        # Exécution parallèle massive pour contourner le timeout de 10s de Vercel
+        resultats_paralleles = await asyncio.gather(*tasks)
+        resultats.extend(resultats_paralleles)
             
         return resultats
     except Exception as exc:
