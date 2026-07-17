@@ -88,65 +88,65 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
             alerte_couleur="vert"
         )]
         
+        sem = asyncio.Semaphore(4)
+
         async def process_amendment(amend):
-            amend_id = str(amend.get("id", amend.get("numero", "Inconnu")))
-            donnees_propres = extraire_texte_brut(amend)
-            
-            user_prompt = (
-                f"REF - Auteur: {reference_brut['auteur']}\nTexte: {reference_brut['texte']}\n"
-                f"TEST - Auteur: {donnees_propres['auteur']}\nTexte: {donnees_propres['texte']}"
-            )
-            
-            try:
-                response = await client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[{"role": "user", "content": f"{system_prompt}\n\n{user_prompt}"}],
-                    temperature=0.1,
-                    max_tokens=200,
-                )
-                contenu = response.choices[0].message.content.strip()
-                match = re.search(r"```(?:json)?(.*?)```", contenu, re.DOTALL | re.IGNORECASE)
-                if match:
-                    contenu = match.group(1).strip()
-                    
-                json_match = re.search(r'\[.*\]|\{.*\}', contenu, re.DOTALL)
-                if json_match:
-                    contenu = json_match.group(0)
-                    
-                try:
-                    data_json = json.loads(contenu)
-                except json.JSONDecodeError:
-                    data_json = {"statut": "Erreur", "justification": "Erreur de formatage du modèle."}
+            async with sem:
+                amend_id = str(amend.get("id", amend.get("numero", "Inconnu")))
+                donnees_propres = extraire_texte_brut(amend)
                 
-                statut = data_json.get("statut", "Nouveau")
-                couleur = "rouge" if statut == "Doublon" else "orange" if statut in ["Identique", "Incompatible"] else "vert"
-                    
-                return AnalyzeResult(
-                    id=amend_id, 
-                    statut=statut,
-                    justification=data_json.get("justification", ""),
-                    alerte_couleur=couleur
+                user_prompt = (
+                    f"REF - Auteur: {reference_brut['auteur']}\nTexte: {reference_brut['texte']}\n"
+                    f"TEST - Auteur: {donnees_propres['auteur']}\nTexte: {donnees_propres['texte']}"
                 )
+                
+                try:
+                    response = await client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=[{"role": "user", "content": f"{system_prompt}\n\n{user_prompt}"}],
+                        temperature=0.1,
+                        max_tokens=200,
+                    )
+                    contenu = response.choices[0].message.content.strip()
+                    match = re.search(r"```(?:json)?(.*?)```", contenu, re.DOTALL | re.IGNORECASE)
+                    if match:
+                        contenu = match.group(1).strip()
+                        
+                    json_match = re.search(r'\[.*\]|\{.*\}', contenu, re.DOTALL)
+                    if json_match:
+                        contenu = json_match.group(0)
+                        
+                    try:
+                        data_json = json.loads(contenu)
+                    except json.JSONDecodeError:
+                        data_json = {"statut": "Erreur", "justification": "Erreur de formatage du modèle."}
                     
-            except Exception as e:
-                logging.error(f"❌ ERREUR LLM sur l'amendement {amend_id} : {e}")
-                return AnalyzeResult(
-                    id=amend_id, 
-                    statut="Erreur",
-                    justification=str(e), 
-                    alerte_couleur="rouge"
-                )
+                    statut = data_json.get("statut", "Nouveau")
+                    couleur = "rouge" if statut == "Doublon" else "orange" if statut in ["Identique", "Incompatible"] else "vert"
+                        
+                    return AnalyzeResult(
+                        id=amend_id, 
+                        statut=statut,
+                        justification=data_json.get("justification", ""),
+                        alerte_couleur=couleur
+                    )
+                        
+                except Exception as e:
+                    logging.error(f"❌ ERREUR LLM sur l'amendement {amend_id} : {e}")
+                    raise HTTPException(status_code=500, detail=f"Erreur API LLM (ex: Rate Limit 429) : {str(e)}")
 
         # Création des tâches asynchrones pour tous les amendements sauf le premier
         tasks = [process_amendment(amend) for amend in amendements_tries[1:]]
         
-        # Exécution parallèle massive pour contourner le timeout de 10s de Vercel
+        # Exécution parallèle avec concurrence contrôlée (semaphore = 4)
         resultats_paralleles = await asyncio.gather(*tasks)
         resultats.extend(resultats_paralleles)
             
         return resultats
     except Exception as exc:
         logging.error("Erreur Backend", exc_info=True)
+        if isinstance(exc, HTTPException):
+            raise exc
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @app.get("/api/health")

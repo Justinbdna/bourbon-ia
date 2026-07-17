@@ -148,7 +148,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
 
               return (
                 <tr
-                  key={a.id}
+                  key={a.id || index}
                   draggable
                   onDragStart={(e) => handleDragStart(e, index)}
                   onDragOver={(e) => e.preventDefault()}
