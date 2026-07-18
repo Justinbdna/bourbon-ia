@@ -147,14 +147,19 @@ Format attendu: [{"id": "...", "statut": "Isolé", "justification": "...", "aler
       })
     } catch (err) {
       console.error("Erreur LM Studio:", err)
+      const isMixedContent = err.name === 'TypeError' && err.message.includes('Load failed')
+      const errorMessage = isMixedContent 
+        ? "Bloqué par la sécurité de votre navigateur (Safari bloque les requêtes de HTTPS vers un HTTP local). Solution : Utilisez Google Chrome, ou lancez le frontend en local."
+        : "Échec de connexion avec LM Studio. Vérifiez qu'il est bien lancé."
+        
       resultats.push({
         id: am.id || am.numero,
         statut: "Erreur",
-        justification: "Échec de connexion ou de formatage avec LM Studio.",
+        justification: errorMessage,
         alerte_couleur: "rouge",
         rang: i + 1
       })
-      avertissements.push(`L'amendement ${am.numero} a échoué en local.`)
+      avertissements.push(`L'amendement ${am.numero} a échoué : ${isMixedContent ? 'Mixed Content (Safari)' : 'Réseau'}.`)
     }
   }
 
