@@ -122,7 +122,7 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
             justification="Premier du lot (Référence globale).", 
             alerte_couleur="vert"
         )]
-        
+        FALLBACK_MODELS = ["llama-3.1-8b-instant", "qwen/qwen3.6-27b", "llama-3.3-70b-versatile"]
         sem = asyncio.Semaphore(4)
 
         async def process_amendment(amend):
@@ -135,40 +135,50 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
                     f"TEST - Auteur: {donnees_propres.get('auteur', '')}\nTexte: {donnees_propres.get('texte', '')}"
                 )
                 
-                try:
-                    response = await client.chat.completions.create(
-                        model="llama3-8b-8192",
-                        messages=[{"role": "user", "content": f"{system_prompt}\n\n{user_prompt}"}],
-                        temperature=0.1,
-                        max_tokens=200,
-                    )
-                    contenu = response.choices[0].message.content.strip()
-                    match = re.search(r"```(?:json)?(.*?)```", contenu, re.DOTALL | re.IGNORECASE)
-                    if match:
-                        contenu = match.group(1).strip()
-                        
-                    json_match = re.search(r'\[.*\]|\{.*\}', contenu, re.DOTALL)
-                    if json_match:
-                        contenu = json_match.group(0)
-                        
+                last_error = None
+                for model_name in FALLBACK_MODELS:
                     try:
-                        data_json = json.loads(contenu)
-                    except json.JSONDecodeError:
-                        data_json = {"statut": "Erreur", "justification": "Erreur de formatage du modèle."}
-                    
-                    statut = data_json.get("statut", "Nouveau")
-                    couleur = "rouge" if statut == "Doublon" else "orange" if statut in ["Identique", "Incompatible"] else "vert"
+                        response = await client.chat.completions.create(
+                            model=model_name,
+                            messages=[{"role": "user", "content": f"{system_prompt}\n\n{user_prompt}"}],
+                            temperature=0.1,
+                            max_tokens=200,
+                        )
+                        contenu = response.choices[0].message.content.strip()
+                        match = re.search(r"```(?:json)?(.*?)```", contenu, re.DOTALL | re.IGNORECASE)
+                        if match:
+                            contenu = match.group(1).strip()
+                            
+                        json_match = re.search(r'\[.*\]|\{.*\}', contenu, re.DOTALL)
+                        if json_match:
+                            contenu = json_match.group(0)
+                            
+                        try:
+                            data_json = json.loads(contenu)
+                        except json.JSONDecodeError:
+                            data_json = {"statut": "Erreur", "justification": "Erreur de formatage du modèle."}
                         
-                    return AnalyzeResult(
-                        id=amend_id, 
-                        statut=statut,
-                        justification=data_json.get("justification", ""),
-                        alerte_couleur=couleur
-                    )
-                        
-                except Exception as e:
-                    logging.error(f"❌ ERREUR LLM sur l'amendement {amend_id} : {e}")
-                    raise HTTPException(status_code=500, detail=f"Erreur API LLM (ex: Rate Limit 429) : {str(e)}")
+                        statut = data_json.get("statut", "Nouveau")
+                        couleur = "rouge" if statut == "Doublon" else "orange" if statut in ["Identique", "Incompatible"] else "vert"
+                            
+                        return AnalyzeResult(
+                            id=amend_id, 
+                            statut=statut,
+                            justification=data_json.get("justification", ""),
+                            alerte_couleur=couleur
+                        )
+                            
+                    except Exception as e:
+                        last_error = e
+                        error_str = str(e).lower()
+                        if "429" in error_str or "rate limit" in error_str or "quota" in error_str:
+                            logging.warning(f"⚠️ Modèle {model_name} épuisé (429/Quota) sur l'amendement {amend_id}, passage au suivant...")
+                        else:
+                            logging.warning(f"⚠️ Modèle {model_name} a échoué sur l'amendement {amend_id} : {e}. Essai du suivant...")
+                        continue
+
+                logging.error(f"❌ ERREUR CRITIQUE LLM sur l'amendement {amend_id} : Tous les modèles ont échoué. Dernier : {last_error}")
+                raise HTTPException(status_code=500, detail=f"Erreur API LLM (ex: Rate Limit 429). Les modèles de secours ont échoué : {str(last_error)}")
 
         # Création des tâches asynchrones pour tous les amendements sauf le premier
         tasks = [process_amendment(amend) for amend in amendements_tries[1:]]
