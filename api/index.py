@@ -59,30 +59,43 @@ def normaliser_amendement(data, index: int = 0) -> dict:
         
         # On vérifie si c'est bien une structure de l'Assemblée (identification ou uid)
         if "identification" in am or "uid" in am or "pointeurFragmentTexte" in am:
-            numero = am.get("identification", {}).get("numeroLong", "Inconnu")
-            article = am.get("pointeurFragmentTexte", {}).get("division", {}).get("titre", "")
+            def safe_str(val, default=""):
+                if isinstance(val, (dict, list)):
+                    import json
+                    return json.dumps(val, ensure_ascii=False)
+                return str(val) if val is not None and str(val).strip() != "" else default
+
+            raw_numero = am.get("identification", {}).get("numeroLong", "Inconnu")
+            numero = safe_str(raw_numero, "Inconnu")
+            
+            raw_article = am.get("pointeurFragmentTexte", {}).get("division", {}).get("titre", "")
+            article = safe_str(raw_article)
             
             auteur = ""
             signataires = am.get("signataires", {})
             if isinstance(signataires, dict):
-                auteur = signataires.get("libelle", "")
+                auteur = safe_str(signataires.get("libelle", ""))
                 if not auteur:
-                    # Tente d'extraire depuis "auteur" ou "acteurRef"
                     aut = signataires.get("auteur", {})
                     if isinstance(aut, dict):
-                        auteur = aut.get("acteurRef", "Inconnu")
+                        auteur = safe_str(aut.get("acteurRef", "Inconnu"))
                     elif isinstance(aut, list) and len(aut) > 0:
-                        auteur = aut[0].get("acteurRef", "Inconnu")
+                        auteur = safe_str(aut[0].get("acteurRef", "Inconnu"))
+            else:
+                auteur = safe_str(signataires)
 
-            impact = am.get("pointeurFragmentTexte", {}).get("division", {}).get("articleDesignation", "")
+            raw_impact = am.get("pointeurFragmentTexte", {}).get("division", {}).get("articleDesignation", "")
+            impact = safe_str(raw_impact)
             
             corps = am.get("corps", {})
-            dispositif = corps.get("cartoucheInformatif")
-            if not dispositif:
-                disp_data = corps.get("contenuAuteur", {}).get("dispositif", "")
-                dispositif = str(disp_data) if disp_data else ""
+            raw_dispositif = corps.get("cartoucheInformatif")
+            if not raw_dispositif:
+                raw_dispositif = corps.get("contenuAuteur", {}).get("dispositif", "")
+            dispositif = safe_str(raw_dispositif)
                 
-            uid = am.get("uid", numero)
+            raw_uid = am.get("uid", numero)
+            uid = safe_str(raw_uid, numero)
+
             return {
                 "id": uid or f"amdt-{index}",
                 "numero": numero,

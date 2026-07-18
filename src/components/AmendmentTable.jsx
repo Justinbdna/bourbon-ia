@@ -6,7 +6,7 @@ const MAX_VISIBLE_HEIGHT = 1360
 
 function truncate(text, max = 90) {
   if (!text) return '—'
-  const flat = text.replace(/\s+/g, ' ').trim()
+  const flat = String(text).replace(/\s+/g, ' ').trim()
   return flat.length > max ? flat.slice(0, max) + '…' : flat
 }
 
@@ -143,8 +143,8 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               const spanInfo = groupSpans.get(a.id ?? `anon-${index}`)
               const auteursText = a.rapporteur
                 ? 'Rapporteur'
-                : (a.auteurs || []).join(', ') || '—'
-              const dispositifFull = (a.dispositif || '').replace(/\s+/g, ' ').trim()
+                : (Array.isArray(a.auteurs) ? a.auteurs : [a.auteurs]).join(', ') || '—'
+              const dispositifFull = String(a.dispositif || '').replace(/\s+/g, ' ').trim()
 
               return (
                 <tr
