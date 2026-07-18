@@ -10,14 +10,15 @@ const LABELS = {
 }
 
 const STYLES = {
-  discussion_commune: 'bg-purple-50 text-purple-700 ring-purple-200',
-  Incompatible: 'bg-purple-50 text-purple-700 ring-purple-200',
-  identiques: 'bg-blue-50 text-blue-700 ring-blue-200',
-  Identique: 'bg-blue-50 text-blue-700 ring-blue-200',
-  doublon: 'bg-red-50 text-red-700 ring-red-200',
-  Doublon: 'bg-red-50 text-red-700 ring-red-200',
-  Nouveau: 'bg-ink-100 text-ink-600 ring-ink-300',
-  isole: 'bg-ink-100 text-ink-600 ring-ink-300',
+  discussion_commune: 'bg-purple-100 text-purple-800 ring-purple-300',
+  Incompatible: 'bg-purple-100 text-purple-800 ring-purple-300',
+  identiques: 'bg-blue-100 text-blue-800 ring-blue-300',
+  Identique: 'bg-blue-100 text-blue-800 ring-blue-300',
+  doublon: 'bg-red-100 text-red-800 ring-red-300',
+  Doublon: 'bg-red-100 text-red-800 ring-red-300',
+  Nouveau: 'bg-ink-100 text-ink-800 ring-ink-300',
+  isole: 'bg-ink-100 text-ink-800 ring-ink-300',
+  Erreur: 'bg-red-100 text-red-800 ring-red-300',
 }
 
 export default function GroupeBadge({ type }) {
