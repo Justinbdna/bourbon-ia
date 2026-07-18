@@ -212,24 +212,34 @@ export default function App() {
     <div className="min-h-screen bg-obsidienne text-plume flex flex-col items-center justify-center p-4">
       <img src="/bourdon_logo.svg" alt="Bourbon.IA Logo" className="h-40 w-auto animate-pulse mb-10" />
       
-      <div className="bg-surface rounded-xl p-8 max-w-3xl text-center shadow-2xl mb-10 border border-ink-800">
-        <p className="text-neutre text-base md:text-lg leading-relaxed mb-4 font-medium">
-          ⚠️ Note sur l'infrastructure de cette démonstration :
-        </p>
-        <p className="text-neutre text-base md:text-lg leading-relaxed mb-4">
-          L'intelligence artificielle utilisée ici est temporairement déportée sur un Cloud sécurisé. Faire tourner un modèle d'IA exige des ressources matérielles intenses. Pour des raisons d'accessibilité publique, nous utilisons une API externe.
-        </p>
-        <p className="text-neutre text-base md:text-lg leading-relaxed">
-          Cependant, l'architecture de Bourbon.IA est nativement conçue pour être souveraine. Il est totalement viable de l'installer et de la relier à une IA 100 % locale hébergée sur vos propres serveurs, garantissant ainsi une confidentialité absolue des données législatives.
+      <div className="bg-surface rounded-xl p-8 max-w-2xl text-center shadow-2xl mb-10 border border-ink-800">
+        <p className="text-neutre text-base md:text-lg leading-relaxed font-medium">
+          Bourbon.IA est nativement conçu pour être une IA souveraine et 100% locale, garantissant la stricte confidentialité des données législatives. Pour la fluidité de cette démonstration publique, les calculs sont temporairement déportés sur un Cloud sécurisé.
         </p>
       </div>
 
-      <button
-        onClick={() => setHasEntered(true)}
-        className="px-10 py-4 bg-bourbon text-white text-lg font-bold rounded-lg shadow-[0_0_25px_rgba(217,18,39,0.5)] hover:bg-red-600 hover:scale-105 transition-all duration-300"
-      >
-        Entrer dans Bourbon.IA
-      </button>
+      <div className="flex flex-col items-center gap-6">
+        <button
+          onClick={() => setIsSettingsOpen(true)}
+          className="rounded-md border border-ink-600 px-4 py-2 text-sm font-medium text-ink-300 hover:bg-ink-800 transition-colors flex items-center gap-2"
+        >
+          ⚙️ Réglages IA
+        </button>
+
+        <button
+          onClick={() => setHasEntered(true)}
+          className="px-10 py-4 bg-bourbon text-white text-lg font-bold rounded-lg shadow-[0_0_25px_rgba(217,18,39,0.5)] hover:bg-red-600 hover:scale-105 transition-all duration-300"
+        >
+          Entrer dans Bourbon.IA
+        </button>
+      </div>
+
+      <AISettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onSave={handleSaveSettings}
+        currentSettings={aiSettings}
+      />
     </div>
   )
 }
