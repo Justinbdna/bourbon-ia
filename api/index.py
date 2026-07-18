@@ -53,11 +53,27 @@ def normaliser_amendement(data, index: int = 0) -> dict:
         if not isinstance(data, dict):
             logging.warning(f"normaliser_amendement: entrée non-dict ignorée (type={type(data).__name__})")
             return {"id": f"amdt-{index}", "numero": "Inconnu", "article": "", "auteurs": [], "point_impact": {"type": ""}, "dispositif": "", "texte": "", "auteur": ""}
-        if "amendement" in data:
-            am = data["amendement"]
+        
+        # Selon le parsing frontend, l'objet peut être enveloppé par "amendement" ou l'être directement
+        am = data.get("amendement", data)
+        
+        # On vérifie si c'est bien une structure de l'Assemblée (identification ou uid)
+        if "identification" in am or "uid" in am or "pointeurFragmentTexte" in am:
             numero = am.get("identification", {}).get("numeroLong", "Inconnu")
             article = am.get("pointeurFragmentTexte", {}).get("division", {}).get("titre", "")
-            auteur = am.get("signataires", {}).get("libelle", "")
+            
+            auteur = ""
+            signataires = am.get("signataires", {})
+            if isinstance(signataires, dict):
+                auteur = signataires.get("libelle", "")
+                if not auteur:
+                    # Tente d'extraire depuis "auteur" ou "acteurRef"
+                    aut = signataires.get("auteur", {})
+                    if isinstance(aut, dict):
+                        auteur = aut.get("acteurRef", "Inconnu")
+                    elif isinstance(aut, list) and len(aut) > 0:
+                        auteur = aut[0].get("acteurRef", "Inconnu")
+
             impact = am.get("pointeurFragmentTexte", {}).get("division", {}).get("articleDesignation", "")
             
             corps = am.get("corps", {})
@@ -77,12 +93,14 @@ def normaliser_amendement(data, index: int = 0) -> dict:
                 "texte": dispositif,
                 "auteur": auteur
             }
-        # Données déjà plates — garantir la présence d'un ID stable
+            
+        # Données déjà plates (ex: sampleAmendments.json)
         if not data.get("id"):
             data["id"] = f"amdt-{index}"
         return data
-    except (TypeError, AttributeError) as e:
-        logging.error(f"normaliser_amendement: erreur d'extraction : {e}")
+    except Exception as e:
+        import traceback
+        logging.error(f"Erreur de normalisation sur l'amendement {index}: {e}\n{traceback.format_exc()}")
         return {"id": f"amdt-err-{index}", "numero": "Erreur", "article": "", "auteurs": [], "point_impact": {"type": ""}, "dispositif": "", "texte": "", "auteur": ""}
 
 @app.post("/api/normalize")
