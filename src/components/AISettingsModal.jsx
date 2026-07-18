@@ -22,7 +22,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-surface border border-ink-200 dark:border-ink-700 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-surface text-ink-900 dark:text-plume border border-ink-200 dark:border-ink-700 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         <div className="px-6 py-4 border-b border-ink-200 dark:border-ink-700 bg-marine-50/50 dark:bg-obsidienne flex justify-between items-center">
           <h2 className="text-lg font-bold text-marine-900 dark:text-plume">⚙️ Réglages IA</h2>
           <button onClick={onClose} className="text-ink-500 hover:text-ink-700 dark:text-ink-400 dark:hover:text-plume transition-colors">
@@ -65,9 +65,9 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                   value={apiKey}
                   onChange={e => setApiKey(e.target.value)}
                   placeholder="gsk_..."
-                  className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent dark:text-plume focus:ring-2 focus:ring-marine-500 focus:border-marine-500 transition-all outline-none"
+                  className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-marine-500 focus:border-marine-500 transition-all outline-none"
                 />
-                <p className="text-xs text-ink-500 dark:text-ink-400">
+                <p className="text-xs text-ink-700 dark:text-ink-300">
                   Une clé API par défaut est gracieusement fournie pour cette démo. Si les quotas sont atteints, vous pouvez utiliser la vôtre (Groq ou compatible).
                 </p>
               </div>
@@ -89,13 +89,13 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                   value={localUrl}
                   onChange={e => setLocalUrl(e.target.value)}
                   placeholder="http://localhost:1234/v1"
-                  className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent dark:text-plume focus:ring-2 focus:ring-marine-500 focus:border-marine-500 transition-all outline-none"
+                  className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-marine-500 focus:border-marine-500 transition-all outline-none"
                 />
               </div>
               
               <div className="bg-marine-50 dark:bg-obsidienne rounded-lg p-5 border border-marine-200 dark:border-marine-800 shadow-inner">
                 <h3 className="text-sm font-semibold text-marine-900 dark:text-plume mb-3">Tutoriel IA Locale</h3>
-                <ol className="text-sm text-ink-600 dark:text-ink-300 space-y-2 list-decimal list-inside">
+                <ol className="text-sm text-ink-700 dark:text-ink-300 space-y-2 list-decimal list-inside">
                   <li>Installer <strong>LM Studio</strong>, <strong>Ollama</strong> ou <strong>VLM</strong>.</li>
                   <li>Télécharger un modèle d'IA local (ex: Mistral ou Llama 3).</li>
                   <li>Démarrer le serveur local de l'application.</li>
