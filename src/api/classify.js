@@ -77,13 +77,11 @@ export async function classifyAmendments(amendements, aiSettings = {}) {
 async function classifyWithLocalAI(amendements, aiSettings) {
   let localUrl = (aiSettings.localUrl || 'http://localhost:1234/v1').trim()
   
-  // Robustesse : si l'utilisateur a collé juste "http://127.0.0.1:1234" sans le "/v1"
-  localUrl = localUrl.replace(/\/+$/, '')
-  if (!localUrl.endsWith('/v1')) {
-    localUrl += '/v1'
-  }
+  // Nettoyage ultra-robuste de l'URL
+  localUrl = localUrl.replace(/\/+$/, '') // Retire les slashs finaux
+  localUrl = localUrl.replace(/\/[vV]1$/, '') // Retire un éventuel /v1 ou /V1 final pour le remettre proprement
   
-  const endpoint = `${localUrl}/chat/completions`
+  const endpoint = `${localUrl}/v1/chat/completions`
   
   if (amendements.length === 0) return { classement: [], avertissements: [], modele_utilise: 'Local' }
 
