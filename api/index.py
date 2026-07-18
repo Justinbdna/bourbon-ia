@@ -152,7 +152,20 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
             "- S'ils ciblent le même article mais diffèrent légèrement, classe-les en 'Discussion commune'.\n"
             "- Sinon, classe en 'Isolé'.\n"
             "Tu n'as pas le droit de renvoyer le statut 'Erreur' ou de refuser de classer. Tu dois trouver des corrélations logiques.\n"
-            "CONTRAINTE TECHNIQUE ABSOLUE : TU NE DOIS RENVOYER QUE DU JSON PUR. AUCUN TEXTE AVANT. AUCUN TEXTE APRÈS. N'UTILISE AUCUNE BALISE MARKDOWN ```json. COMMENCE DIRECTEMENT TA RÉPONSE PAR [ ET TERMINE PAR ]."
+            "RÈGLES DE FORMATAGE ABSOLUES ET INTRANSIGEANTES :\n"
+            "1. Tu dois renvoyer un tableau JSON valide contenant EXACTEMENT un objet pour chaque amendement fourni.\n"
+            "2. Tu DOIS conserver la valeur exacte de la clé 'id' de l'amendement (qui est une chaîne de caractères, ex: 'amdt-185', 'amdt-7rect', 'CD12'). Ne la remplace JAMAIS par un entier.\n"
+            "3. La clé 'statut' ne peut avoir QUE l'une de ces 3 valeurs exactes : 'Identique', 'Discussion commune', ou 'Isolé'. Aucune autre valeur n'est tolérée (n'utilise pas 'Nouveau', ni 'Erreur').\n"
+            "4. Voici le SEUL format JSON accepté en sortie. Tu dois le respecter à la lettre :\n"
+            "[\n"
+            "  {\n"
+            "    \"id\": \"ID_EXACT_FOURNI_EN_ENTRÉE\",\n"
+            "    \"statut\": \"Isolé\",\n"
+            "    \"justification\": \"Ta justification courte ici\",\n"
+            "    \"alerte_couleur\": \"gris\"\n"
+            "  }\n"
+            "]\n"
+            "Ne rajoute aucune autre clé. Ne mets pas de texte avant ou après le tableau JSON."
         )
         
         if not amendements_tries:
