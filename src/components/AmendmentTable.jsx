@@ -47,7 +47,7 @@ function computeGroupSpans(amendments) {
     const meta = g?.groupe_id ? GROUP_META[g.type] : null
 
     if (!meta) {
-      spans.set(a.id, { span: 1, isStart: true, meta: null })
+      spans.set(a.id ?? `anon-${i}`, { span: 1, isStart: true, meta: null })
       i += 1
       continue
     }
@@ -58,7 +58,7 @@ function computeGroupSpans(amendments) {
     }
     const size = j - i
     for (let k = i; k < j; k++) {
-      spans.set(amendments[k].id, { span: size, isStart: k === i, meta })
+      spans.set(amendments[k].id ?? `anon-${k}`, { span: size, isStart: k === i, meta })
     }
     i = j
   }
@@ -140,7 +140,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               const isSelected = a.id === selectedId
               const res = a.resultat_ia
               const isDoublon = res?.groupe?.type === 'doublon'
-              const spanInfo = groupSpans.get(a.id)
+              const spanInfo = groupSpans.get(a.id ?? `anon-${index}`)
               const auteursText = a.rapporteur
                 ? 'Rapporteur'
                 : (a.auteurs || []).join(', ') || '—'
@@ -148,7 +148,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
 
               return (
                 <tr
-                  key={a.id || index}
+                  key={a.id ?? `fallback-${index}`}
                   draggable
                   onDragStart={(e) => handleDragStart(e, index)}
                   onDragOver={(e) => e.preventDefault()}

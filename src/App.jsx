@@ -41,25 +41,35 @@ export default function App() {
     setClassifyError(null)
     setWarnings([])
 
+    const CHUNK_SIZE = 5
+    const allResults = []
+    const allWarnings = []
+
     try {
-      const result = await classifyAmendments(amendments)
-      const parId = new Map(result.classement.map((c) => [c.id, c]))
+      for (let i = 0; i < amendments.length; i += CHUNK_SIZE) {
+        const chunk = amendments.slice(i, i + CHUNK_SIZE)
 
-      const misAJour = amendments.map((a) => ({
-        ...a,
-        resultat_ia: parId.get(a.id) || null,
-      }))
+        try {
+          const result = await classifyAmendments(chunk)
+          allResults.push(...result.classement)
+          allWarnings.push(...(result.avertissements || []))
+        } catch (chunkErr) {
+          allWarnings.push(
+            `Erreur sur le lot ${Math.floor(i / CHUNK_SIZE) + 1}: ${chunkErr.message}`
+          )
+        }
 
-      // Trie par rang d'examen renvoyé par l'IA ; les amendements non
-      // classés (absents de la réponse) restent en fin de liste.
-      misAJour.sort((a, b) => {
-        const rangA = a.resultat_ia?.rang ?? Infinity
-        const rangB = b.resultat_ia?.rang ?? Infinity
-        return rangA - rangB
-      })
+        // Mise à jour progressive : les badges apparaissent au fur et à mesure
+        const parId = new Map(allResults.map((c) => [c.id, c]))
+        setAmendments((prev) =>
+          prev.map((a) => ({
+            ...a,
+            resultat_ia: parId.get(a.id) || a.resultat_ia || null,
+          }))
+        )
+      }
 
-      setAmendments(misAJour)
-      setWarnings(result.avertissements || [])
+      setWarnings(allWarnings)
     } catch (err) {
       setClassifyError(err.message || 'Erreur inconnue lors du classement.')
     } finally {

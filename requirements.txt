@@ -1,9 +1,4 @@
 fastapi
-uvicorn
 pydantic
-requests
-sqlalchemy
-httpx
 openai
 python-dotenv
-# sqlite3 est inclus nativement dans Python standard

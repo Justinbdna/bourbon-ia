@@ -4,7 +4,7 @@ import os
 import re
 import time
 import asyncio
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,13 +17,9 @@ load_dotenv()
 # GESTION DES IMPORTS POUR VERCEL SERVERLESS
 # ==========================================
 try:
-    # Environnement Vercel (depuis la racine du projet)
     from api.sorting_engine import trier_amendements
-    from api.llm_processor import extraire_texte_brut
 except ModuleNotFoundError:
-    # Environnement Local (exécution directe dans le dossier api/)
     from sorting_engine import trier_amendements
-    from llm_processor import extraire_texte_brut
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -49,43 +45,55 @@ class AnalyzeResult(BaseModel):
     statut: str
     justification: str
     alerte_couleur: str
+    rang: int = 0
+    groupe: Optional[Dict[str, str]] = None
 
-def normaliser_amendement(data: dict) -> dict:
-    if "amendement" in data:
-        am = data["amendement"]
-        numero = am.get("identification", {}).get("numeroLong", "Inconnu")
-        article = am.get("pointeurFragmentTexte", {}).get("division", {}).get("titre", "")
-        auteur = am.get("signataires", {}).get("libelle", "")
-        impact = am.get("pointeurFragmentTexte", {}).get("division", {}).get("articleDesignation", "")
-        
-        corps = am.get("corps", {})
-        dispositif = corps.get("cartoucheInformatif")
-        if not dispositif:
-            disp_data = corps.get("contenuAuteur", {}).get("dispositif", "")
-            dispositif = str(disp_data) if disp_data else ""
+def normaliser_amendement(data, index: int = 0) -> dict:
+    try:
+        if not isinstance(data, dict):
+            logging.warning(f"normaliser_amendement: entrée non-dict ignorée (type={type(data).__name__})")
+            return {"id": f"amdt-{index}", "numero": "Inconnu", "article": "", "auteurs": [], "point_impact": {"type": ""}, "dispositif": "", "texte": "", "auteur": ""}
+        if "amendement" in data:
+            am = data["amendement"]
+            numero = am.get("identification", {}).get("numeroLong", "Inconnu")
+            article = am.get("pointeurFragmentTexte", {}).get("division", {}).get("titre", "")
+            auteur = am.get("signataires", {}).get("libelle", "")
+            impact = am.get("pointeurFragmentTexte", {}).get("division", {}).get("articleDesignation", "")
             
-        uid = am.get("uid", numero)
-        return {
-            "id": uid,
-            "numero": numero,
-            "article": article,
-            "auteurs": [auteur] if auteur else [],
-            "point_impact": {"type": impact},
-            "dispositif": dispositif,
-            "texte": dispositif,
-            "auteur": auteur
-        }
-    return data
+            corps = am.get("corps", {})
+            dispositif = corps.get("cartoucheInformatif")
+            if not dispositif:
+                disp_data = corps.get("contenuAuteur", {}).get("dispositif", "")
+                dispositif = str(disp_data) if disp_data else ""
+                
+            uid = am.get("uid", numero)
+            return {
+                "id": uid or f"amdt-{index}",
+                "numero": numero,
+                "article": article,
+                "auteurs": [auteur] if auteur else [],
+                "point_impact": {"type": impact},
+                "dispositif": dispositif,
+                "texte": dispositif,
+                "auteur": auteur
+            }
+        # Données déjà plates — garantir la présence d'un ID stable
+        if not data.get("id"):
+            data["id"] = f"amdt-{index}"
+        return data
+    except (TypeError, AttributeError) as e:
+        logging.error(f"normaliser_amendement: erreur d'extraction : {e}")
+        return {"id": f"amdt-err-{index}", "numero": "Erreur", "article": "", "auteurs": [], "point_impact": {"type": ""}, "dispositif": "", "texte": "", "auteur": ""}
 
 @app.post("/api/normalize")
 async def normalize_endpoint(payload: AnalyzeRequest):
-    return [normaliser_amendement(a) for a in payload.amendements]
+    return [normaliser_amendement(a, i) for i, a in enumerate(payload.amendements)]
 
 @app.post("/api/analyze", response_model=List[AnalyzeResult])
 async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
     try:
         # 0. Normalisation des données brutes en données plates
-        amendements_propres = [normaliser_amendement(a) for a in payload.amendements]
+        amendements_propres = [normaliser_amendement(a, i) for i, a in enumerate(payload.amendements)]
 
         # 1. Tri mécanique (Doctrine de l'Assemblée)
         amendements_tries = trier_amendements(amendements_propres)
@@ -186,8 +194,27 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
         # Exécution parallèle avec concurrence contrôlée (semaphore = 4)
         resultats_paralleles = await asyncio.gather(*tasks)
         resultats.extend(resultats_paralleles)
+
+        # Post-traitement : injection du rang et du groupe dans chaque résultat
+        STATUT_TO_GROUPE = {
+            "Identique": "identiques",
+            "Identiques": "identiques",
+            "Incompatible": "discussion_commune",
+            "Discussion commune": "discussion_commune",
+        }
+        groupe_ids = {}
+        final = []
+        for i, r in enumerate(resultats):
+            entry = r.model_dump() if hasattr(r, "model_dump") else r.dict()
+            entry["rang"] = i + 1
+            grp_type = STATUT_TO_GROUPE.get(entry["statut"])
+            if grp_type:
+                if grp_type not in groupe_ids:
+                    groupe_ids[grp_type] = f"grp-{grp_type}-1"
+                entry["groupe"] = {"type": grp_type, "groupe_id": groupe_ids[grp_type]}
+            final.append(entry)
             
-        return resultats
+        return final
     except Exception as exc:
         logging.error("Erreur Backend", exc_info=True)
         if isinstance(exc, HTTPException):
