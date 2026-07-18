@@ -50,11 +50,45 @@ class AnalyzeResult(BaseModel):
     justification: str
     alerte_couleur: str
 
+def normaliser_amendement(data: dict) -> dict:
+    if "amendement" in data:
+        am = data["amendement"]
+        numero = am.get("identification", {}).get("numeroLong", "Inconnu")
+        article = am.get("pointeurFragmentTexte", {}).get("division", {}).get("titre", "")
+        auteur = am.get("signataires", {}).get("libelle", "")
+        impact = am.get("pointeurFragmentTexte", {}).get("division", {}).get("articleDesignation", "")
+        
+        corps = am.get("corps", {})
+        dispositif = corps.get("cartoucheInformatif")
+        if not dispositif:
+            disp_data = corps.get("contenuAuteur", {}).get("dispositif", "")
+            dispositif = str(disp_data) if disp_data else ""
+            
+        uid = am.get("uid", numero)
+        return {
+            "id": uid,
+            "numero": numero,
+            "article": article,
+            "auteurs": [auteur] if auteur else [],
+            "point_impact": {"type": impact},
+            "dispositif": dispositif,
+            "texte": dispositif,
+            "auteur": auteur
+        }
+    return data
+
+@app.post("/api/normalize")
+async def normalize_endpoint(payload: AnalyzeRequest):
+    return [normaliser_amendement(a) for a in payload.amendements]
+
 @app.post("/api/analyze", response_model=List[AnalyzeResult])
 async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
     try:
+        # 0. Normalisation des données brutes en données plates
+        amendements_propres = [normaliser_amendement(a) for a in payload.amendements]
+
         # 1. Tri mécanique (Doctrine de l'Assemblée)
-        amendements_tries = trier_amendements(payload.amendements)
+        amendements_tries = trier_amendements(amendements_propres)
     
         # Lazy Load OpenAI pour éviter les plantages au build
         from openai import AsyncOpenAI
@@ -78,8 +112,9 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
             return []
 
         # Le premier amendement sert de référence absolue pour le lot
-        reference_brut = extraire_texte_brut(amendements_tries[0])
-        ref_id = str(amendements_tries[0].get("id", amendements_tries[0].get("numero", "Inconnu")))
+        # (les données sont déjà normalisées par notre fonction)
+        reference_brut = amendements_tries[0]
+        ref_id = str(reference_brut.get("id", reference_brut.get("numero", "Inconnu")))
         
         resultats = [AnalyzeResult(
             id=ref_id, 
@@ -93,16 +128,16 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
         async def process_amendment(amend):
             async with sem:
                 amend_id = str(amend.get("id", amend.get("numero", "Inconnu")))
-                donnees_propres = extraire_texte_brut(amend)
+                donnees_propres = amend
                 
                 user_prompt = (
-                    f"REF - Auteur: {reference_brut['auteur']}\nTexte: {reference_brut['texte']}\n"
-                    f"TEST - Auteur: {donnees_propres['auteur']}\nTexte: {donnees_propres['texte']}"
+                    f"REF - Auteur: {reference_brut.get('auteur', '')}\nTexte: {reference_brut.get('texte', '')}\n"
+                    f"TEST - Auteur: {donnees_propres.get('auteur', '')}\nTexte: {donnees_propres.get('texte', '')}"
                 )
                 
                 try:
                     response = await client.chat.completions.create(
-                        model="llama-3.3-70b-versatile",
+                        model="llama3-8b-8192",
                         messages=[{"role": "user", "content": f"{system_prompt}\n\n{user_prompt}"}],
                         temperature=0.1,
                         max_tokens=200,

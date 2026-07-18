@@ -4,7 +4,7 @@ import AmendmentTable from './components/AmendmentTable'
 import AmendmentDetail from './components/AmendmentDetail'
 import ClassifyButton from './components/ClassifyButton'
 import sampleAmendments from './data/sampleAmendments.json'
-import { classifyAmendments } from './api/classify'
+import { classifyAmendments, normalizeAmendments } from './api/classify'
 import ThemeToggle from './components/ThemeToggle'
 
 
@@ -19,12 +19,17 @@ export default function App() {
 
   const selected = amendments.find((a) => a.id === selectedId) || null
 
-  function handleImport(list, label) {
-    setAmendments(list)
-    setSourceLabel(label)
-    setSelectedId(list[0]?.id ?? null)
-    setClassifyError(null)
-    setWarnings([])
+  async function handleImport(list, label) {
+    try {
+      const cleanList = await normalizeAmendments(list)
+      setAmendments(cleanList)
+      setSourceLabel(label)
+      setSelectedId(cleanList[0]?.id ?? null)
+      setClassifyError(null)
+      setWarnings([])
+    } catch (err) {
+      setClassifyError(err.message)
+    }
   }
 
   function handleLoadSample() {

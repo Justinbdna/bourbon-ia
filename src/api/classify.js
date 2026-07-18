@@ -13,6 +13,23 @@ export class ClassifyError extends Error {
 }
 
 /**
+ * Normalise les JSON bruts de l'Assemblée nationale en objets plats pour le Front.
+ */
+export async function normalizeAmendments(amendements) {
+  const response = await fetch(`${API_BASE_URL}/api/normalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amendements, model: 'llama3-8b-8192' }),
+  })
+  
+  if (!response.ok) {
+    throw new ClassifyError(`Erreur de normalisation: ${await response.text()}`, response.status)
+  }
+  
+  return await response.json()
+}
+
+/**
  * Envoie les amendements au backend FastAPI pour classement par l'IA.
  * Renvoie { classement, avertissements, modele_utilise }.
  */
