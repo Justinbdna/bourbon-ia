@@ -152,7 +152,7 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
             "- S'ils ciblent le même article mais diffèrent légèrement, classe-les en 'Discussion commune'.\n"
             "- Sinon, classe en 'Isolé'.\n"
             "Tu n'as pas le droit de renvoyer le statut 'Erreur' ou de refuser de classer. Tu dois trouver des corrélations logiques.\n"
-            "Réponds UNIQUEMENT en JSON avec les clés : id, statut (Doublon, Identique, Nouveau, Incompatible), justification."
+            "CONTRAINTE TECHNIQUE ABSOLUE : TU NE DOIS RENVOYER QUE DU JSON PUR. AUCUN TEXTE AVANT. AUCUN TEXTE APRÈS. N'UTILISE AUCUNE BALISE MARKDOWN ```json. COMMENCE DIRECTEMENT TA RÉPONSE PAR [ ET TERMINE PAR ]."
         )
         
         if not amendements_tries:
@@ -194,9 +194,12 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
                         contenu = response.choices[0].message.content.strip()
                         logging.info(f"🚀 PROMPT GROQ:\n{system_prompt}\n\n{user_prompt}")
                         logging.info(f"✅ REPONSE BRUTE GROQ:\n{contenu}")
-                        match = re.search(r"```(?:json)?(.*?)```", contenu, re.DOTALL | re.IGNORECASE)
-                        if match:
-                            contenu = match.group(1).strip()
+                        import re
+                        raw_text = contenu.strip()
+                        if raw_text.startswith("```"):
+                            raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
+                            raw_text = re.sub(r"\s*```$", "", raw_text)
+                        contenu = raw_text.strip()
                             
                         json_match = re.search(r'\[.*\]|\{.*\}', contenu, re.DOTALL)
                         if json_match:
@@ -204,6 +207,8 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
                             
                         try:
                             data_json = json.loads(contenu)
+                            if isinstance(data_json, list) and len(data_json) > 0:
+                                data_json = data_json[0]
                         except json.JSONDecodeError:
                             data_json = {"statut": "Erreur", "justification": "Erreur de formatage du modèle."}
                         
@@ -258,9 +263,7 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
         return final
     except Exception as exc:
         logging.error("Erreur Backend", exc_info=True)
-        if isinstance(exc, HTTPException):
-            raise exc
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        return [{"id": am.get("id", f"fallback-{i}"), "statut": "Erreur", "justification": "Erreur de formatage du modèle.", "alerte_couleur": "rouge"} for i, am in enumerate(payload.amendements)]
 
 @app.get("/api/health")
 def health():
