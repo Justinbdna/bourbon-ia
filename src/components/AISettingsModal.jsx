@@ -55,20 +55,28 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
           </div>
 
           {provider === 'groq' ? (
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-marine-800 dark:text-plume">
-                Clé API Groq (Optionnelle pour la démo)
-              </label>
-              <input 
-                type="password"
-                value={apiKey}
-                onChange={e => setApiKey(e.target.value)}
-                placeholder="gsk_..."
-                className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent dark:text-plume focus:ring-2 focus:ring-marine-500 focus:border-marine-500 transition-all outline-none"
-              />
-              <p className="text-xs text-ink-500 dark:text-ink-400">
-                La clé par défaut est configurée pour le hackathon, mais ses quotas sont limités. Vous pouvez utiliser votre propre clé Groq pour éviter les erreurs de Rate Limit.
-              </p>
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-marine-800 dark:text-plume">
+                  Clé API Cloud (Optionnelle pour la démo)
+                </label>
+                <input 
+                  type="password"
+                  value={apiKey}
+                  onChange={e => setApiKey(e.target.value)}
+                  placeholder="gsk_..."
+                  className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent dark:text-plume focus:ring-2 focus:ring-marine-500 focus:border-marine-500 transition-all outline-none"
+                />
+                <p className="text-xs text-ink-500 dark:text-ink-400">
+                  Une clé API par défaut est gracieusement fournie pour cette démo. Si les quotas sont atteints, vous pouvez utiliser la vôtre (Groq ou compatible).
+                </p>
+              </div>
+              <div className="flex items-start gap-2 bg-marine-50/50 dark:bg-obsidienne/50 p-3 rounded-md border border-marine-100 dark:border-marine-800/50">
+                <span className="text-sm">🔒</span>
+                <p className="text-xs text-marine-800 dark:text-plume/80 leading-relaxed">
+                  <strong>Sécurité :</strong> Votre clé est uniquement sauvegardée localement sur votre navigateur. Elle n'est jamais stockée sur nos serveurs.
+                </p>
+              </div>
             </div>
           ) : (
             <div className="space-y-5">
