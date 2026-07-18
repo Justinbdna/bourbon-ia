@@ -143,10 +143,12 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
             effective_base_url = payload.base_url or "http://localhost:1234/v1"
             effective_api_key = payload.api_key or "local-key"
             effective_model = "local-model"
+            logging.info(f"🔒 SÉCURITÉ : Mode LOCAL activé. Les requêtes partent vers {effective_base_url}. La clé Groq de Vercel est TOTALEMENT IGNORÉE.")
         else:
             effective_base_url = "https://api.groq.com/openai/v1"
             effective_api_key = payload.api_key or os.getenv("GROQ_API_KEY")
             effective_model = "llama-3.3-70b-versatile"
+            logging.info("☁️ SÉCURITÉ : Mode CLOUD activé. Utilisation de l'API Groq.")
             if not effective_api_key:
                 logging.warning("Clé GROQ_API_KEY manquante.")
             
