@@ -134,20 +134,37 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {amendments.map((a, index) => (
-              <tr key={a.id ?? `fallback-${index}`}>
-                <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{a.rang || "—"}</td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{a.article || "—"}</td>
-                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{a.numero}</td>
-                <td className="px-4 py-4 text-sm text-gray-500 max-w-[120px] truncate" title={a.auteurs}>{a.auteurs}</td>
-                <td className="px-4 py-4 text-sm text-gray-500 w-40"><ImpactBadge impact={a.point_impact} /></td>
-                <td className="px-4 py-4 text-sm text-gray-900 w-full max-w-md truncate" title={a.dispositif}>{a.dispositif}</td>
-                <td className="px-4 py-4 text-sm whitespace-nowrap"><GroupeBadge statut={a.statut} groupe={a.groupe} /></td>
-                <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button onClick={() => removeAmendment(a.id)} className="text-gray-400 hover:text-red-600 transition-colors">Retirer</button>
-                </td>
-              </tr>
-            ))}
+            {amendments.map((a, index) => {
+              const rang = a.rang || a.resultat_ia?.rang
+              const statut = a.statut || a.resultat_ia?.statut
+              const groupe = a.groupe || a.resultat_ia?.groupe
+              const isSelected = a.id === selectedId
+              
+              let auteursText = a.auteurs
+              if (Array.isArray(auteursText)) {
+                auteursText = auteursText.join(', ')
+              }
+              auteursText = auteursText || '—'
+
+              return (
+                <tr 
+                  key={a.id ?? `fallback-${index}`}
+                  onClick={() => onSelect && onSelect(a.id)}
+                  className={`cursor-pointer transition-colors ${isSelected ? 'bg-marine-50' : 'hover:bg-gray-50'}`}
+                >
+                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{rang || "—"}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{a.article || "—"}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{a.numero}</td>
+                  <td className="px-4 py-4 text-sm text-gray-500 max-w-[120px] truncate" title={auteursText}>{auteursText}</td>
+                  <td className="px-4 py-4 text-sm text-gray-500 w-40"><ImpactBadge type={a.point_impact?.type || a.point_impact} /></td>
+                  <td className="px-4 py-4 text-sm text-gray-900 w-full max-w-md truncate" title={a.dispositif}>{a.dispositif}</td>
+                  <td className="px-4 py-4 text-sm whitespace-nowrap"><GroupeBadge statut={statut} groupe={groupe} /></td>
+                  <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button onClick={(e) => { e.stopPropagation(); onDelete && onDelete(a.id); }} className="text-gray-400 hover:text-red-600 transition-colors">Retirer</button>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
