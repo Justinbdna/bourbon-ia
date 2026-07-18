@@ -148,6 +148,7 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
         
         system_prompt = (
             "Tu es un assistant juridique. Compare ces amendements en ignorant le 'chapeau'. "
+            "ANALYSE OBLIGATOIRE : Tu dois comparer les dispositifs. Même si les dispositifs indiquent 'Non renseigné' ou une erreur d'irrecevabilité, force un statut. S'ils ont la même erreur, mets-les en 'Discussion commune'. Renvoie impérativement un JSON valide. "
             "Réponds UNIQUEMENT en JSON avec les clés : id, statut (Doublon, Identique, Nouveau, Incompatible), justification."
         )
         
@@ -188,6 +189,8 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
                             max_tokens=200,
                         )
                         contenu = response.choices[0].message.content.strip()
+                        logging.info(f"🚀 PROMPT GROQ:\n{system_prompt}\n\n{user_prompt}")
+                        logging.info(f"✅ REPONSE BRUTE GROQ:\n{contenu}")
                         match = re.search(r"```(?:json)?(.*?)```", contenu, re.DOTALL | re.IGNORECASE)
                         if match:
                             contenu = match.group(1).strip()

@@ -128,10 +128,10 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-16">Rang</th>
               <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-14">Art.</th>
               <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-20">N°</th>
-              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold max-w-[120px]">Auteur(s)</th>
+              <th className="max-w-[150px] truncate px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Auteur(s)</th>
               <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-40">Point d'impact</th>
               <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-full max-w-md">Extrait du dispositif</th>
-              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-42">Groupe</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Groupe</th>
               <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-28">Actions</th>
             </tr>
           </thead>
@@ -200,14 +200,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                     {a.numero}
                     {a.rectification ? ` ${a.rectification}` : ''}
                   </td>
-                  <td
-                    className="px-4 py-3 text-ink-700 truncate whitespace-nowrap max-w-[120px]"
-                    title={auteursText}
-                  >
-                    <span className={a.rapporteur ? 'font-medium text-bronze-600' : ''}>
-                      {auteursText}
-                    </span>
-                  </td>
+                  <td className="max-w-[150px] truncate px-4 py-4 whitespace-nowrap text-sm text-gray-500">{auteursText}</td>
                   <td className="px-4 py-3 truncate whitespace-nowrap w-40">
                     <ImpactBadge type={a.point_impact?.type} />
                   </td>
