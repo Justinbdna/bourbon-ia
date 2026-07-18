@@ -75,7 +75,14 @@ export async function classifyAmendments(amendements, aiSettings = {}) {
 
 // Fonction dédiée pour appeler LM Studio DIRECTEMENT depuis le navigateur
 async function classifyWithLocalAI(amendements, aiSettings) {
-  const localUrl = aiSettings.localUrl || 'http://localhost:1234/v1'
+  let localUrl = (aiSettings.localUrl || 'http://localhost:1234/v1').trim()
+  
+  // Robustesse : si l'utilisateur a collé juste "http://127.0.0.1:1234" sans le "/v1"
+  localUrl = localUrl.replace(/\/+$/, '')
+  if (!localUrl.endsWith('/v1')) {
+    localUrl += '/v1'
+  }
+  
   const endpoint = `${localUrl}/chat/completions`
   
   if (amendements.length === 0) return { classement: [], avertissements: [], modele_utilise: 'Local' }
