@@ -42,11 +42,13 @@ export default function AmendmentDetail({ amendment, onClose }) {
       <div className="px-5 py-4 space-y-5 overflow-y-auto scroll-thin">
         <div className="flex flex-wrap gap-4 text-sm">
           <div>
-            <p className="text-ink-500 dark:text-ink-400 text-xs">Auteur(s)</p>
-            <p className="text-ink-900 dark:text-plume font-medium">
-              {a.rapporteur ? 'Rapporteur — ' : ''}
-              {(a.auteurs || []).join(', ') || '—'}
-            </p>
+            <p className="text-ink-500 dark:text-ink-400 text-xs mb-1">Auteur(s)</p>
+            <div className="max-h-24 overflow-y-auto text-sm text-gray-700 bg-gray-50 p-2 rounded">
+              <p className="text-ink-900 dark:text-plume font-medium">
+                {a.rapporteur ? 'Rapporteur — ' : ''}
+                {(a.auteurs || []).join(', ') || '—'}
+              </p>
+            </div>
           </div>
           <div>
             <p className="text-ink-500 dark:text-ink-400 text-xs">Date de dépôt</p>

@@ -170,8 +170,8 @@ export default function App() {
           onClick={handleClassify}
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-6 gap-6 items-start">
-          <div className="lg:col-span-4">
+        <div className="flex flex-col gap-6 items-start">
+          <div className="w-full">
             <AmendmentTable
               amendments={amendments}
               selectedId={selectedId}
@@ -180,7 +180,7 @@ export default function App() {
               onDelete={handleDelete}
             />
           </div>
-          <div className="lg:col-span-2 lg:sticky lg:top-6">
+          <div className="w-full">
             <AmendmentDetail amendment={selected} onClose={() => setSelectedId(null)} />
           </div>
         </div>

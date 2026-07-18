@@ -4,6 +4,7 @@ import os
 import re
 import time
 import asyncio
+import html
 from typing import List, Dict, Any, Optional
 
 from fastapi import FastAPI, Request, HTTPException
@@ -60,10 +61,13 @@ def normaliser_amendement(data, index: int = 0) -> dict:
         # On vérifie si c'est bien une structure de l'Assemblée (identification ou uid)
         if "identification" in am or "uid" in am or "pointeurFragmentTexte" in am:
             def safe_str(val, default=""):
+                if isinstance(val, dict) and ("@xmlns" in val or "@xmlns:xsi" in val):
+                    return "Non renseigné"
                 if isinstance(val, (dict, list)):
                     import json
                     return json.dumps(val, ensure_ascii=False)
-                return str(val) if val is not None and str(val).strip() != "" else default
+                res = str(val) if val is not None and str(val).strip() != "" else default
+                return html.unescape(res)
 
             raw_numero = am.get("identification", {}).get("numeroLong", "Inconnu")
             numero = safe_str(raw_numero, "Inconnu")
