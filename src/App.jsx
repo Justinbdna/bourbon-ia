@@ -6,6 +6,7 @@ import ClassifyButton from './components/ClassifyButton'
 import sampleAmendments from './data/sampleAmendments.json'
 import { classifyAmendments, normalizeAmendments } from './api/classify'
 import ThemeToggle from './components/ThemeToggle'
+import AISettingsModal from './components/AISettingsModal'
 
 
 export default function App() {
@@ -16,6 +17,17 @@ export default function App() {
   const [isClassifying, setIsClassifying] = useState(false)
   const [classifyError, setClassifyError] = useState(null)
   const [warnings, setWarnings] = useState([])
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [aiSettings, setAiSettings] = useState(() => {
+    const saved = localStorage.getItem('bourbon_ai_settings')
+    if (saved) return JSON.parse(saved)
+    return { provider: 'groq', apiKey: '', localUrl: 'http://localhost:1234/v1' }
+  })
+
+  function handleSaveSettings(newSettings) {
+    setAiSettings(newSettings)
+    localStorage.setItem('bourbon_ai_settings', JSON.stringify(newSettings))
+  }
 
   const selected = amendments.find((a) => a.id === selectedId) || null
 
@@ -42,7 +54,7 @@ export default function App() {
     setWarnings([])
 
     try {
-      const result = await classifyAmendments(amendments)
+      const result = await classifyAmendments(amendments, aiSettings)
       const parId = new Map(result.classement.map((c) => [c.id, c]))
 
       const misAJour = amendments.map((a) => ({
@@ -114,6 +126,12 @@ export default function App() {
             <img src="/bourdon_logo.svg" alt="Logo" className="h-24 w-auto" />
           </div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="rounded-md border border-white/30 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/10 transition-colors flex items-center gap-2"
+            >
+              ⚙️ Réglages IA
+            </button>
             <ThemeToggle />
             {amendments.length > 0 && (
               <>
@@ -172,6 +190,13 @@ export default function App() {
             <AmendmentDetail amendment={selected} onClose={() => setSelectedId(null)} />
           </div>
         </div>
+
+        <AISettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          onSave={handleSaveSettings}
+          currentSettings={aiSettings}
+        />
       </main>
 
       <footer className="max-w-[95%] mx-auto px-6 pb-8 text-center">

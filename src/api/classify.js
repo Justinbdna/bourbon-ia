@@ -33,9 +33,14 @@ export async function normalizeAmendments(amendements) {
  * Envoie les amendements au backend FastAPI pour classement par l'IA.
  * Renvoie { classement, avertissements, modele_utilise }.
  */
-export async function classifyAmendments(amendements) {
-  const payload = { amendements }
-  console.log("PAYLOAD ENVOYÉ:", amendements)
+export async function classifyAmendments(amendements, aiSettings = {}) {
+  const payload = { 
+    amendements,
+    provider: aiSettings.provider || 'groq',
+    api_key: aiSettings.apiKey || null,
+    base_url: aiSettings.localUrl || null
+  }
+  console.log("PAYLOAD ENVOYÉ:", payload)
 
   let response
   try {

@@ -40,6 +40,9 @@ app.add_middleware(
 class AnalyzeRequest(BaseModel):
     amendements: list
     model: str = "mac_mistral"
+    provider: str = "groq"
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
 
 class AnalyzeResult(BaseModel):
     id: str
@@ -136,13 +139,20 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
         # Lazy Load OpenAI pour éviter les plantages au build
         from openai import AsyncOpenAI
         
-        api_key = os.getenv("GROQ_API_KEY")
-        if not api_key:
-            logging.warning("Clé GROQ_API_KEY manquante. L'analyse LLM risque d'échouer.")
+        if payload.provider == "local":
+            effective_base_url = payload.base_url or "http://localhost:1234/v1"
+            effective_api_key = payload.api_key or "local-key"
+            effective_model = "local-model"
+        else:
+            effective_base_url = "https://api.groq.com/openai/v1"
+            effective_api_key = payload.api_key or os.getenv("GROQ_API_KEY")
+            effective_model = "llama-3.3-70b-versatile"
+            if not effective_api_key:
+                logging.warning("Clé GROQ_API_KEY manquante.")
             
         client = AsyncOpenAI(
-            base_url="https://api.groq.com/openai/v1", 
-            api_key=api_key or "DUMMY_KEY", 
+            base_url=effective_base_url, 
+            api_key=effective_api_key or "DUMMY_KEY", 
             timeout=300.0
         )
         
@@ -196,7 +206,7 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
                 )
                 
                 last_error = None
-                for model_name in FALLBACK_MODELS:
+                for model_name in [effective_model]:
                     try:
                         response = await client.chat.completions.create(
                             model=model_name,
