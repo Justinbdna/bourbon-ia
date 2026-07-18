@@ -122,17 +122,15 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
       <div className="overflow-y-auto scroll-thin" style={{ maxHeight: MAX_VISIBLE_HEIGHT }}>
         <table className="w-full text-sm table-fixed">
           <thead>
-            <tr className="bg-marine-50 dark:bg-obsidienne text-marine-900 dark:text-plume text-left border-b border-ink-200 dark:border-ink-700">
-              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-2 py-3 w-8"></th>
-              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-1 py-3 w-10"></th>
-              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-16">Rang</th>
-              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-14">Art.</th>
-              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-20">N°</th>
-              <th className="max-w-[150px] truncate px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Auteur(s)</th>
-              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-40">Point d'impact</th>
-              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-full max-w-md">Extrait du dispositif</th>
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rang</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Art.</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">N°</th>
+              <th className="max-w-[120px] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Auteur(s)</th>
+              <th className="w-40 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Point d'impact</th>
+              <th className="w-full max-w-md px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Extrait du dispositif</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Groupe</th>
-              <th className="sticky top-0 z-10 bg-marine-50 dark:bg-obsidienne px-4 py-3 font-semibold w-28">Actions</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -158,76 +156,15 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                     isSelected ? 'bg-marine-100/70' : 'hover:bg-ink-100/60'
                   }`}
                 >
-                  <td
-                    className="px-2 py-3 cursor-grab active:cursor-grabbing text-center"
-                    title="Glisser pour repositionner"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <GripIcon />
-                  </td>
-
-                  {spanInfo.isStart && (
-                    <td rowSpan={spanInfo.span} className="p-0 align-top">
-                      {spanInfo.meta ? (
-                        <div className="flex h-full items-stretch gap-1 py-1.5 pl-1.5 pr-0.5 min-h-[2.75rem]">
-                          <span
-                            className={`text-[10px] font-semibold uppercase tracking-wide flex items-center ${spanInfo.meta.accent}`}
-                          >
-                            {spanInfo.meta.label}
-                          </span>
-                          <svg viewBox="0 0 16 100" preserveAspectRatio="none" className="w-4 h-full shrink-0">
-                            <path
-                              d="M12 6 H6 V94 H12"
-                              fill="none"
-                              stroke={spanInfo.meta.stroke}
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        </div>
-                      ) : null}
-                    </td>
-                  )}
-
-                  <td className="px-4 py-3 font-medium text-ink-900 whitespace-nowrap truncate">
-                    {hasClassification ? index + 1 : <span className="text-ink-400 italic">—</span>}
-                  </td>
-                  <td className="px-4 py-3 font-medium text-ink-900 whitespace-nowrap truncate">
-                    {a.article}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap truncate">
-                    {a.numero}
-                    {a.rectification ? ` ${a.rectification}` : ''}
-                  </td>
-                  <td className="max-w-[150px] truncate px-4 py-4 whitespace-nowrap text-sm text-gray-500">{auteursText}</td>
-                  <td className="px-4 py-3 truncate whitespace-nowrap w-40">
-                    <ImpactBadge type={a.point_impact?.type} />
-                  </td>
-                  <td
-                    className="px-4 py-3 text-ink-600 truncate whitespace-nowrap w-full max-w-md"
-                    title={dispositifFull}
-                  >
-                    {truncate(a.dispositif)}
-                  </td>
-                  <td className="px-4 py-3 truncate whitespace-nowrap">
-                    {res ? (
-                      <GroupeBadge type={res.statut} />
-                    ) : (
-                      <span className="text-ink-500 italic text-xs">Non classé</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 truncate whitespace-nowrap">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onDelete(a.id)
-                      }}
-                      className="text-xs font-medium text-ink-500 hover:text-red-600 transition-colors"
-                    >
-                      Retirer
-                    </button>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{res?.rang || "—"}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{a.article || "—"}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{a.numero}</td>
+                  <td className="max-w-[120px] truncate px-4 py-4 text-sm text-gray-500" title={auteursText}>{auteursText}</td>
+                  <td className="w-40 px-4 py-4 text-sm text-gray-500"><ImpactBadge type={a.point_impact?.type} /></td>
+                  <td className="w-full max-w-md px-4 py-4 text-sm text-gray-900 truncate" title={dispositifFull}>{dispositifFull}</td>
+                  <td className="px-4 py-4 text-sm whitespace-nowrap"><GroupeBadge statut={res?.statut} groupe={res?.groupe} /></td>
+                  <td className="px-4 py-4 text-right text-sm font-medium">
+                    <button onClick={() => onDelete(a.id)} className="text-gray-400 hover:text-red-600 transition-colors">Retirer</button>
                   </td>
                 </tr>
               )

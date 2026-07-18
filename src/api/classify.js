@@ -35,7 +35,7 @@ export async function normalizeAmendments(amendements) {
  */
 export async function classifyAmendments(amendements) {
   const payload = { amendements }
-  console.log("🚀 PAYLOAD ENVOYÉ À L'API :", amendements)
+  console.log("PAYLOAD ENVOYÉ:", amendements)
 
   let response
   try {
@@ -60,7 +60,7 @@ export async function classifyAmendments(amendements) {
   let data = null
   try {
     data = await response.json()
-    console.log("✅ RÉPONSE BRUTE DE L'API :", data)
+    console.log("RÉPONSE REÇUE:", data)
   } catch {
     // pas de corps JSON exploitable
   }

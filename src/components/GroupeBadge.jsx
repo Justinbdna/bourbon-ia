@@ -1,35 +1,18 @@
-const LABELS = {
-  discussion_commune: 'Discussion commune',
-  Incompatible: 'Discussion commune',
-  identiques: 'Identiques',
-  Identique: 'Identiques',
-  doublon: 'Doublon',
-  Doublon: 'Doublon',
-  Nouveau: 'Isolé',
-  isole: 'Isolé',
-}
+const getBadgeStyle = (statusLabel) => {
+  const s = String(statusLabel || "").toLowerCase();
+  if (s.includes("isolé") || s.includes("nouveau")) return "bg-gray-100 text-gray-800 border border-gray-200";
+  if (s.includes("commune") || s.includes("incompatible")) return "bg-purple-100 text-purple-800 border border-purple-200 font-semibold";
+  if (s.includes("identique")) return "bg-blue-100 text-blue-800 border border-blue-200 font-semibold";
+  if (s.includes("erreur") || s === "—" || s === "") return "bg-red-100 text-red-800 border border-red-200";
+  return "bg-gray-100 text-gray-800"; 
+};
 
-const STYLES = {
-  discussion_commune: 'bg-purple-100 text-purple-800 ring-purple-300',
-  Incompatible: 'bg-purple-100 text-purple-800 ring-purple-300',
-  identiques: 'bg-blue-100 text-blue-800 ring-blue-300',
-  Identique: 'bg-blue-100 text-blue-800 ring-blue-300',
-  doublon: 'bg-red-100 text-red-800 ring-red-300',
-  Doublon: 'bg-red-100 text-red-800 ring-red-300',
-  Nouveau: 'bg-ink-100 text-ink-800 ring-ink-300',
-  isole: 'bg-ink-100 text-ink-800 ring-ink-300',
-  Erreur: 'bg-red-100 text-red-800 ring-red-300',
-}
-
-export default function GroupeBadge({ type }) {
-  if (!type) return <span className="text-ink-500 text-xs">—</span>
-
-  const label = LABELS[type] || type
-  const style = STYLES[type] || 'bg-ink-100 text-ink-700 ring-ink-300'
-
+export default function GroupeBadge({ statut, groupe }) {
+  const label = statut || (groupe ? groupe.type : "Non classé");
+  const style = getBadgeStyle(label);
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${style}`}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs ${style}`}
     >
       {label}
     </span>

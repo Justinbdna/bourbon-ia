@@ -147,8 +147,11 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
         )
         
         system_prompt = (
-            "Tu es un assistant juridique. Compare ces amendements en ignorant le 'chapeau'. "
-            "ANALYSE OBLIGATOIRE : Tu dois comparer les dispositifs. Même si les dispositifs indiquent 'Non renseigné' ou une erreur d'irrecevabilité, force un statut. S'ils ont la même erreur, mets-les en 'Discussion commune'. Renvoie impérativement un JSON valide. "
+            "RÈGLE DE CLASSEMENT MVP : Tu es un administrateur de l'Assemblée nationale. Tu dois classer une liste d'amendements. Même si le 'dispositif' est vide, qu'il indique 'Non renseigné' ou 'Irrecevable au titre de l'article 40', TU DOIS LES CLASSER. \n"
+            "- Si plusieurs amendements ciblent exactement le même 'article' et ont le même dispositif (même vide ou irrecevable), classe-les en 'Identiques'.\n"
+            "- S'ils ciblent le même article mais diffèrent légèrement, classe-les en 'Discussion commune'.\n"
+            "- Sinon, classe en 'Isolé'.\n"
+            "Tu n'as pas le droit de renvoyer le statut 'Erreur' ou de refuser de classer. Tu dois trouver des corrélations logiques.\n"
             "Réponds UNIQUEMENT en JSON avec les clés : id, statut (Doublon, Identique, Nouveau, Incompatible), justification."
         )
         
