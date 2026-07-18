@@ -120,55 +120,34 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
         </div>
       )}
       <div className="overflow-y-auto scroll-thin" style={{ maxHeight: MAX_VISIBLE_HEIGHT }}>
-        <table className="w-full text-sm table-fixed">
-          <thead>
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rang</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Art.</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">N°</th>
-              <th className="max-w-[120px] px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Auteur(s)</th>
-              <th className="w-40 px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Point d'impact</th>
-              <th className="w-full max-w-md px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Extrait du dispositif</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider max-w-[120px]">Auteur(s)</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">Point d'impact</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-full max-w-md">Extrait du dispositif</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Groupe</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
-          <tbody>
-            {amendments.map((a, index) => {
-              const isSelected = a.id === selectedId
-              const res = a.resultat_ia
-              const isDoublon = res?.groupe?.type === 'doublon'
-              const spanInfo = groupSpans.get(a.id ?? `anon-${index}`)
-              const auteursText = a.rapporteur
-                ? 'Rapporteur'
-                : (Array.isArray(a.auteurs) ? a.auteurs : [a.auteurs]).join(', ') || '—'
-              const dispositifFull = String(a.dispositif || '').replace(/\s+/g, ' ').trim()
-
-              return (
-                <tr
-                  key={a.id ?? `fallback-${index}`}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, index)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => handleDrop(e, index)}
-                  onClick={() => onSelect(a.id)}
-                  className={`cursor-pointer border-t border-ink-100 transition-colors ${
-                    isSelected ? 'bg-marine-100/70' : 'hover:bg-ink-100/60'
-                  }`}
-                >
-                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{res?.rang || "—"}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{a.article || "—"}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{a.numero}</td>
-                  <td className="max-w-[120px] truncate px-4 py-4 text-sm text-gray-500" title={auteursText}>{auteursText}</td>
-                  <td className="w-40 px-4 py-4 text-sm text-gray-500"><ImpactBadge type={a.point_impact?.type} /></td>
-                  <td className="w-full max-w-md px-4 py-4 text-sm text-gray-900 truncate" title={dispositifFull}>{dispositifFull}</td>
-                  <td className="px-4 py-4 text-sm whitespace-nowrap"><GroupeBadge statut={res?.statut} groupe={res?.groupe} /></td>
-                  <td className="px-4 py-4 text-right text-sm font-medium">
-                    <button onClick={() => onDelete(a.id)} className="text-gray-400 hover:text-red-600 transition-colors">Retirer</button>
-                  </td>
-                </tr>
-              )
-            })}
+          <tbody className="bg-white divide-y divide-gray-200">
+            {amendments.map((a, index) => (
+              <tr key={a.id ?? `fallback-${index}`}>
+                <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{a.rang || "—"}</td>
+                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{a.article || "—"}</td>
+                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{a.numero}</td>
+                <td className="px-4 py-4 text-sm text-gray-500 max-w-[120px] truncate" title={a.auteurs}>{a.auteurs}</td>
+                <td className="px-4 py-4 text-sm text-gray-500 w-40"><ImpactBadge impact={a.point_impact} /></td>
+                <td className="px-4 py-4 text-sm text-gray-900 w-full max-w-md truncate" title={a.dispositif}>{a.dispositif}</td>
+                <td className="px-4 py-4 text-sm whitespace-nowrap"><GroupeBadge statut={a.statut} groupe={a.groupe} /></td>
+                <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <button onClick={() => removeAmendment(a.id)} className="text-gray-400 hover:text-red-600 transition-colors">Retirer</button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
