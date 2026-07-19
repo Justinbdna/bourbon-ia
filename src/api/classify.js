@@ -1,3 +1,5 @@
+import { preSortAmendements } from '../utils/sortingEngine'
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:8000')
 
 /**
@@ -40,14 +42,37 @@ export async function classifyAmendments(amendements, aiSettings = {}) {
     return await classifyWithLocalAI(amendements, aiSettings)
   }
 
+  // --- PRÉ-TRI MÉCANIQUE (Portage du moteur de Yassine) ---
+  const preSorted = preSortAmendements(amendements)
+  const toSendToLLM = preSorted.filter(am => !am._skipLLM)
+  const preClassified = preSorted.filter(am => am._skipLLM).map(am => ({
+    id: am.id,
+    statut: 'Identique',
+    justification: 'Détecté mécaniquement : même article et même dispositif.',
+    alerte_couleur: 'orange',
+    rang: am._rang,
+    groupe: am._groupe
+  }))
+
+  const allWarnings = []
+  if (preClassified.length > 0) {
+    allWarnings.push(`✅ ${preClassified.length} amendement(s) classé(s) mécaniquement (Identiques).`)
+  }
+
+  if (toSendToLLM.length === 0) {
+    return { classement: preClassified, avertissements: allWarnings, modele_utilise: 'Moteur déterministe (sans IA)' }
+  }
+
   // --- MODE CLOUD (Groq via Vercel) avec CHUNKING ---
   // Vercel coupe au bout de 10s. On découpe en lots de 5 amendements max.
   const CHUNK_SIZE = 5
-  const allResults = []
-  const allWarnings = []
+  const llmResults = []
 
-  for (let start = 0; start < amendements.length; start += CHUNK_SIZE) {
-    const chunk = amendements.slice(start, start + CHUNK_SIZE)
+  // On nettoie les champs internes avant d'envoyer au backend
+  const cleanForBackend = toSendToLLM.map(({ _rang, _groupe, _skipLLM, ...rest }) => rest)
+
+  for (let start = 0; start < cleanForBackend.length; start += CHUNK_SIZE) {
+    const chunk = cleanForBackend.slice(start, start + CHUNK_SIZE)
     
     const payload = {
       amendements: chunk,
@@ -85,14 +110,15 @@ export async function classifyAmendments(amendements, aiSettings = {}) {
 
     const data = await response.json()
     if (Array.isArray(data)) {
-      allResults.push(...data)
+      llmResults.push(...data)
     } else if (data.classement) {
-      allResults.push(...data.classement)
+      llmResults.push(...data.classement)
       if (data.avertissements) allWarnings.push(...data.avertissements)
     }
   }
 
-  // Recalculer les rangs globaux après fusion des lots
+  // Fusion : pré-classés + résultats LLM, puis re-ranking global
+  const allResults = [...preClassified, ...llmResults]
   allResults.forEach((r, i) => { r.rang = i + 1 })
 
   return { classement: allResults, avertissements: allWarnings, modele_utilise: 'Groq (Cloud)' }
@@ -151,34 +177,46 @@ async function classifyWithLocalAI(amendements, aiSettings) {
     }
   }
 
-  // --- CLASSEMENT : Le serveur répond, on peut travailler ---
-  const systemPrompt = `RÈGLE DE CLASSEMENT MVP : Tu es un administrateur de l'Assemblée nationale. Tu dois classer une liste d'amendements.
-- Si plusieurs amendements ciblent le même article et ont le même dispositif, classe-les en 'Identique'.
-- S'ils diffèrent légèrement, classe-les en 'Discussion commune'.
-- Sinon, classe en 'Isolé'.
-RÈGLES DE FORMATAGE ABSOLUES :
-1. Renvoie un tableau JSON valide.
-2. Conserve la valeur exacte de la clé 'id'.
-3. 'statut' doit être 'Identique', 'Discussion commune', ou 'Isolé'.
-Format attendu: [{"id": "...", "statut": "Isolé", "justification": "...", "alerte_couleur": "gris"}]`
+  // --- PRÉ-TRI MÉCANIQUE (Portage du moteur de Yassine) ---
+  const preSorted = preSortAmendements(amendements)
+  const toClassifyByLLM = preSorted.filter(am => !am._skipLLM)
+  const preClassified = preSorted.filter(am => am._skipLLM).map(am => ({
+    id: am.id,
+    statut: 'Identique',
+    justification: 'Détecté mécaniquement : même article et même dispositif.',
+    alerte_couleur: 'orange',
+    rang: am._rang,
+    groupe: am._groupe
+  }))
 
-  const reference_brut = amendements[0]
+  const avertissements = []
+  if (preClassified.length > 0) {
+    avertissements.push(`✅ ${preClassified.length} amendement(s) classé(s) mécaniquement (Identiques). Tokens économisés.`)
+  }
+
+  if (toClassifyByLLM.length === 0) {
+    return { classement: preClassified, avertissements, modele_utilise: 'Moteur déterministe (sans IA)' }
+  }
+
+  // --- CLASSEMENT LLM pour les amendements non déterminés ---
+  const systemPrompt = `TU ES UN AUTOMATE DE CLASSEMENT. RÉPONSE UNIQUE JSON SANS COMMENTAIRE : {"statut": "Identique" | "Discussion commune" | "Isolé", "justification": "...", "alerte_couleur": "orange" | "vert" | "gris"}. NE LISTE JAMAIS LES AUTEURS. SI PLUSIEURS OBJETS, GARDE UNIQUEMENT LE PREMIER.`
+
+  const reference_brut = toClassifyByLLM[0]
   const resultats = [{
     id: reference_brut.id || reference_brut.numero,
-    statut: "Isolé",
-    justification: "Premier du lot (Référence).",
-    alerte_couleur: "vert",
+    statut: 'Isolé',
+    justification: 'Premier du lot (Référence).',
+    alerte_couleur: 'vert',
     rang: 1
   }]
 
-  const avertissements = []
   let consecutiveFailures = 0
 
-  for (let i = 1; i < amendements.length; i++) {
+  for (let i = 1; i < toClassifyByLLM.length; i++) {
     // Fail-fast : si 2 requêtes consécutives échouent, on arrête tout
     if (consecutiveFailures >= 2) {
       resultats.push({
-        id: amendements[i].id || amendements[i].numero,
+        id: toClassifyByLLM[i].id || toClassifyByLLM[i].numero,
         statut: 'Erreur',
         justification: 'Classement interrompu : trop d\'échecs consécutifs.',
         alerte_couleur: 'rouge',
@@ -187,8 +225,8 @@ Format attendu: [{"id": "...", "statut": "Isolé", "justification": "...", "aler
       continue
     }
 
-    const am = amendements[i]
-    const userPrompt = `REF - Auteur: ${reference_brut.auteurs}\nTexte: ${reference_brut.dispositif}\nTEST - Auteur: ${am.auteurs}\nTexte: ${am.dispositif}`
+    const am = toClassifyByLLM[i]
+    const userPrompt = `REF: ${reference_brut.dispositif}\nTEST: ${am.dispositif}`
 
     try {
       const res = await fetch(endpoint, {
@@ -208,75 +246,72 @@ Format attendu: [{"id": "...", "statut": "Isolé", "justification": "...", "aler
       if (!res.ok) throw new Error(`LM Studio a répondu ${res.status}`)
 
       const jsonRes = await res.json()
-      
+
       // Vérifier si le modèle a été coupé par la limite de tokens
       const finishReason = jsonRes.choices[0].finish_reason
       if (finishReason === 'length') {
         console.warn(`Amendement ${am.numero} : réponse tronquée (finish_reason=length)`)
       }
-      
+
       let contenu = jsonRes.choices[0].message.content.trim()
 
-      // Extraction JSON anti-hallucination (gère les listes infinies et coupures)
+      // --- PARSEUR JSON ANTI-HALLUCINATION ---
       let parsed;
       try {
         let cleanContent = contenu.replace(/^```(?:json)?\s*/m, '').replace(/\s*```$/m, '').trim();
         const jsonMatch = cleanContent.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
-        if (jsonMatch) {
-            cleanContent = jsonMatch[0];
-        }
-        
-        // Ajout d'une sécurité si le JSON finit par une virgule à cause d'une petite coupure
+        if (jsonMatch) cleanContent = jsonMatch[0];
         cleanContent = cleanContent.replace(/,\s*([\]}])/g, '$1');
-        
         parsed = JSON.parse(cleanContent);
-        
-        // Neutralisation de l'hallucination "Liste de co-auteurs"
         if (Array.isArray(parsed)) {
           if (parsed.length > 0) {
-            parsed = parsed[0]; // On prend le premier élément, qui contient le bon statut
+            parsed = parsed[0]; // Correction hallucination multi-auteurs
           } else {
-            throw new Error("Tableau JSON vide retourné");
+            throw new Error('Tableau JSON vide retourné');
           }
         }
       } catch (parseError) {
-        console.error("Erreur de parsing JSON brut:", contenu);
-        throw new Error("Format JSON invalide renvoyé par l'IA Locale");
+        console.error('Erreur de parsing JSON brut:', contenu);
+        throw new Error('Format JSON invalide renvoyé par l\'IA Locale');
       }
 
-      const statut = parsed.statut || "Isolé"
-      const alerte_couleur = statut === "Identique" ? "orange" : "vert"
+      const statut = parsed.statut || 'Isolé'
+      const alerte_couleur = parsed.alerte_couleur || (statut === 'Identique' ? 'orange' : 'vert')
 
       resultats.push({
         id: am.id || am.numero,
-        statut: statut,
-        justification: parsed.justification || "",
-        alerte_couleur: alerte_couleur,
+        statut,
+        justification: parsed.justification || '',
+        alerte_couleur,
         rang: i + 1
       })
-      consecutiveFailures = 0 // Reset en cas de succès
+      consecutiveFailures = 0
     } catch (err) {
-      console.error("Erreur LM Studio:", err)
+      console.error('Erreur LM Studio:', err)
       consecutiveFailures++
       resultats.push({
         id: am.id || am.numero,
-        statut: "Erreur",
-        justification: "Échec de communication avec LM Studio.",
-        alerte_couleur: "rouge",
+        statut: 'Erreur',
+        justification: 'Échec de communication avec LM Studio.',
+        alerte_couleur: 'rouge',
         rang: i + 1
       })
       avertissements.push(`L'amendement ${am.numero} a échoué.`)
     }
   }
 
-  // Attribution des groupes
+  // Attribution des groupes pour les résultats LLM
   for (const r of resultats) {
-    if (r.statut === "Identique") {
-      r.groupe = { type: "identiques", groupe_id: `grp-identiques-1` }
-    } else if (r.statut === "Discussion commune") {
-      r.groupe = { type: "discussion_commune", groupe_id: `grp-discussion_commune-1` }
+    if (r.statut === 'Identique') {
+      r.groupe = { type: 'identiques', groupe_id: 'grp-identiques-llm' }
+    } else if (r.statut === 'Discussion commune') {
+      r.groupe = { type: 'discussion_commune', groupe_id: 'grp-discussion_commune-1' }
     }
   }
 
-  return { classement: resultats, avertissements, modele_utilise: 'LM Studio (Local)' }
+  // Fusion : pré-classés + résultats LLM, puis re-ranking global
+  const allResults = [...preClassified, ...resultats]
+  allResults.forEach((r, i) => { r.rang = i + 1 })
+
+  return { classement: allResults, avertissements, modele_utilise: 'LM Studio (Local)' }
 }
