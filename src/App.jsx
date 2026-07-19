@@ -71,6 +71,20 @@ export default function App() {
       setAmendments(misAJour)
       setWarnings(result.avertissements || [])
     } catch (err) {
+      console.error('Erreur classement:', err)
+      // Filet de sécurité : on ne crashe JAMAIS React.
+      // On marque tous les amendements avec un résultat d'erreur.
+      const fallbackAmendments = amendments.map((a, i) => ({
+        ...a,
+        resultat_ia: {
+          id: a.id,
+          statut: 'Erreur',
+          justification: err.message || 'Erreur inconnue lors du classement.',
+          alerte_couleur: 'rouge',
+          rang: i + 1
+        }
+      }))
+      setAmendments(fallbackAmendments)
       setClassifyError(err.message || 'Erreur inconnue lors du classement.')
     } finally {
       setIsClassifying(false)

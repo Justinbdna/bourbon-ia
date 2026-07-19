@@ -75,17 +75,58 @@ export async function classifyAmendments(amendements, aiSettings = {}) {
 
 // Fonction dédiée pour appeler LM Studio DIRECTEMENT depuis le navigateur
 async function classifyWithLocalAI(amendements, aiSettings) {
-  let localUrl = (aiSettings.localUrl || 'http://localhost:1234/v1').trim()
-  
-  // Nettoyage ultra-robuste de l'URL
-  localUrl = localUrl.replace(/\/+$/, '') // Retire les slashs finaux
-  localUrl = localUrl.replace(/\/[vV]1$/, '') // Retire un éventuel /v1 ou /V1 final pour le remettre proprement
-  
-  const endpoint = `${localUrl}/v1/chat/completions`
-  
   if (amendements.length === 0) return { classement: [], avertissements: [], modele_utilise: 'Local' }
 
-  // 1. Définir le prompt système (identique au backend)
+  // --- NETTOYAGE URL ---
+  let localUrl = (aiSettings.localUrl || 'http://localhost:1234/v1').trim()
+  localUrl = localUrl.replace(/\/+$/, '')
+  localUrl = localUrl.replace(/\/[vV]1$/, '')
+  const baseUrl = `${localUrl}/v1`
+  const endpoint = `${baseUrl}/chat/completions`
+
+  // --- PREFLIGHT : Test de connectivité AVANT la boucle ---
+  try {
+    const preflight = await fetch(`${baseUrl}/models`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(5000) // Timeout 5s max
+    })
+    if (!preflight.ok) {
+      throw new Error(`LM Studio a répondu ${preflight.status}`)
+    }
+  } catch (preflightErr) {
+    console.error('Preflight LM Studio échoué:', preflightErr)
+
+    // Diagnostic précis de l'erreur
+    let diagnostic = ''
+    const msg = preflightErr.message || ''
+    if (msg.includes('Failed to fetch') || msg.includes('Load failed') || msg.includes('NetworkError')) {
+      diagnostic = 'Connexion impossible vers LM Studio. Causes possibles :\n'
+        + '• Le serveur LM Studio n\'est pas démarré\n'
+        + '• Aucun modèle n\'est chargé dans LM Studio\n'
+        + '• Blocage CORS (site HTTPS → localhost HTTP)\n'
+        + '→ Solution : Activez le CORS dans LM Studio (Server Settings), ou lancez le site en local (npm run dev).'
+    } else if (msg.includes('TimeoutError') || msg.includes('timed out')) {
+      diagnostic = 'LM Studio ne répond pas (timeout 5s). Vérifiez qu\'un modèle est bien chargé.'
+    } else {
+      diagnostic = `Erreur de connexion LM Studio : ${msg}`
+    }
+
+    // Court-circuit : marquer TOUS les amendements en Erreur immédiatement
+    const fallback = amendements.map((am, i) => ({
+      id: am.id || am.numero,
+      statut: 'Erreur',
+      justification: diagnostic,
+      alerte_couleur: 'rouge',
+      rang: i + 1
+    }))
+    return {
+      classement: fallback,
+      avertissements: [`⚠️ Serveur local injoignable. Aucun amendement n'a pu être classé. ${diagnostic.split('\n')[0]}`],
+      modele_utilise: 'LM Studio (Local) — Hors ligne'
+    }
+  }
+
+  // --- CLASSEMENT : Le serveur répond, on peut travailler ---
   const systemPrompt = `RÈGLE DE CLASSEMENT MVP : Tu es un administrateur de l'Assemblée nationale. Tu dois classer une liste d'amendements.
 - Si plusieurs amendements ciblent le même article et ont le même dispositif, classe-les en 'Identique'.
 - S'ils diffèrent légèrement, classe-les en 'Discussion commune'.
@@ -99,25 +140,37 @@ Format attendu: [{"id": "...", "statut": "Isolé", "justification": "...", "aler
   const reference_brut = amendements[0]
   const resultats = [{
     id: reference_brut.id || reference_brut.numero,
-    statut: "Isolé", // Force le premier à Isolé ou Nouveau par défaut
+    statut: "Isolé",
     justification: "Premier du lot (Référence).",
     alerte_couleur: "vert",
     rang: 1
   }]
 
   const avertissements = []
-  
-  // 2. Traiter les suivants un par un pour ne pas surcharger le modèle local
+  let consecutiveFailures = 0
+
   for (let i = 1; i < amendements.length; i++) {
+    // Fail-fast : si 2 requêtes consécutives échouent, on arrête tout
+    if (consecutiveFailures >= 2) {
+      resultats.push({
+        id: amendements[i].id || amendements[i].numero,
+        statut: 'Erreur',
+        justification: 'Classement interrompu : trop d\'échecs consécutifs.',
+        alerte_couleur: 'rouge',
+        rang: i + 1
+      })
+      continue
+    }
+
     const am = amendements[i]
     const userPrompt = `REF - Auteur: ${reference_brut.auteurs}\nTexte: ${reference_brut.dispositif}\nTEST - Auteur: ${am.auteurs}\nTexte: ${am.dispositif}`
-    
+
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'local-model', // LM Studio ignore souvent le nom
+          model: 'local-model',
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
@@ -127,22 +180,22 @@ Format attendu: [{"id": "...", "statut": "Isolé", "justification": "...", "aler
         })
       })
 
-      if (!res.ok) throw new Error("Erreur réseau vers LM Studio")
-      
+      if (!res.ok) throw new Error(`LM Studio a répondu ${res.status}`)
+
       const jsonRes = await res.json()
       let contenu = jsonRes.choices[0].message.content.trim()
-      
+
       // Nettoyage Markdown (```json ... ```)
       contenu = contenu.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '').trim()
       const match = contenu.match(/\[.*\]|\{.*\}/s)
       if (match) contenu = match[0]
-      
+
       let parsed = JSON.parse(contenu)
       if (Array.isArray(parsed)) parsed = parsed[0]
 
       const statut = parsed.statut || "Isolé"
       const alerte_couleur = statut === "Identique" ? "orange" : "vert"
-      
+
       resultats.push({
         id: am.id || am.numero,
         statut: statut,
@@ -150,26 +203,22 @@ Format attendu: [{"id": "...", "statut": "Isolé", "justification": "...", "aler
         alerte_couleur: alerte_couleur,
         rang: i + 1
       })
+      consecutiveFailures = 0 // Reset en cas de succès
     } catch (err) {
       console.error("Erreur LM Studio:", err)
-      const isMixedContent = err.name === 'TypeError' && err.message.includes('Load failed')
-      const errorMessage = isMixedContent 
-        ? "Bloqué par la sécurité de votre navigateur (Safari bloque les requêtes de HTTPS vers un HTTP local). Solution : Utilisez Google Chrome, ou lancez le frontend en local."
-        : "Échec de connexion avec LM Studio. Vérifiez qu'il est bien lancé."
-        
+      consecutiveFailures++
       resultats.push({
         id: am.id || am.numero,
         statut: "Erreur",
-        justification: errorMessage,
+        justification: "Échec de communication avec LM Studio.",
         alerte_couleur: "rouge",
         rang: i + 1
       })
-      avertissements.push(`L'amendement ${am.numero} a échoué : ${isMixedContent ? 'Mixed Content (Safari)' : 'Réseau'}.`)
+      avertissements.push(`L'amendement ${am.numero} a échoué.`)
     }
   }
 
-  // 3. Attribution des groupes basique
-  let grpId = 1
+  // Attribution des groupes
   for (const r of resultats) {
     if (r.statut === "Identique") {
       r.groupe = { type: "identiques", groupe_id: `grp-identiques-1` }
