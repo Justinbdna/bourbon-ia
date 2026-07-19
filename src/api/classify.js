@@ -40,37 +40,62 @@ export async function classifyAmendments(amendements, aiSettings = {}) {
     return await classifyWithLocalAI(amendements, aiSettings)
   }
 
-  // Logique originelle pour le Cloud (Groq) via Vercel
-  const payload = {
-    amendements,
-    provider: 'groq',
-    api_key: aiSettings.apiKey || null
+  // --- MODE CLOUD (Groq via Vercel) avec CHUNKING ---
+  // Vercel coupe au bout de 10s. On découpe en lots de 5 amendements max.
+  const CHUNK_SIZE = 5
+  const allResults = []
+  const allWarnings = []
+
+  for (let start = 0; start < amendements.length; start += CHUNK_SIZE) {
+    const chunk = amendements.slice(start, start + CHUNK_SIZE)
+    
+    const payload = {
+      amendements: chunk,
+      provider: 'groq',
+      api_key: aiSettings.apiKey || null
+    }
+
+    let response;
+    try {
+      response = await fetch(`${API_BASE_URL}/api/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    } catch (err) {
+      throw new ClassifyError(
+        `Impossible de joindre le serveur Vercel. (${err.message})`,
+        0
+      )
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      const status = response.status
+      
+      // Message explicite pour les erreurs de quota (429)
+      if (status === 429 || status === 500 && errorText.toLowerCase().includes('rate limit')) {
+        throw new ClassifyError(
+          `⚠️ Quota de tokens dépassé (Erreur ${status}). Ouvrez les ⚙️ Réglages IA pour : saisir votre propre clé API Groq (gratuite), ou basculer sur une IA Locale (LM Studio/Ollama) gratuite et illimitée.`,
+          status
+        )
+      }
+      throw new ClassifyError(`Erreur API Vercel ${status}: ${errorText}`, status)
+    }
+
+    const data = await response.json()
+    if (Array.isArray(data)) {
+      allResults.push(...data)
+    } else if (data.classement) {
+      allResults.push(...data.classement)
+      if (data.avertissements) allWarnings.push(...data.avertissements)
+    }
   }
 
-  let response;
-  try {
-    response = await fetch(`${API_BASE_URL}/api/analyze`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-  } catch (err) {
-    throw new ClassifyError(
-      `Impossible de joindre le serveur Vercel. (${err.message})`,
-      0
-    )
-  }
+  // Recalculer les rangs globaux après fusion des lots
+  allResults.forEach((r, i) => { r.rang = i + 1 })
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new ClassifyError(`Erreur API Vercel ${response.status}: ${errorText}`, response.status)
-  }
-
-  const data = await response.json()
-  if (Array.isArray(data)) {
-    return { classement: data, avertissements: [], modele_utilise: 'Groq (Cloud)' }
-  }
-  return data
+  return { classement: allResults, avertissements: allWarnings, modele_utilise: 'Groq (Cloud)' }
 }
 
 // Fonction dédiée pour appeler LM Studio DIRECTEMENT depuis le navigateur
