@@ -201,21 +201,40 @@ Format attendu: [{"id": "...", "statut": "Isolé", "justification": "...", "aler
             { role: 'user', content: userPrompt }
           ],
           temperature: 0.1,
-          max_tokens: 200
+          max_tokens: 1500
         })
       })
 
       if (!res.ok) throw new Error(`LM Studio a répondu ${res.status}`)
 
       const jsonRes = await res.json()
+      
+      // Vérifier si le modèle a été coupé par la limite de tokens
+      const finishReason = jsonRes.choices[0].finish_reason
+      if (finishReason === 'length') {
+        console.warn(`Amendement ${am.numero} : réponse tronquée (finish_reason=length)`)
+      }
+      
       let contenu = jsonRes.choices[0].message.content.trim()
 
-      // Nettoyage Markdown (```json ... ```)
-      contenu = contenu.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '').trim()
-      const match = contenu.match(/\[.*\]|\{.*\}/s)
-      if (match) contenu = match[0]
-
-      let parsed = JSON.parse(contenu)
+      // Extraction JSON ultra-robuste (alignée sur le parseur backend)
+      let parsed
+      try {
+        // 1. Retirer les balises Markdown
+        contenu = contenu.replace(/^```(?:json)?\s*/m, '').replace(/\s*```$/m, '').trim()
+        // 2. Extraire le premier objet ou tableau JSON trouvé
+        const jsonMatch = contenu.match(/\[.*\]|\{.*\}/s)
+        if (jsonMatch) contenu = jsonMatch[0]
+        parsed = JSON.parse(contenu)
+      } catch (parseErr) {
+        console.error('JSON invalide reçu de LM Studio:', contenu)
+        // Tentative de sauvetage : extraire juste le premier objet { ... }
+        const objMatch = contenu.match(/\{[^{}]*\}/)
+        if (objMatch) {
+          try { parsed = JSON.parse(objMatch[0]) } catch { parsed = null }
+        }
+        if (!parsed) throw new Error('Format JSON invalide renvoyé par l\'IA Locale')
+      }
       if (Array.isArray(parsed)) parsed = parsed[0]
 
       const statut = parsed.statut || "Isolé"
