@@ -201,7 +201,7 @@ Format attendu: [{"id": "...", "statut": "Isolé", "justification": "...", "aler
             { role: 'user', content: userPrompt }
           ],
           temperature: 0.1,
-          max_tokens: 1500
+          max_tokens: 8192
         })
       })
 
@@ -217,25 +217,32 @@ Format attendu: [{"id": "...", "statut": "Isolé", "justification": "...", "aler
       
       let contenu = jsonRes.choices[0].message.content.trim()
 
-      // Extraction JSON ultra-robuste (alignée sur le parseur backend)
-      let parsed
+      // Extraction JSON anti-hallucination (gère les listes infinies et coupures)
+      let parsed;
       try {
-        // 1. Retirer les balises Markdown
-        contenu = contenu.replace(/^```(?:json)?\s*/m, '').replace(/\s*```$/m, '').trim()
-        // 2. Extraire le premier objet ou tableau JSON trouvé
-        const jsonMatch = contenu.match(/\[.*\]|\{.*\}/s)
-        if (jsonMatch) contenu = jsonMatch[0]
-        parsed = JSON.parse(contenu)
-      } catch (parseErr) {
-        console.error('JSON invalide reçu de LM Studio:', contenu)
-        // Tentative de sauvetage : extraire juste le premier objet { ... }
-        const objMatch = contenu.match(/\{[^{}]*\}/)
-        if (objMatch) {
-          try { parsed = JSON.parse(objMatch[0]) } catch { parsed = null }
+        let cleanContent = contenu.replace(/^```(?:json)?\s*/m, '').replace(/\s*```$/m, '').trim();
+        const jsonMatch = cleanContent.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
+        if (jsonMatch) {
+            cleanContent = jsonMatch[0];
         }
-        if (!parsed) throw new Error('Format JSON invalide renvoyé par l\'IA Locale')
+        
+        // Ajout d'une sécurité si le JSON finit par une virgule à cause d'une petite coupure
+        cleanContent = cleanContent.replace(/,\s*([\]}])/g, '$1');
+        
+        parsed = JSON.parse(cleanContent);
+        
+        // Neutralisation de l'hallucination "Liste de co-auteurs"
+        if (Array.isArray(parsed)) {
+          if (parsed.length > 0) {
+            parsed = parsed[0]; // On prend le premier élément, qui contient le bon statut
+          } else {
+            throw new Error("Tableau JSON vide retourné");
+          }
+        }
+      } catch (parseError) {
+        console.error("Erreur de parsing JSON brut:", contenu);
+        throw new Error("Format JSON invalide renvoyé par l'IA Locale");
       }
-      if (Array.isArray(parsed)) parsed = parsed[0]
 
       const statut = parsed.statut || "Isolé"
       const alerte_couleur = statut === "Identique" ? "orange" : "vert"
