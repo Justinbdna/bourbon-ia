@@ -90,7 +90,7 @@ export default function ImportPanel({ onImport }) {
     <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 p-5">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="font-display text-lg text-marine-900 dark:text-plume">Récupérer des amendements</h2>
+          <h2 className="font-display text-lg text-slate-900 dark:text-plume">Récupérer des amendements</h2>
           <p className="text-sm text-ink-500 dark:text-ink-300 mt-0.5">
             Importe un fichier JSON, ou colle directement les données.
           </p>
@@ -100,7 +100,7 @@ export default function ImportPanel({ onImport }) {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="rounded-md bg-marine-800 px-4 py-2 text-sm font-medium text-white hover:bg-marine-900 transition-colors"
+            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-black transition-colors"
           >
             Importer un fichier JSON
           </button>
@@ -129,13 +129,13 @@ export default function ImportPanel({ onImport }) {
             onChange={(e) => setPasteValue(e.target.value)}
             rows={6}
             placeholder='[{ "id": "amdt-1", "article": "22", "numero": "1", ... }]'
-            className="w-full rounded-md border border-ink-300 p-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-marine-600"
+            className="w-full rounded-md border border-ink-300 p-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-900"
           />
           <div className="mt-2 flex gap-2">
             <button
               type="button"
               onClick={handlePasteSubmit}
-              className="rounded-md bg-marine-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-marine-900"
+              className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-black"
             >
               Charger
             </button>

@@ -79,15 +79,15 @@ export default function AmendmentDetail({ amendment, onClose }) {
           )}
         </section>
 
-        <section>
-          <h4 className="font-display text-sm uppercase tracking-wide text-marine-800 dark:text-plume mb-2">
+        <section className="bg-gray-50 dark:bg-surface border border-ink-200 dark:border-ink-700 rounded-md p-4">
+          <h4 className="font-display text-sm uppercase tracking-wide text-slate-900 dark:text-plume mb-2">
             Dispositif
           </h4>
           <ScrollableText text={a.dispositif} />
         </section>
 
-        <section>
-          <h4 className="font-display text-sm uppercase tracking-wide text-marine-800 dark:text-plume mb-2">
+        <section className="bg-gray-50 dark:bg-surface border border-ink-200 dark:border-ink-700 rounded-md p-4">
+          <h4 className="font-display text-sm uppercase tracking-wide text-slate-900 dark:text-plume mb-2">
             Exposé sommaire
           </h4>
           <ScrollableText text={a.expose_sommaire} />

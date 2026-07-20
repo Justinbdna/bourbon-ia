@@ -199,7 +199,7 @@ async function classifyWithLocalAI(amendements, aiSettings) {
   }
 
   // --- CLASSEMENT LLM pour les amendements non déterminés ---
-  const systemPrompt = `TU ES UN AUTOMATE DE CLASSEMENT. RÉPONSE UNIQUE JSON SANS COMMENTAIRE : {"statut": "Identique" | "Discussion commune" | "Isolé", "justification": "...", "alerte_couleur": "orange" | "vert" | "gris"}. NE LISTE JAMAIS LES AUTEURS. SI PLUSIEURS OBJETS, GARDE UNIQUEMENT LE PREMIER.`
+  const systemPrompt = `TU ES UN AUTOMATE DE CLASSEMENT. RÉPONSE UNIQUE JSON SANS COMMENTAIRE : {"statut": "Identique" | "Discussion commune" | "Isolé", "justification": "...", "alerte_couleur": "orange" | "vert" | "gris"}. NE LISTE JAMAIS LES AUTEURS. SI PLUSIEURS OBJETS, GARDE UNIQUEMENT LE PREMIER. RÉPONDS OBLIGATOIREMENT EN FRANÇAIS.`
 
   const reference_brut = toClassifyByLLM[0]
   const resultats = [{
