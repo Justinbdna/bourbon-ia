@@ -119,7 +119,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
           </p>
         </div>
       )}
-      <div className="overflow-y-auto scroll-thin" style={{ maxHeight: MAX_VISIBLE_HEIGHT }}>
+      <div className="overflow-y-auto overflow-x-auto scroll-thin" style={{ maxHeight: MAX_VISIBLE_HEIGHT }}>
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>

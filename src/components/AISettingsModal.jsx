@@ -75,6 +75,13 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                   <span className="text-xs">Vos requêtes sont sécurisées. Aucune donnée n'est stockée sur nos serveurs.</span>
                 </p>
               </div>
+              
+              <div className="flex items-start gap-2 bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-md border border-yellow-200 dark:border-yellow-800/50">
+                <span className="text-lg">⚠️</span>
+                <p className="text-sm text-yellow-800 dark:text-yellow-200 leading-relaxed">
+                  <strong>Attention :</strong> En cas de forte affluence, cette API partagée peut atteindre ses limites de requêtes (rate-limit) et échouer. Pour une fiabilité garantie, utilisez votre propre Clé API ou l'IA Locale.
+                </p>
+              </div>
             </div>
           )}
 

@@ -43,8 +43,8 @@ export default function AmendmentDetail({ amendment, onClose }) {
         <div className="flex flex-wrap gap-4 text-sm">
           <div>
             <p className="text-ink-500 dark:text-ink-400 text-xs mb-1">Auteur(s)</p>
-            <div className="max-h-24 overflow-y-auto text-sm text-gray-700 bg-gray-50 p-2 rounded">
-              <p className="text-ink-900 dark:text-plume font-medium">
+            <div className="max-h-24 overflow-y-auto text-sm text-slate-900 dark:text-slate-100 bg-gray-50 dark:bg-ink-800 p-2 rounded">
+              <p className="font-medium">
                 {a.rapporteur ? 'Rapporteur — ' : ''}
                 {(a.auteurs || []).join(', ') || '—'}
               </p>

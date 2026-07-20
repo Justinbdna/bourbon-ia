@@ -157,7 +157,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleExport}
-                  className="rounded-md border border-white/30 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/10 transition-colors"
+                  className="rounded-md bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 px-3 py-1.5 text-sm font-medium hover:bg-slate-700 dark:hover:bg-slate-300 transition-colors"
                 >
                   Exporter en JSON
                 </button>
