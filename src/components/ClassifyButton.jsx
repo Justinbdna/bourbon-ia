@@ -3,7 +3,7 @@ export default function ClassifyButton({ disabled, loading, error, warnings = []
     <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 p-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="font-display text-lg text-marine-900 dark:text-plume">Classement automatique</h2>
+          <h2 className="font-display text-lg text-slate-900 dark:text-plume">Classement automatique</h2>
           <p className="text-sm text-ink-500 dark:text-ink-300 mt-0.5">
             Applique les règles de classement de l'Assemblée aux amendements chargés, via l'IA.
           </p>

@@ -113,24 +113,24 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
   return (
     <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 overflow-hidden">
       {totalClasses > 0 && (
-        <div className="bg-marine-50/80 dark:bg-obsidienne border-b border-ink-200 dark:border-ink-700 px-4 py-3">
-          <p className="text-sm font-medium text-marine-800 dark:text-plume">
+        <div className="bg-slate-100/80 dark:bg-slate-900/50 border-b border-ink-200 dark:border-ink-700 px-4 py-3">
+          <p className="text-sm font-medium text-slate-900 dark:text-plume">
             {totalClasses} amendements classés ({countDC} en discussion commune, {countId} identiques, {countIsole} isolés).
           </p>
         </div>
       )}
       <div className="overflow-y-auto overflow-x-auto scroll-thin" style={{ maxHeight: MAX_VISIBLE_HEIGHT }}>
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-100 dark:bg-[#1A1B22] border-b border-gray-200 dark:border-gray-800">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rang</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Art.</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">N°</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider max-w-[120px]">Auteur(s)</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">Point d'impact</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-full max-w-md">Extrait du dispositif</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Groupe</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Rang</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Art.</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">N°</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider max-w-[120px]">Auteur(s)</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-40">Point d'impact</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-full max-w-md">Extrait du dispositif</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Groupe</th>
+              <th className="px-4 py-4 text-right text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -150,7 +150,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                 <tr 
                   key={a.id ?? `fallback-${index}`}
                   onClick={() => onSelect && onSelect(a.id)}
-                  className={`cursor-pointer transition-colors ${isSelected ? 'bg-marine-50' : 'hover:bg-gray-50'}`}
+                  className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100 dark:bg-slate-800' : 'hover:bg-gray-50 dark:hover:bg-slate-900/50'}`}
                 >
                   <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{rang || "—"}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{a.article || "—"}</td>
@@ -177,7 +177,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
           type="button"
           disabled={amendments.length === 0}
           onClick={() => downloadRtf(amendments)}
-          className="rounded-md border border-marine-700 dark:border-marine-100 px-3 py-1.5 text-sm font-medium text-marine-800 dark:text-plume hover:bg-marine-50 dark:hover:bg-marine-900/50 disabled:border-ink-300 disabled:text-ink-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+          className="rounded-md border border-slate-700 dark:border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-900 dark:text-plume hover:bg-slate-100 dark:hover:bg-slate-800 disabled:border-ink-300 disabled:text-ink-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
         >
           Exporter en préjaune (.rtf)
         </button>

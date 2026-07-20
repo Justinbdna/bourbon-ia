@@ -133,8 +133,8 @@ export default function App() {
 
   if (hasEntered) {
     return (
-      <div className="min-h-screen">
-      <header className="bg-marine-950 text-white">
+      <div className="min-h-screen bg-white dark:bg-[#0B0C10]">
+      <header className="bg-[#0B0C10] text-white border-b border-gray-800">
         <div className="max-w-[95%] mx-auto px-6 py-6 flex items-center justify-between flex-wrap gap-3">
           <div>
             <img src="/bourdon_logo.svg" alt="Logo" className="h-24 w-auto" />
@@ -149,7 +149,7 @@ export default function App() {
             <ThemeToggle />
             {amendments.length > 0 && (
               <>
-                <span className="text-sm text-marine-100/80">
+                <span className="text-sm text-gray-300/80">
                   {amendments.length} amendement{amendments.length > 1 ? 's' : ''} chargé
                   {amendments.length > 1 ? 's' : ''}
                   {sourceLabel ? ` · ${sourceLabel}` : ''}
@@ -175,7 +175,7 @@ export default function App() {
             <button
               type="button"
               onClick={handleLoadSample}
-              className="text-sm text-marine-700 dark:text-marine-300 underline underline-offset-2 hover:text-marine-900 dark:hover:text-marine-100"
+              className="text-sm text-slate-700 dark:text-slate-300 underline underline-offset-2 hover:text-slate-900 dark:hover:text-slate-100"
             >
               Pas de fichier sous la main ? Charger le jeu de données d'exemple
             </button>
@@ -223,7 +223,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-obsidienne text-plume flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-[#0B0C10] text-plume flex flex-col items-center justify-center p-4">
       <img src="/bourdon_logo.svg" alt="Bourbon.IA Logo" className="h-40 w-auto animate-pulse mb-10" />
       
       <div className="bg-surface rounded-xl p-8 max-w-2xl text-center shadow-2xl mb-10 border border-ink-800">

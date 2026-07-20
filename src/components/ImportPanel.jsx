@@ -100,7 +100,7 @@ export default function ImportPanel({ onImport }) {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-black transition-colors"
+            className="rounded-md bg-slate-900 text-white hover:bg-black dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white px-4 py-2 text-sm font-medium transition-colors"
           >
             Importer un fichier JSON
           </button>
@@ -135,7 +135,7 @@ export default function ImportPanel({ onImport }) {
             <button
               type="button"
               onClick={handlePasteSubmit}
-              className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-black"
+              className="rounded-md bg-slate-900 text-white hover:bg-black dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white px-3 py-1.5 text-sm font-medium transition-colors"
             >
               Charger
             </button>

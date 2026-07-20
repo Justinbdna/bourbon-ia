@@ -44,7 +44,7 @@ export default function ScrollableText({ text, className = '' }) {
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="mt-2 text-xs font-medium text-marine-700 hover:text-marine-900 underline underline-offset-2"
+          className="mt-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white underline underline-offset-2"
         >
           {expanded ? 'Réduire' : `Afficher tout (${lineCount} lignes environ)`}
         </button>

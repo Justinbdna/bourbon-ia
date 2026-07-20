@@ -12,8 +12,8 @@ const STYLES = {
   redaction_globale_article: 'bg-amber-50 text-amber-700 ring-amber-200',
   suppression_alinea: 'bg-orange-50 text-orange-700 ring-orange-200',
   redaction_globale_alinea: 'bg-yellow-50 text-yellow-800 ring-yellow-200',
-  point_restreint: 'bg-marine-50 text-marine-700 ring-marine-100',
-  article_entier: 'bg-marine-50 text-marine-700 ring-marine-100',
+  point_restreint: 'bg-slate-100 text-slate-700 ring-slate-300',
+  article_entier: 'bg-slate-100 text-slate-700 ring-slate-300',
 }
 
 export default function ImpactBadge({ type }) {

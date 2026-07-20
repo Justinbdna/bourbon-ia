@@ -24,7 +24,7 @@ export default function AmendmentDetail({ amendment, onClose }) {
             {a.texte_examine?.titre}
             {a.texte_examine?.lecture ? ` · ${a.texte_examine.lecture}` : ''}
           </p>
-          <h3 className="font-display text-xl text-marine-900 dark:text-plume mt-0.5">
+          <h3 className="font-display text-xl text-slate-900 dark:text-plume mt-0.5">
             Article {a.article} — Amendement n° {a.numero}
             {a.rectification ? ` ${a.rectification}` : ''}
           </h3>
@@ -43,7 +43,7 @@ export default function AmendmentDetail({ amendment, onClose }) {
         <div className="flex flex-wrap gap-4 text-sm">
           <div>
             <p className="text-ink-500 dark:text-ink-400 text-xs mb-1">Auteur(s)</p>
-            <div className="max-h-24 overflow-y-auto text-sm text-slate-900 dark:text-slate-100 bg-gray-50 dark:bg-ink-800 p-2 rounded">
+            <div className="max-h-24 overflow-y-auto text-sm bg-gray-100 text-slate-900 dark:bg-[#1A1B22] dark:text-white border border-gray-300 dark:border-gray-700 p-2 rounded">
               <p className="font-medium">
                 {a.rapporteur ? 'Rapporteur — ' : ''}
                 {(a.auteurs || []).join(', ') || '—'}
@@ -60,14 +60,14 @@ export default function AmendmentDetail({ amendment, onClose }) {
           </div>
         </div>
 
-        <section className="rounded-md bg-marine-50 dark:bg-marine-900/20 border border-marine-100 dark:border-marine-800 p-3.5">
-          <h4 className="font-display text-sm uppercase tracking-wide text-marine-800 dark:text-plume mb-2">
+        <section className="rounded-md bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-3.5">
+          <h4 className="font-display text-sm uppercase tracking-wide text-slate-900 dark:text-plume mb-2">
             Résultat du classement IA
           </h4>
           {res ? (
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-marine-900 dark:text-plume">Rang {res.rang}</span>
+                <span className="font-semibold text-slate-900 dark:text-plume">Rang {res.rang}</span>
                 <GroupeBadge type={res.groupe?.type} />
               </div>
               <p className="text-ink-700 dark:text-ink-300">{res.justification}</p>
