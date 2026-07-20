@@ -223,27 +223,25 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0B0C10] text-plume flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-[#0B0C10] text-plume flex flex-col items-center justify-center p-4 relative">
+      <button
+        onClick={() => setIsSettingsOpen(true)}
+        className="absolute top-4 left-4 z-50 rounded-md border border-ink-600 px-4 py-2 text-sm font-medium text-ink-300 hover:bg-ink-800 transition-colors flex items-center gap-2"
+      >
+        ⚙️ Réglages IA
+      </button>
+
       <img src="/bourdon_logo.svg" alt="Bourbon.IA Logo" className="h-40 w-auto animate-pulse mb-10" />
       
-      <div className="flex flex-col items-center gap-6 mb-10">
-        <button
-          onClick={() => setIsSettingsOpen(true)}
-          className="rounded-md border border-ink-600 px-4 py-2 text-sm font-medium text-ink-300 hover:bg-ink-800 transition-colors flex items-center gap-2"
-        >
-          ⚙️ Réglages IA
-        </button>
+      <button
+        onClick={() => setHasEntered(true)}
+        className="px-10 py-4 bg-bourbon text-white text-lg font-bold rounded-lg shadow-[0_0_25px_rgba(217,18,39,0.5)] hover:bg-red-600 hover:scale-105 transition-all duration-300"
+      >
+        Entrer dans Bourbon.IA
+      </button>
 
-        <button
-          onClick={() => setHasEntered(true)}
-          className="px-10 py-4 bg-bourbon text-white text-lg font-bold rounded-lg shadow-[0_0_25px_rgba(217,18,39,0.5)] hover:bg-red-600 hover:scale-105 transition-all duration-300"
-        >
-          Entrer dans Bourbon.IA
-        </button>
-      </div>
-
-      <div className="bg-surface rounded-xl p-8 max-w-2xl text-center shadow-2xl border border-ink-800">
-        <p className="text-neutre text-base md:text-lg leading-relaxed font-medium">
+      <div className="absolute bottom-4 left-0 right-0 text-center text-xs text-slate-500 px-6 max-w-2xl mx-auto">
+        <p>
           Bourbon.IA est nativement conçu pour être une IA souveraine et 100% locale, garantissant la stricte confidentialité des données législatives. Pour la fluidité de cette démonstration publique, les calculs sont temporairement déportés sur un Cloud sécurisé.
         </p>
       </div>

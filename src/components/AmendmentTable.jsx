@@ -69,7 +69,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
   if (amendments.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-ink-300 bg-white dark:bg-surface dark:border-ink-700 p-10 text-center">
-        <p className="text-ink-500 dark:text-ink-300 text-sm">
+        <p className="text-slate-500 dark:text-slate-300 text-sm">
           Aucun amendement chargé pour l'instant. Importe un fichier JSON ci-dessus pour commencer.
         </p>
       </div>
@@ -133,7 +133,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               <th className="px-4 py-4 text-right text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white dark:bg-[#0B0C10] divide-y divide-gray-200 dark:divide-gray-800">
             {amendments.map((a, index) => {
               const rang = a.rang || a.resultat_ia?.rang
               const statut = a.statut || a.resultat_ia?.statut
@@ -152,12 +152,12 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   onClick={() => onSelect && onSelect(a.id)}
                   className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22] border-l-4 border-l-[#D91227]' : 'dark:bg-[#0B0C10] hover:bg-slate-50 dark:hover:bg-gray-900/50'}`}
                 >
-                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{rang || "—"}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{a.article || "—"}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{a.numero}</td>
-                  <td className="px-4 py-4 text-sm text-gray-500 max-w-[120px] truncate" title={auteursText}>{auteursText}</td>
-                  <td className="px-4 py-4 text-sm text-gray-500 w-40"><ImpactBadge type={a.point_impact?.type || a.point_impact} /></td>
-                  <td className="px-4 py-4 text-sm text-gray-900 w-full max-w-md truncate" title={a.dispositif}>{a.dispositif}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-slate-800 dark:text-slate-200">{rang || "—"}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-800 dark:text-slate-200">{a.article || "—"}</td>
+                  <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-800 dark:text-slate-200">{a.numero}</td>
+                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 max-w-[120px] truncate" title={auteursText}>{auteursText}</td>
+                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-40"><ImpactBadge type={a.point_impact?.type || a.point_impact} /></td>
+                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full max-w-md truncate" title={a.dispositif}>{a.dispositif}</td>
                   <td className="px-4 py-4 text-sm whitespace-nowrap"><GroupeBadge statut={statut} groupe={groupe} /></td>
                   <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button onClick={(e) => { e.stopPropagation(); onDelete && onDelete(a.id); }} className="text-gray-400 hover:text-red-600 transition-colors">Retirer</button>
