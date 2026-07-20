@@ -150,7 +150,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                 <tr 
                   key={a.id ?? `fallback-${index}`}
                   onClick={() => onSelect && onSelect(a.id)}
-                  className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100 dark:bg-slate-800' : 'hover:bg-gray-50 dark:hover:bg-slate-900/50'}`}
+                  className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22] border-l-4 border-l-[#D91227]' : 'dark:bg-[#0B0C10] hover:bg-slate-50 dark:hover:bg-gray-900/50'}`}
                 >
                   <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{rang || "—"}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{a.article || "—"}</td>

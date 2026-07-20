@@ -259,17 +259,20 @@ async function classifyWithLocalAI(amendements, aiSettings) {
       let parsed;
       try {
         let cleanContent = contenu.replace(/^```(?:json)?\s*/m, '').replace(/\s*```$/m, '').trim();
-        const jsonMatch = cleanContent.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
-        if (jsonMatch) cleanContent = jsonMatch[0];
-        cleanContent = cleanContent.replace(/,\s*([\]}])/g, '$1');
-        parsed = JSON.parse(cleanContent);
-        if (Array.isArray(parsed)) {
-          if (parsed.length > 0) {
-            parsed = parsed[0]; // Correction hallucination multi-auteurs
-          } else {
-            throw new Error('Tableau JSON vide retourné');
-          }
+        const firstBracket = cleanContent.indexOf('[');
+        const firstBrace = cleanContent.indexOf('{');
+        const isArray = firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace);
+        
+        if (isArray) {
+            cleanContent = cleanContent.substring(firstBracket, cleanContent.lastIndexOf(']') + 1);
+        } else if (firstBrace !== -1) {
+            cleanContent = cleanContent.substring(firstBrace, cleanContent.lastIndexOf('}') + 1);
         }
+        
+        cleanContent = cleanContent.replace(/,\s*([\]}])/g, '$1');
+        let data = JSON.parse(cleanContent);
+        if (Array.isArray(data)) data = data[0];
+        parsed = data;
       } catch (parseError) {
         console.error('Erreur de parsing JSON brut:', contenu);
         throw new Error('Format JSON invalide renvoyé par l\'IA Locale');
