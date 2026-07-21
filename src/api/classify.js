@@ -55,8 +55,8 @@ export async function classifyAmendments(amendements, options = {}) {
   }
 
   const systemPrompt = isReasoningMode
-    ? "Tu es un expert. Prends le temps de réfléchir et d'analyser. À la TOUTE FIN de ton analyse, tu DOIS obligatoirement générer un bloc JSON pur respectant EXACTEMENT ce format : {\"statut\": \"Identique\" | \"Discussion commune\" | \"Isolé\", \"justification\": \"en français\", \"alerte_couleur\": \"vert\" | \"orange\" | \"gris\"}"
-    : "TU ES UN AUTOMATE. AUCUNE RÉFLEXION AUTORISÉE. Renvoie UNIQUEMENT le JSON pur, sans aucun texte avant ni après. Format STRICT : {\"statut\": \"Identique\" | \"Discussion commune\" | \"Isolé\", \"justification\": \"en français\", \"alerte_couleur\": \"vert\" | \"orange\" | \"gris\"}"
+    ? "Tu es un expert. Prends le temps de réfléchir et d'analyser. À la TOUTE FIN de ton analyse, génère le bloc JSON pur respectant EXACTEMENT ce format : {\"statut\": \"Identique\" | \"Discussion commune\" | \"Isolé\", \"justification\": \"en français\", \"alerte_couleur\": \"vert\" | \"orange\" | \"gris\"}"
+    : "TU ES UN AUTOMATE. AUCUNE RÉFLEXION AUTORISÉE. Renvoie UNIQUEMENT le JSON pur respectant EXACTEMENT ce format : {\"statut\": \"Identique\" | \"Discussion commune\" | \"Isolé\", \"justification\": \"en français\", \"alerte_couleur\": \"vert\" | \"orange\" | \"gris\"}"
 
   const dynamicMaxTokens = isReasoningMode ? 16384 : 4096
 

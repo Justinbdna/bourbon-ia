@@ -25,10 +25,10 @@ export default function ClassifyButton({ disabled, loading, error, warnings = []
             <div className="flex items-center gap-4">
               <div className="flex flex-col items-end">
                 <span className="text-sm font-bold text-bourbon">
-                  🧠 Amendement {progressInfo?.current || 0} / {progressInfo?.total || 0}
+                  🧠 L'IA analyse l'amendement {progressInfo?.current || 0} sur {progressInfo?.total || 0}...
                 </span>
                 <span className="text-xs text-slate-500 flex items-center gap-1 animate-pulse">
-                  Traitement en cours... ({progressInfo?.elapsed || 0}s)
+                  Temps écoulé : {progressInfo?.elapsed || 0} s
                 </span>
               </div>
               <button
