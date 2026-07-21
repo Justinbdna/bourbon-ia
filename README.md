@@ -29,9 +29,13 @@ Pour une mise en production, l'architecture évoluera vers des **Micro-services 
 ### Moteur LLM — Bonsai 27B
 L'application est configurée pour fonctionner en local avec des modèles surpuissants et quantifiés. Notre configuration de référence :
 
-| Modèle | Paramètres | VRAM requise | Contexte |
-|---|---|---|---|
-| **Bonsai 27B** (quantifié Q4) | 27 milliards | ~4 Go | 8 192 tokens |
+| Modèle | Paramètres | Usage recommandé |
+|---|---|---|
+| **Bonsai 27B** (Q4) | 27 milliards | Modèle de référence. Excellent ratio VRAM/Performances. |
+| **Mistral 7B Instruct v0.3** | 7 milliards | Rapide et efficace pour les tâches de classification simples. |
+| **Qwen 3.5 9B** | 9 milliards | Très bon compromis pour les machines avec < 12 Go VRAM. |
+| **Gemma 4 12B** | 12 milliards | Solide pour le raisonnement logique. |
+| **QWQ 32B** | 32 milliards | Pour les configurations très haut de gamme (Nécessite > 16 Go VRAM). |
 
 L'intégration de l'API Cloud **Groq** (Llama 3.3 70B) n'est présente que pour assurer la fluidité de la démonstration publique, dans l'attente du déploiement d'une infrastructure GPU souveraine.
 
