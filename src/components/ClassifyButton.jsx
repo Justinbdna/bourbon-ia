@@ -13,7 +13,7 @@ export default function ClassifyButton({ disabled, loading, error, warnings = []
           <label className="flex items-center cursor-pointer gap-2 mr-2">
             <div className="relative">
               <input type="checkbox" className="sr-only" checked={isReasoningMode} onChange={(e) => onToggleReasoning(e.target.checked)} disabled={loading} />
-              <div className={`block w-10 h-6 rounded-full transition-colors ${isReasoningMode ? 'bg-purple-600' : 'bg-slate-300 dark:bg-slate-700'}`}></div>
+              <div className={`block w-10 h-6 rounded-full transition-colors ${isReasoningMode ? 'bg-red-600' : 'bg-slate-300 dark:bg-slate-700'}`}></div>
               <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${isReasoningMode ? 'transform translate-x-4' : ''}`}></div>
             </div>
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -36,7 +36,7 @@ export default function ClassifyButton({ disabled, loading, error, warnings = []
                 onClick={onStop}
                 className="rounded-md bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition-all shadow-[0_0_15px_rgba(220,38,38,0.5)] flex items-center gap-2"
               >
-                🛑 Annuler
+                Annuler
               </button>
             </div>
           ) : (

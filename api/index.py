@@ -44,6 +44,7 @@ class AnalyzeRequest(BaseModel):
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     system_prompt: Optional[str] = None
+    max_tokens: Optional[int] = None
 
 class AnalyzeResult(BaseModel):
     id: str
@@ -215,7 +216,7 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
                             model=model_name,
                             messages=[{"role": "user", "content": f"{system_prompt}\n\n{user_prompt}"}],
                             temperature=0.1,
-                            max_tokens=200,
+                            max_tokens=payload.max_tokens or 4096,
                         )
                         contenu = response.choices[0].message.content.strip()
                         logging.info(f"🚀 PROMPT GROQ:\n{system_prompt}\n\n{user_prompt}")

@@ -58,6 +58,8 @@ export async function classifyAmendments(amendements, options = {}) {
     ? "Tu es un expert. Prends le temps de réfléchir et d'analyser. À la TOUTE FIN de ton analyse, tu DOIS obligatoirement générer un bloc JSON pur respectant EXACTEMENT ce format : {\"statut\": \"Identique\" | \"Discussion commune\" | \"Isolé\", \"justification\": \"en français\", \"alerte_couleur\": \"vert\" | \"orange\" | \"gris\"}"
     : "TU ES UN AUTOMATE. AUCUNE RÉFLEXION AUTORISÉE. Renvoie UNIQUEMENT le JSON pur, sans aucun texte avant ni après. Format STRICT : {\"statut\": \"Identique\" | \"Discussion commune\" | \"Isolé\", \"justification\": \"en français\", \"alerte_couleur\": \"vert\" | \"orange\" | \"gris\"}"
 
+  const dynamicMaxTokens = isReasoningMode ? 16384 : 4096
+
   const reference_brut = toClassifyByLLM[0]
   const refResult = {
     id: reference_brut.id || reference_brut.numero,
@@ -126,7 +128,7 @@ export async function classifyAmendments(amendements, options = {}) {
               { role: 'user', content: userPrompt }
             ],
             temperature: isReasoningMode ? 0.6 : 0.1,
-            max_tokens: 8192
+            max_tokens: dynamicMaxTokens
           })
         })
         if (!res.ok) throw new Error(`API a répondu ${res.status}`)
@@ -148,7 +150,8 @@ export async function classifyAmendments(amendements, options = {}) {
           amendements: [reference_brut, am],
           provider: 'groq',
           api_key: aiSettings.apiKey || null,
-          system_prompt: systemPrompt
+          system_prompt: systemPrompt,
+          max_tokens: dynamicMaxTokens
         }
         const res = await fetch(endpoint, {
           method: 'POST',
@@ -204,6 +207,10 @@ export async function classifyAmendments(amendements, options = {}) {
       resultats.push(errorRes)
       onProgress(errorRes, processedCount, amendements.length, avertissements)
     }
+
+    // ⏱️ Temporisation Anti-Rate-Limit (Groq / Vercel)
+    // Permet de lisser la charge serveur et de rendre l'escalade visuelle plus agréable.
+    await new Promise(res => setTimeout(res, 3000))
   }
 
   const allResults = [...preClassified, ...resultats]
