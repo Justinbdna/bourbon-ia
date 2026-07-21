@@ -168,7 +168,7 @@ export default function App() {
       <header className="bg-[#0B0C10] text-white border-b border-gray-800">
         <div className="max-w-[95%] mx-auto px-6 py-6 flex items-center justify-between flex-wrap gap-3">
           <div>
-            <img src="/Bourbon.IA-Final.png" alt="Bourbon.IA Logo" className="h-10 w-auto object-contain" />
+            <img src="/Bourbon.IA-Final.png" alt="Bourbon.IA Logo" className="h-20 w-auto object-contain" />
           </div>
           <div className="flex items-center gap-4">
             <button
@@ -266,7 +266,7 @@ export default function App() {
         ⚙️ Réglages IA
       </button>
 
-      <img src="/Bourbon.IA-Final.png" alt="Bourbon.IA Logo" className="h-20 w-auto object-contain animate-pulse mb-10" />
+      <img src="/Bourbon.IA-Final.png" alt="Bourbon.IA Logo" className="h-48 w-auto object-contain animate-pulse mb-10" />
       
       <button
         onClick={() => setHasEntered(true)}
