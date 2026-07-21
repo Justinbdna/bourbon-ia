@@ -43,6 +43,7 @@ class AnalyzeRequest(BaseModel):
     provider: str = "groq"
     api_key: Optional[str] = None
     base_url: Optional[str] = None
+    system_prompt: Optional[str] = None
 
 class AnalyzeResult(BaseModel):
     id: str
@@ -158,7 +159,7 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
             timeout=300.0
         )
         
-        system_prompt = (
+        system_prompt = payload.system_prompt or (
             "RÈGLE DE CLASSEMENT MVP : Tu es un administrateur de l'Assemblée nationale. Tu dois classer une liste d'amendements. Même si le 'dispositif' est vide, qu'il indique 'Non renseigné' ou 'Irrecevable au titre de l'article 40', TU DOIS LES CLASSER. \n"
             "- Si plusieurs amendements ciblent exactement le même 'article' et ont le même dispositif (même vide ou irrecevable), classe-les en 'Identiques'.\n"
             "- S'ils ciblent le même article mais diffèrent légèrement, classe-les en 'Discussion commune'.\n"

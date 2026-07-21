@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import ImportPanel from './components/ImportPanel'
 import AmendmentTable from './components/AmendmentTable'
 import AmendmentDetail from './components/AmendmentDetail'
@@ -7,7 +7,6 @@ import sampleAmendments from './data/sampleAmendments.json'
 import { classifyAmendments, normalizeAmendments } from './api/classify'
 import ThemeToggle from './components/ThemeToggle'
 import AISettingsModal from './components/AISettingsModal'
-
 
 export default function App() {
   const [hasEntered, setHasEntered] = useState(false)
@@ -18,6 +17,12 @@ export default function App() {
   const [classifyError, setClassifyError] = useState(null)
   const [warnings, setWarnings] = useState([])
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isReasoningMode, setIsReasoningMode] = useState(false)
+  const [progressInfo, setProgressInfo] = useState(null)
+  
+  const abortRef = useRef(false)
+  const timerRef = useRef(null)
+  
   const [aiSettings, setAiSettings] = useState(() => {
     const saved = localStorage.getItem('bourbon_ai_settings')
     if (saved) return JSON.parse(saved)
@@ -48,35 +53,59 @@ export default function App() {
     handleImport(sampleAmendments, "Jeu de données d'exemple")
   }
 
+  function handleStopClassify() {
+    abortRef.current = true
+  }
+
   async function handleClassify() {
     setIsClassifying(true)
     setClassifyError(null)
     setWarnings([])
+    abortRef.current = false
+    setProgressInfo({ current: 0, total: amendments.length, elapsed: 0 })
+
+    if (timerRef.current) clearInterval(timerRef.current)
+    timerRef.current = setInterval(() => {
+      setProgressInfo(prev => prev ? { ...prev, elapsed: prev.elapsed + 1 } : null)
+    }, 1000)
 
     try {
-      const result = await classifyAmendments(amendments, aiSettings)
-      const parId = new Map(result.classement.map((c) => [c.id, c]))
-
-      const misAJour = amendments.map((a) => ({
-        ...a,
-        resultat_ia: parId.get(a.id) || null,
-      }))
-
-      misAJour.sort((a, b) => {
-        const rangA = a.resultat_ia?.rang ?? Infinity
-        const rangB = b.resultat_ia?.rang ?? Infinity
-        return rangA - rangB
+      await classifyAmendments(amendments, {
+        aiSettings,
+        isReasoningMode,
+        abortRef,
+        onProgress: (partialResult, idx, total, warningsList) => {
+          setAmendments(prev => {
+            const newAmdts = [...prev]
+            const targetIndex = newAmdts.findIndex(a => (a.id || a.numero) === partialResult.id)
+            if (targetIndex !== -1) {
+              newAmdts[targetIndex] = { ...newAmdts[targetIndex], resultat_ia: partialResult }
+            }
+            return newAmdts
+          })
+          setProgressInfo(prev => prev ? { ...prev, current: idx, total } : null)
+          if (warningsList && warningsList.length > 0) {
+            setWarnings([...warningsList])
+          }
+        }
       })
 
-      setAmendments(misAJour)
-      setWarnings(result.avertissements || [])
+      // Tri final une fois terminé
+      setAmendments(prev => {
+        const sorted = [...prev]
+        sorted.sort((a, b) => {
+          const rangA = a.resultat_ia?.rang ?? Infinity
+          const rangB = b.resultat_ia?.rang ?? Infinity
+          return rangA - rangB
+        })
+        return sorted
+      })
+
     } catch (err) {
       console.error('Erreur classement:', err)
-      // Filet de sécurité : on ne crashe JAMAIS React.
-      // On marque tous les amendements avec un résultat d'erreur.
       const fallbackAmendments = amendments.map((a, i) => ({
         ...a,
-        resultat_ia: {
+        resultat_ia: a.resultat_ia || {
           id: a.id,
           statut: 'Erreur',
           justification: err.message || 'Erreur inconnue lors du classement.',
@@ -87,7 +116,9 @@ export default function App() {
       setAmendments(fallbackAmendments)
       setClassifyError(err.message || 'Erreur inconnue lors du classement.')
     } finally {
+      if (timerRef.current) clearInterval(timerRef.current)
       setIsClassifying(false)
+      setProgressInfo(null)
     }
   }
 
@@ -188,6 +219,10 @@ export default function App() {
           error={classifyError}
           warnings={warnings}
           onClick={handleClassify}
+          onStop={handleStopClassify}
+          isReasoningMode={isReasoningMode}
+          onToggleReasoning={setIsReasoningMode}
+          progressInfo={progressInfo}
         />
 
         <div className="flex flex-col gap-6 items-start">
