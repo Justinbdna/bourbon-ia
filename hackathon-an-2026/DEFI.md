@@ -61,11 +61,16 @@ Pour les besoins du Hackathon, le front-end est déployé, mais le backend néce
 - [ ] `legiwatch-serveur-mcp-parlement` — Serveur MCP Parlement ✺ LegiWatch
 
 ### Galerie
-![Capture principale - Interface Bourbon.IA](images/image-1.png)
-![Capture secondaire - Interface classement Yassine](images/image-2.png)
+![Page d'accueil Bourbon.IA](images/01-accueil.png)
+![Interface de travail - Mode Sombre](images/02-interface-sombre.png)
+![Interface de travail - Mode Clair](images/03-interface-claire.png)
+![Modale de configuration IA locale](images/04-reglages-ia.png)
+
+### 🎥 Vidéo de Démonstration
+[👉 Visionner la démonstration vidéo de Bourbon.IA](lien_vers_la_video_a_remplacer_par_le_tech_lead)
 
 ### Documents
-- [Diapositives de présentation Bourbon.IA](../docs/bourbon.ia.pdf)
+- [Diapositives de présentation Bourbon.IA](docs/bourbon.ia.pdf)
 
 ### URL de démonstration
 https://bourbon-ia.vercel.app/
