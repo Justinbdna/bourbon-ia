@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import ImportPanel from './components/ImportPanel'
 import AmendmentTable from './components/AmendmentTable'
 import AmendmentDetail from './components/AmendmentDetail'
@@ -10,7 +10,21 @@ import AISettingsModal from './components/AISettingsModal'
 
 export default function App() {
   const [hasEntered, setHasEntered] = useState(false)
-  const [amendments, setAmendments] = useState([])
+  const [amendments, setAmendments] = useState(() => {
+    const saved = localStorage.getItem('bourbon_session_amendments')
+    if (saved) {
+      try {
+        return JSON.parse(saved)
+      } catch (e) {
+        console.error("Failed to parse saved session", e)
+      }
+    }
+    return []
+  })
+
+  useEffect(() => {
+    localStorage.setItem('bourbon_session_amendments', JSON.stringify(amendments))
+  }, [amendments])
   const [sourceLabel, setSourceLabel] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
   const [isClassifying, setIsClassifying] = useState(false)

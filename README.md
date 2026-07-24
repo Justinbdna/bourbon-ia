@@ -37,10 +37,10 @@ L'application est configurée pour fonctionner en local avec des modèles surpui
 
 | Modèle | Paramètres | Usage recommandé |
 |---|---|---|
-| **Bonsai 27B** (Q4) | 27 milliards | Modèle de référence. Excellent ratio VRAM/Performances. |
+| **Qwen 3.5 27B / Gemma 4 31B** | 27-31 milliards | **Modèles de référence denses et éprouvés** pour la mise en production. |
+| **Bonsai 27B** | 27 milliards | Compression extrême (1-bit/ternaire) très récente, conservée en phase d'expérimentation. |
 | **Mistral 7B Instruct v0.3** | 7 milliards | Rapide et efficace pour les tâches de classification simples. |
 | **Qwen 3.5 9B** | 9 milliards | Très bon compromis pour les machines avec < 12 Go VRAM. |
-| **Gemma 4 12B** | 12 milliards | Solide pour le raisonnement logique. |
 | **QWQ 32B** | 32 milliards | Pour les configurations très haut de gamme (Nécessite > 16 Go VRAM). |
 
 L'intégration de l'API Cloud **Groq** (Llama 3.3 70B) n'est présente que pour assurer la fluidité de la démonstration publique, dans l'attente du déploiement d'une infrastructure GPU souveraine.
