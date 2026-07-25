@@ -88,12 +88,18 @@ export default function App() {
     }
   }, [])
 
-  // ─── Afficher la modale RGPD au premier lancement ───
+  // ─── Séquence d'apparition RGPD (cooldown de 3s après l'entrée dans l'application) ───
   useEffect(() => {
-    if (!consentAsked) {
-      setShowConsentModal(true)
+    let timer = null
+    if (hasEntered && !consentAsked) {
+      timer = setTimeout(() => {
+        setShowConsentModal(true)
+      }, 3000)
     }
-  }, [consentAsked])
+    return () => {
+      if (timer) clearTimeout(timer)
+    }
+  }, [hasEntered, consentAsked])
 
   function handleConsentAccept() {
     sessionStorage.setItem('bourbon_consent', 'true')
@@ -439,12 +445,6 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         onSave={handleSaveSettings}
         currentSettings={aiSettings}
-      />
-
-      <ConsentModal
-        isOpen={showConsentModal}
-        onAccept={handleConsentAccept}
-        onRefuse={handleConsentRefuse}
       />
     </div>
   )

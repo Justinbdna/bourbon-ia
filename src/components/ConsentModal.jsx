@@ -1,25 +1,49 @@
+import React from 'react'
+
+export function DialogTitle({ children, className = '', ...props }) {
+  return (
+    <h2 id="consent-modal-title" className={className} {...props}>
+      {children}
+    </h2>
+  )
+}
+
+export function DialogDescription({ children, className = '', ...props }) {
+  return (
+    <p id="consent-modal-description" className={className} {...props}>
+      {children}
+    </p>
+  )
+}
+
 /**
- * ConsentModal — Modale RGPD de consentement pour la sauvegarde locale.
- * Affichée au premier lancement si aucun consentement n'a été donné.
+ * ConsentModal — Modale RGPD de consentement pour la sauvegarde locale chiffrée.
+ * Accessible, centrée, backdrop blur et conforme ARIA/Radix.
  */
 export default function ConsentModal({ isOpen, onAccept, onRefuse }) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-white dark:bg-[#1A1B22] rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 max-w-lg mx-4 p-6">
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-200"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="consent-modal-title"
+      aria-describedby="consent-modal-description"
+    >
+      <div className="bg-white dark:bg-[#1A1B22] rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 max-w-lg w-full p-6 md:p-8 animate-in zoom-in-95 duration-200">
         <div className="flex items-center gap-3 mb-4">
-          <span className="text-2xl">🔒</span>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+          <span className="text-3xl">🔒</span>
+          <DialogTitle className="text-lg font-bold text-slate-900 dark:text-white">
             Protection des données — Sauvegarde locale
-          </h2>
+          </DialogTitle>
         </div>
 
-        <p className="text-sm text-slate-700 dark:text-slate-300 mb-3 leading-relaxed">
+        <DialogDescription className="text-sm text-slate-700 dark:text-slate-300 mb-4 leading-relaxed">
           Bourbon.IA peut sauvegarder votre session de travail dans le navigateur afin de reprendre en cas de coupure ou de crash.
-        </p>
+        </DialogDescription>
 
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4">
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl p-4 mb-4">
           <p className="text-sm text-amber-800 dark:text-amber-200 leading-relaxed">
             <strong>Garanties de sécurité :</strong><br />
             • Les données sont <strong>chiffrées (AES-256-GCM)</strong> avant tout stockage.<br />
@@ -28,22 +52,22 @@ export default function ConsentModal({ isOpen, onAccept, onRefuse }) {
           </p>
         </div>
 
-        <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">
           Si vous refusez, aucune donnée ne sera sauvegardée. Un rechargement de page ou un crash effacera votre travail en cours.
         </p>
 
-        <div className="flex items-center justify-end gap-3">
+        <div className="flex flex-col sm:flex-row items-center justify-end gap-3">
           <button
             type="button"
             onClick={onRefuse}
-            className="rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="w-full sm:w-auto rounded-lg border border-gray-300 dark:border-gray-600 px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
             Refuser
           </button>
           <button
             type="button"
             onClick={onAccept}
-            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors shadow-[0_0_10px_rgba(16,185,129,0.4)]"
+            className="w-full sm:w-auto rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.3)]"
           >
             Accepter la sauvegarde chiffrée
           </button>
