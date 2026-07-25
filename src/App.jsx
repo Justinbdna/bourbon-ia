@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import ImportPanel from './components/ImportPanel'
 import AmendmentTable from './components/AmendmentTable'
 import AmendmentDetail from './components/AmendmentDetail'
@@ -7,24 +7,14 @@ import sampleAmendments from './data/sampleAmendments.json'
 import { classifyAmendments, normalizeAmendments } from './api/classify'
 import ThemeToggle from './components/ThemeToggle'
 import AISettingsModal from './components/AISettingsModal'
+import ConsentModal from './components/ConsentModal'
+import { encrypt, decrypt } from './utils/crypto'
+
+const STORAGE_KEY = 'bourbon_session_amendments'
 
 export default function App() {
   const [hasEntered, setHasEntered] = useState(false)
-  const [amendments, setAmendments] = useState(() => {
-    const saved = localStorage.getItem('bourbon_session_amendments')
-    if (saved) {
-      try {
-        return JSON.parse(saved)
-      } catch (e) {
-        console.error("Failed to parse saved session", e)
-      }
-    }
-    return []
-  })
-
-  useEffect(() => {
-    localStorage.setItem('bourbon_session_amendments', JSON.stringify(amendments))
-  }, [amendments])
+  const [amendments, setAmendments] = useState([])
   const [sourceLabel, setSourceLabel] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
   const [isClassifying, setIsClassifying] = useState(false)
@@ -33,15 +23,92 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isReasoningMode, setIsReasoningMode] = useState(false)
   const [progressInfo, setProgressInfo] = useState(null)
-  
+  const [showCloudWarning, setShowCloudWarning] = useState(false)
+
+  // Consentement RGPD (sessionStorage = volatile)
+  const [consentAsked, setConsentAsked] = useState(() => sessionStorage.getItem('bourbon_consent') !== null)
+  const [consentGiven, setConsentGiven] = useState(() => sessionStorage.getItem('bourbon_consent') === 'true')
+  const [showConsentModal, setShowConsentModal] = useState(false)
+
   const abortRef = useRef(false)
+  const abortControllerRef = useRef(null)
   const timerRef = useRef(null)
-  
+
+  // Provider LOCAL par défaut (souveraineté)
   const [aiSettings, setAiSettings] = useState(() => {
     const saved = localStorage.getItem('bourbon_ai_settings')
     if (saved) return JSON.parse(saved)
-    return { provider: 'groq', apiKey: '', localUrl: 'http://localhost:1234/v1' }
+    return { provider: 'local', apiKey: '', localUrl: 'http://localhost:1234/v1' }
   })
+
+  // ─── Restauration de session chiffrée ───
+  useEffect(() => {
+    if (!consentGiven) return
+    async function restore() {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (!stored) return
+      try {
+        const json = await decrypt(stored)
+        const parsed = JSON.parse(json)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setAmendments(parsed)
+        }
+      } catch (e) {
+        console.warn('Impossible de restaurer la session chiffrée (clé expirée ou données corrompues).', e)
+        localStorage.removeItem(STORAGE_KEY)
+      }
+    }
+    restore()
+  }, [consentGiven])
+
+  // ─── Auto-save chiffré ───
+  useEffect(() => {
+    if (!consentGiven || amendments.length === 0) return
+    let cancelled = false
+    async function save() {
+      try {
+        const cipher = await encrypt(JSON.stringify(amendments))
+        if (!cancelled) {
+          localStorage.setItem(STORAGE_KEY, cipher)
+        }
+      } catch (e) {
+        console.warn('Échec de l\'auto-save chiffré.', e)
+      }
+    }
+    save()
+    return () => { cancelled = true }
+  }, [amendments, consentGiven])
+
+  // ─── Nettoyage au démontage (anti memory leak) ───
+  useEffect(() => {
+    return () => {
+      abortRef.current = true
+      if (abortControllerRef.current) abortControllerRef.current.abort()
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [])
+
+  // ─── Afficher la modale RGPD au premier lancement ───
+  useEffect(() => {
+    if (!consentAsked) {
+      setShowConsentModal(true)
+    }
+  }, [consentAsked])
+
+  function handleConsentAccept() {
+    sessionStorage.setItem('bourbon_consent', 'true')
+    setConsentGiven(true)
+    setConsentAsked(true)
+    setShowConsentModal(false)
+  }
+
+  function handleConsentRefuse() {
+    sessionStorage.setItem('bourbon_consent', 'false')
+    setConsentGiven(false)
+    setConsentAsked(true)
+    setShowConsentModal(false)
+    localStorage.removeItem(STORAGE_KEY)
+  }
 
   function handleSaveSettings(newSettings) {
     setAiSettings(newSettings)
@@ -69,13 +136,32 @@ export default function App() {
 
   function handleStopClassify() {
     abortRef.current = true
+    if (abortControllerRef.current) abortControllerRef.current.abort()
   }
 
   async function handleClassify() {
+    // ── MODALE CLOUD BLOQUANTE ──
+    if (aiSettings.provider !== 'local') {
+      setShowCloudWarning(true)
+      return
+    }
+    executeClassify()
+  }
+
+  function handleCloudConfirm() {
+    setShowCloudWarning(false)
+    executeClassify()
+  }
+
+  async function executeClassify() {
     setIsClassifying(true)
     setClassifyError(null)
     setWarnings([])
     abortRef.current = false
+
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     setProgressInfo({ current: 0, total: amendments.length, elapsed: 0 })
 
     if (timerRef.current) clearInterval(timerRef.current)
@@ -88,6 +174,7 @@ export default function App() {
         aiSettings,
         isReasoningMode,
         abortRef,
+        signal: controller.signal,
         onProgress: (partialResult, idx, total, warningsList) => {
           setAmendments(prev => {
             const newAmdts = [...prev]
@@ -116,29 +203,31 @@ export default function App() {
       })
 
     } catch (err) {
-      console.error('Erreur classement:', err)
-      const fallbackAmendments = amendments.map((a, i) => ({
-        ...a,
-        resultat_ia: a.resultat_ia || {
-          id: a.id,
-          statut: 'Erreur',
-          justification: err.message || 'Erreur inconnue lors du classement.',
-          alerte_couleur: 'rouge',
-          rang: i + 1
-        }
-      }))
-      setAmendments(fallbackAmendments)
-      setClassifyError(err.message || 'Erreur inconnue lors du classement.')
+      if (err.name === 'AbortError') {
+        setWarnings(prev => [...prev, "🛑 Classement annulé par l'utilisateur."])
+      } else {
+        console.error('Erreur classement:', err)
+        const fallbackAmendments = amendments.map((a, i) => ({
+          ...a,
+          resultat_ia: a.resultat_ia || {
+            id: a.id,
+            statut: 'Erreur',
+            justification: err.message || 'Erreur inconnue lors du classement.',
+            alerte_couleur: 'rouge',
+            rang: i + 1
+          }
+        }))
+        setAmendments(fallbackAmendments)
+        setClassifyError(err.message || 'Erreur inconnue lors du classement.')
+      }
     } finally {
       if (timerRef.current) clearInterval(timerRef.current)
+      abortControllerRef.current = null
       setIsClassifying(false)
       setProgressInfo(null)
     }
   }
 
-  // Le personnel peut glisser-déposer une ligne s'il juge le classement de
-  // l'IA perfectible. Le rang affiché (position dans la liste) s'adapte
-  // automatiquement au nouvel ordre.
   function handleReorder(fromIndex, toIndex) {
     setAmendments((prev) => {
       const updated = [...prev]
@@ -148,8 +237,6 @@ export default function App() {
     })
   }
 
-  // Retrait manuel d'un amendement (typiquement : un doublon jugé
-  // irrecevable par le personnel après relecture).
   function handleDelete(id) {
     const confirmed = window.confirm(
       "Retirer définitivement cet amendement de la liste de travail ?"
@@ -159,8 +246,6 @@ export default function App() {
     if (selectedId === id) setSelectedId(null)
   }
 
-  // Export du travail en cours (classement + réordonnancements manuels)
-  // pour que le personnel puisse le reprendre plus tard.
   function handleExport() {
     const payload = { amendements: amendments }
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -176,13 +261,19 @@ export default function App() {
     URL.revokeObjectURL(url)
   }
 
+  // ─── Badge de souveraineté ───
+  const sovereigntyBadge = aiSettings.provider === 'local'
+    ? <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-900/40 border border-emerald-600/50 px-3 py-1 text-xs font-bold text-emerald-300">🟢 Mode Local Souverain</span>
+    : <span className="inline-flex items-center gap-1.5 rounded-full bg-red-900/40 border border-red-600/50 px-3 py-1 text-xs font-bold text-red-300">🔴 Mode Cloud (Groq)</span>
+
   if (hasEntered) {
     return (
       <div className="min-h-screen bg-white dark:bg-[#0B0C10]">
       <header className="bg-[#0B0C10] text-white border-b border-gray-800">
         <div className="max-w-[95%] mx-auto px-6 py-6 flex items-center justify-between flex-wrap gap-3">
-          <div>
+          <div className="flex items-center gap-4">
             <img src="/Bourbon.IA-Final.png" alt="Bourbon.IA Logo" className="h-20 w-auto object-contain" />
+            {sovereigntyBadge}
           </div>
           <div className="flex items-center gap-4">
             <button
@@ -267,6 +358,54 @@ export default function App() {
           ⚠️ Note technique - Version Démo : Pour des raisons de logistique et de puissance de serveurs, l'IA de cette démonstration est temporairement déportée sur un Cloud externe sécurisé (Groq/Llama 3.3). L'architecture logicielle de Bourbon.IA reste conçue pour une exécution 100 % souveraine, locale et hors-ligne, garantissant la stricte confidentialité des données.
         </p>
       </footer>
+
+      {/* ── MODALE D'ALERTE CLOUD BLOQUANTE ── */}
+      {showCloudWarning && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#1A1B22] rounded-xl shadow-2xl border border-red-300 dark:border-red-800 max-w-lg mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-3xl">🚨</span>
+              <h2 className="text-lg font-bold text-red-700 dark:text-red-400">
+                Alerte Souveraineté — Envoi Cloud
+              </h2>
+            </div>
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-5">
+              <p className="text-sm text-red-800 dark:text-red-200 leading-relaxed">
+                <strong>Attention :</strong> Vos données d'amendements vont quitter votre poste pour être envoyées à un serveur extérieur (<strong>Groq / États-Unis</strong>), hors de l'Union européenne.
+              </p>
+              <p className="text-sm text-red-800 dark:text-red-200 mt-2">
+                Cette action est <strong>incompatible avec le mode souverain</strong> et la confidentialité des textes non publiés.
+              </p>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
+              Pour un usage confidentiel, ouvrez les ⚙️ Réglages IA et sélectionnez "IA Locale".
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCloudWarning(false)}
+                className="rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleCloudConfirm}
+                className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors"
+              >
+                Je confirme l'envoi vers le Cloud
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODALE CONSENTEMENT RGPD ── */}
+      <ConsentModal
+        isOpen={showConsentModal}
+        onAccept={handleConsentAccept}
+        onRefuse={handleConsentRefuse}
+      />
     </div>
     )
   }
@@ -300,6 +439,12 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         onSave={handleSaveSettings}
         currentSettings={aiSettings}
+      />
+
+      <ConsentModal
+        isOpen={showConsentModal}
+        onAccept={handleConsentAccept}
+        onRefuse={handleConsentRefuse}
       />
     </div>
   )

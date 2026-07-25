@@ -1,8 +1,9 @@
+import { useState, useMemo } from 'react'
 import ImpactBadge from './ImpactBadge'
 import GroupeBadge from './GroupeBadge'
 import { downloadRtf } from '../utils/exportRtf'
 
-const MAX_VISIBLE_HEIGHT = 1360
+const PAGE_SIZE = 50
 
 function truncate(text, max = 90) {
   if (!text) return '—'
@@ -66,6 +67,8 @@ function computeGroupSpans(amendments) {
 }
 
 export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete }) {
+  const [currentPage, setCurrentPage] = useState(0)
+
   if (amendments.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-ink-300 bg-white dark:bg-surface dark:border-ink-700 p-10 text-center">
@@ -76,17 +79,23 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
     )
   }
 
+  const totalPages = Math.ceil(amendments.length / PAGE_SIZE)
+  const safePage = Math.min(currentPage, totalPages - 1)
+  const startIdx = safePage * PAGE_SIZE
+  const pageAmendments = amendments.slice(startIdx, startIdx + PAGE_SIZE)
+
   const hasClassification = amendments.some((a) => a.resultat_ia)
   const groupSpans = computeGroupSpans(amendments)
 
   function handleDragStart(e, index) {
-    e.dataTransfer.setData('text/plain', String(index))
+    e.dataTransfer.setData('text/plain', String(startIdx + index))
     e.dataTransfer.effectAllowed = 'move'
   }
 
-  function handleDrop(e, targetIndex) {
+  function handleDrop(e, targetLocalIndex) {
     e.preventDefault()
     const fromIndex = Number(e.dataTransfer.getData('text/plain'))
+    const targetIndex = startIdx + targetLocalIndex
     if (Number.isNaN(fromIndex) || fromIndex === targetIndex) return
     onReorder(fromIndex, targetIndex)
   }
@@ -96,30 +105,29 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
     downloadRtf(amendments, `prejaune-${dateStr}.rtf`)
   }
 
-  const totalClasses = amendments.filter(a => a.resultat_ia).length
-  const countDC = amendments.filter(a => {
-    const s = a.resultat_ia?.statut
-    return s === 'Incompatible' || s === 'Discussion commune'
-  }).length
-  const countId = amendments.filter(a => {
-    const s = a.resultat_ia?.statut
-    return s === 'Identique' || s === 'Identiques'
-  }).length
-  const countIsole = amendments.filter(a => {
-    const s = a.resultat_ia?.statut
-    return s === 'Nouveau' || s === 'Isolé'
-  }).length
+  // Compteurs calculés avec un seul reduce
+  const counts = useMemo(() => {
+    return amendments.reduce((acc, a) => {
+      if (!a.resultat_ia) return acc
+      acc.total++
+      const s = a.resultat_ia.statut
+      if (s === 'Incompatible' || s === 'Discussion commune') acc.dc++
+      else if (s === 'Identique' || s === 'Identiques') acc.id++
+      else if (s === 'Nouveau' || s === 'Isolé') acc.isole++
+      return acc
+    }, { total: 0, dc: 0, id: 0, isole: 0 })
+  }, [amendments])
 
   return (
     <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 overflow-hidden">
-      {totalClasses > 0 && (
+      {counts.total > 0 && (
         <div className="bg-slate-100/80 dark:bg-slate-900/50 border-b border-ink-200 dark:border-ink-700 px-4 py-3">
           <p className="text-sm font-medium text-slate-900 dark:text-plume">
-            {totalClasses} amendements classés ({countDC} en discussion commune, {countId} identiques, {countIsole} isolés).
+            {counts.total} amendements classés ({counts.dc} en discussion commune, {counts.id} identiques, {counts.isole} isolés).
           </p>
         </div>
       )}
-      <div className="overflow-y-auto overflow-x-auto scroll-thin" style={{ maxHeight: MAX_VISIBLE_HEIGHT }}>
+      <div className="overflow-x-auto scroll-thin">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-100 dark:bg-[#1A1B22] border-b border-gray-200 dark:border-gray-800">
             <tr>
@@ -134,7 +142,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-[#0B0C10] divide-y divide-gray-200 dark:divide-gray-800">
-            {amendments.map((a, index) => {
+            {pageAmendments.map((a, index) => {
               const rang = a.rang || a.resultat_ia?.rang
               const statut = a.statut || a.resultat_ia?.statut
               const groupe = a.groupe || a.resultat_ia?.groupe
@@ -148,7 +156,11 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
 
               return (
                 <tr 
-                  key={a.id ?? `fallback-${index}`}
+                  key={a.id ?? `fallback-${startIdx + index}`}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => handleDrop(e, index)}
                   onClick={() => onSelect && onSelect(a.id)}
                   className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22] border-l-4 border-l-[#D91227]' : 'dark:bg-[#0B0C10] hover:bg-slate-50 dark:hover:bg-gray-900/50'}`}
                 >
@@ -168,6 +180,33 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
           </tbody>
         </table>
       </div>
+
+      {/* ── PAGINATION ── */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t border-ink-200 dark:border-ink-700 bg-slate-50 dark:bg-[#12131A] px-4 py-3">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Page {safePage + 1} / {totalPages} — Amendements {startIdx + 1}–{Math.min(startIdx + PAGE_SIZE, amendments.length)} sur {amendments.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={safePage === 0}
+              onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+              className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              ← Précédent
+            </button>
+            <button
+              type="button"
+              disabled={safePage >= totalPages - 1}
+              onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
+              className="rounded-md border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Suivant →
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between gap-3 border-t border-ink-100 dark:border-ink-700 bg-ink-50/50 dark:bg-obsidienne/50 px-4 py-3">
         <p className="text-xs text-ink-500 dark:text-ink-300">

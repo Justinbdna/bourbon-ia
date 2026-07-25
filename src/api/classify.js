@@ -22,9 +22,30 @@ export async function normalizeAmendments(amendements) {
   return await response.json()
 }
 
+/**
+ * Temporisation annulable : résout après `ms` millisecondes,
+ * mais rejette immédiatement si `signal` est avorté.
+ */
+function cancellableDelay(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new DOMException('Aborted', 'AbortError')); return }
+    const timer = setTimeout(resolve, ms)
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer)
+      reject(new DOMException('Aborted', 'AbortError'))
+    }, { once: true })
+  })
+}
+
 export async function classifyAmendments(amendements, options = {}) {
-  const { aiSettings = {}, isReasoningMode = false, abortRef = { current: false }, onProgress = () => {} } = options
-  const provider = aiSettings.provider || 'groq'
+  const {
+    aiSettings = {},
+    isReasoningMode = false,
+    abortRef = { current: false },
+    signal,            // AbortController.signal
+    onProgress = () => {}
+  } = options
+  const provider = aiSettings.provider || 'local'
 
   // PRÉ-TRI MÉCANIQUE
   const preSorted = preSortAmendements(amendements)
@@ -80,9 +101,13 @@ export async function classifyAmendments(amendements, options = {}) {
   // Preflight local
   if (provider === 'local') {
     try {
-      const preflight = await fetch(`${localUrl}/v1/models`, { method: 'GET', signal: AbortSignal.timeout(5000) })
+      const preflight = await fetch(`${localUrl}/v1/models`, {
+        method: 'GET',
+        signal: signal || AbortSignal.timeout(5000)
+      })
       if (!preflight.ok) throw new Error(`Status ${preflight.status}`)
     } catch (err) {
+      if (err.name === 'AbortError') throw err
       const diag = 'Connexion impossible vers LM Studio (CORS, non démarré, etc.)'
       avertissements.push(`⚠️ Serveur local injoignable. ${diag}`)
       const fallback = toClassifyByLLM.map((am, i) => {
@@ -98,7 +123,8 @@ export async function classifyAmendments(amendements, options = {}) {
   let consecutiveFailures = 0
 
   for (let i = 1; i < toClassifyByLLM.length; i++) {
-    if (abortRef.current) {
+    // Vérification d'annulation AVANT chaque itération
+    if (abortRef.current || signal?.aborted) {
       avertissements.push("🛑 Classement annulé par l'utilisateur.")
       break
     }
@@ -121,6 +147,7 @@ export async function classifyAmendments(amendements, options = {}) {
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal,
           body: JSON.stringify({
             model: 'local-model',
             messages: [
@@ -145,7 +172,6 @@ export async function classifyAmendments(amendements, options = {}) {
         parsed = JSON.parse(jsonStr)
       } else {
         // Mode Cloud Groq (Backend FastAPI)
-        // On envoie un batch de 2 amendements : la ref et celui à tester
         const payload = {
           amendements: [reference_brut, am],
           provider: 'groq',
@@ -156,6 +182,7 @@ export async function classifyAmendments(amendements, options = {}) {
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal,
           body: JSON.stringify(payload)
         })
         if (!res.ok) {
@@ -165,7 +192,6 @@ export async function classifyAmendments(amendements, options = {}) {
         }
         const data = await res.json()
         if (Array.isArray(data) && data.length > 0) {
-           // le premier résultat retourné par le backend correspond au testé
            parsed = data[0]
         } else {
            throw new Error("Réponse Vercel invalide")
@@ -195,6 +221,11 @@ export async function classifyAmendments(amendements, options = {}) {
       consecutiveFailures = 0
 
     } catch (err) {
+      // Propager les AbortError pour arrêter proprement la boucle
+      if (err.name === 'AbortError') {
+        avertissements.push("🛑 Classement annulé par l'utilisateur.")
+        break
+      }
       console.error('Erreur IA:', err)
       consecutiveFailures++
       const errorRes = {
@@ -208,9 +239,15 @@ export async function classifyAmendments(amendements, options = {}) {
       onProgress(errorRes, processedCount, amendements.length, avertissements)
     }
 
-    // ⏱️ Temporisation Anti-Rate-Limit (Groq / Vercel)
-    // Permet de lisser la charge serveur et de rendre l'escalade visuelle plus agréable.
-    await new Promise(res => setTimeout(res, 3000))
+    // ⏱️ Temporisation Anti-Rate-Limit — ANNULABLE
+    try {
+      await cancellableDelay(3000, signal)
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        avertissements.push("🛑 Classement annulé par l'utilisateur.")
+        break
+      }
+    }
   }
 
   const allResults = [...preClassified, ...resultats]
