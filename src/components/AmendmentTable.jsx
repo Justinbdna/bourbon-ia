@@ -69,6 +69,19 @@ function computeGroupSpans(amendments) {
 export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete }) {
   const [currentPage, setCurrentPage] = useState(0)
 
+  // Compteurs calculés avec un seul reduce (déplacé AVANT le return conditionnel pour éviter l'erreur #310)
+  const counts = useMemo(() => {
+    return amendments.reduce((acc, a) => {
+      if (!a.resultat_ia) return acc
+      acc.total++
+      const s = a.resultat_ia.statut
+      if (s === 'Incompatible' || s === 'Discussion commune') acc.dc++
+      else if (s === 'Identique' || s === 'Identiques') acc.id++
+      else if (s === 'Nouveau' || s === 'Isolé') acc.isole++
+      return acc
+    }, { total: 0, dc: 0, id: 0, isole: 0 })
+  }, [amendments])
+
   if (amendments.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-ink-300 bg-white dark:bg-surface dark:border-ink-700 p-10 text-center">
@@ -104,19 +117,6 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
     const dateStr = new Date().toISOString().slice(0, 10)
     downloadRtf(amendments, `prejaune-${dateStr}.rtf`)
   }
-
-  // Compteurs calculés avec un seul reduce
-  const counts = useMemo(() => {
-    return amendments.reduce((acc, a) => {
-      if (!a.resultat_ia) return acc
-      acc.total++
-      const s = a.resultat_ia.statut
-      if (s === 'Incompatible' || s === 'Discussion commune') acc.dc++
-      else if (s === 'Identique' || s === 'Identiques') acc.id++
-      else if (s === 'Nouveau' || s === 'Isolé') acc.isole++
-      return acc
-    }, { total: 0, dc: 0, id: 0, isole: 0 })
-  }, [amendments])
 
   return (
     <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 overflow-hidden">
