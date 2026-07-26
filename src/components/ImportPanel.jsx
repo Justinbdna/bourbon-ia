@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import * as Dialog from '@radix-ui/react-dialog'
+
 /**
  * Permet au personnel de l'Assemblée de récupérer les amendements
  * à traiter : soit en important un fichier JSON, soit en collant
@@ -150,31 +150,35 @@ export default function ImportPanel({ onImport }) {
         </div>
       )}
 
-      <Dialog.Root open={!!error} onOpenChange={(open) => { if (!open) setError(null) }}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" />
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
-            <Dialog.Content className="bg-white dark:bg-[#1A1B22] rounded-xl shadow-2xl border border-red-300 dark:border-red-800 max-w-sm w-full mx-4 p-6 pointer-events-auto outline-none animate-in zoom-in-95 duration-200">
-              <div className="flex items-center gap-3 mb-4">
-                <span className="text-3xl">⚠️</span>
-                <Dialog.Title className="text-lg font-bold text-red-700 dark:text-red-400">
-                  Erreur d'importation
-                </Dialog.Title>
-              </div>
-              <Dialog.Description className="text-sm text-slate-700 dark:text-slate-300 mb-6">
-                {error}
-              </Dialog.Description>
-              <div className="flex justify-end">
-                <Dialog.Close asChild>
-                  <button className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors">
-                    Fermer
-                  </button>
-                </Dialog.Close>
-              </div>
-            </Dialog.Content>
+      {/* ── MODALE D'ERREUR 100% NATIVE (zéro Radix) ── */}
+      {error && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="import-error-title"
+        >
+          <div className="bg-white dark:bg-[#1A1B22] rounded-xl shadow-2xl border border-red-300 dark:border-red-800 max-w-sm w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <h2 id="import-error-title" className="text-lg font-bold text-red-700 dark:text-red-400">
+                Erreur d'importation
+              </h2>
+            </div>
+            <p className="text-sm text-slate-700 dark:text-slate-300 mb-6 leading-relaxed">
+              {error}
+            </p>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors"
+              >
+                Fermer
+              </button>
+            </div>
           </div>
-        </Dialog.Portal>
-      </Dialog.Root>
+        </div>
+      )}
     </div>
   )
 }

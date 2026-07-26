@@ -16,18 +16,21 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
   if (!isOpen) return null
 
   const handleSave = () => {
-    // Si l'utilisateur choisit groq_auto, on efface (ou ignore) potentiellement sa clé, ou on la garde pour plus tard,
-    // mais on passe provider="groq_auto" pour que le frontend sache.
     onSave({ provider, apiKey: provider === 'groq_auto' ? '' : apiKey, localUrl })
     onClose()
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-surface text-ink-900 dark:text-plume border border-ink-200 dark:border-ink-700 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-title"
+    >
+      <div className="bg-white dark:bg-surface text-ink-900 dark:text-plume border border-ink-200 dark:border-ink-700 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
         <div className="px-6 py-4 border-b border-ink-200 dark:border-ink-700 bg-slate-50/50 dark:bg-obsidienne flex justify-between items-center">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-plume">⚙️ Réglages IA</h2>
-          <button onClick={onClose} className="text-ink-500 hover:text-ink-700 dark:text-ink-400 dark:hover:text-plume transition-colors">
+          <h2 id="settings-title" className="text-lg font-bold text-slate-900 dark:text-plume">⚙️ Réglages IA</h2>
+          <button onClick={onClose} className="text-ink-500 hover:text-ink-700 dark:text-ink-400 dark:hover:text-plume transition-colors" aria-label="Fermer">
             ✕
           </button>
         </div>

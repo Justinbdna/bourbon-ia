@@ -9,7 +9,6 @@ import ThemeToggle from './components/ThemeToggle'
 import AISettingsModal from './components/AISettingsModal'
 import ConsentModal from './components/ConsentModal'
 import { encrypt, decrypt } from './utils/crypto'
-import * as Dialog from '@radix-ui/react-dialog'
 
 const STORAGE_KEY = 'bourbon_session_amendments'
 
@@ -211,7 +210,7 @@ export default function App() {
 
     } catch (err) {
       if (err.name === 'AbortError') {
-        setWarnings(prev => [...prev, "🛑 Classement annulé par l'utilisateur."])
+        setWarnings(prev => [...prev, "Classement annulé par l'utilisateur."])
       } else {
         console.error('Erreur classement:', err)
         const fallbackAmendments = amendments.map((a, i) => ({
@@ -268,7 +267,7 @@ export default function App() {
     URL.revokeObjectURL(url)
   }
 
-  // ─── Badge de souveraineté ───
+  // ─── Badge de souveraineté (SANS EMOJI, texte brut) ───
   const sovereigntyBadge = aiSettings.provider === 'local'
     ? <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-900/40 border border-emerald-600/50 px-3 py-1 text-xs font-bold text-emerald-300">Mode Local Souverain</span>
     : <span className="inline-flex items-center gap-1.5 rounded-full bg-red-900/40 border border-red-600/50 px-3 py-1 text-xs font-bold text-red-300">Mode Cloud (Groq)</span>
@@ -277,21 +276,18 @@ export default function App() {
     return (
       <div className="min-h-screen bg-white dark:bg-[#0B0C10]">
       <header className="bg-[#0B0C10] text-white border-b border-gray-800">
-        <div className="max-w-[95%] mx-auto px-6 py-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center justify-center md:justify-start gap-4">
-            <img src="/Bourbon.IA-Final.png" alt="Bourbon.IA Logo" className="h-20 w-auto object-contain shrink-0" />
-          </div>
-          <div className="flex flex-wrap items-center justify-center md:justify-end gap-3 sm:gap-4 w-full md:w-auto flex-1">
-            <div className="shrink-0 ml-auto">{sovereigntyBadge}</div>
+        <div className="max-w-[95%] mx-auto px-6 py-6 flex items-center gap-4 flex-wrap">
+          <img src="/Bourbon.IA-Final.png" alt="Bourbon.IA Logo" className="h-20 w-auto object-contain shrink-0" />
+
+          <div className="ml-auto flex items-center gap-3 flex-wrap">
+            {sovereigntyBadge}
             <button
               onClick={() => setIsSettingsOpen(true)}
               className="rounded-md border border-white/30 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/10 transition-colors flex items-center gap-2 shrink-0"
             >
               ⚙️ Réglages IA
             </button>
-            <div className="shrink-0">
-              <ThemeToggle />
-            </div>
+            <ThemeToggle />
             {amendments.length > 0 && (
               <>
                 <span className="text-sm text-gray-300/80">
@@ -368,53 +364,50 @@ export default function App() {
         </p>
       </footer>
 
-      {/* ── MODALE D'ALERTE CLOUD BLOQUANTE ── */}
-      <Dialog.Root open={showCloudWarning} onOpenChange={(open) => !open && setShowCloudWarning(false)}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" />
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pointer-events-none">
-            <Dialog.Content className="bg-white dark:bg-[#1A1B22] rounded-xl shadow-2xl border border-red-300 dark:border-red-800 max-w-lg w-full mx-4 p-6 pointer-events-auto outline-none animate-in zoom-in-95 duration-200">
-              <div className="flex items-center gap-3 mb-4">
-                <span className="text-3xl">🚨</span>
-                <Dialog.Title className="text-lg font-bold text-red-700 dark:text-red-400">
-                  Alerte Souveraineté — Envoi Cloud
-                </Dialog.Title>
-              </div>
-              <Dialog.Description className="sr-only">
-                Avertissement : Vos données vont être envoyées vers un serveur Cloud américain.
-              </Dialog.Description>
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-5">
-                <p className="text-sm text-red-800 dark:text-red-200 leading-relaxed">
-                  <strong>Attention :</strong> Vos données d'amendements vont quitter votre poste pour être envoyées à un serveur extérieur (<strong>Groq / États-Unis</strong>), hors de l'Union européenne.
-                </p>
-                <p className="text-sm text-red-800 dark:text-red-200 mt-2">
-                  Cette action est <strong>incompatible avec le mode souverain</strong> et la confidentialité des textes non publiés.
-                </p>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
-                Pour un usage confidentiel, ouvrez les ⚙️ Réglages IA et sélectionnez "IA Locale".
+      {/* ── MODALE D'ALERTE CLOUD BLOQUANTE (100% natif, zéro Radix) ── */}
+      {showCloudWarning && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cloud-warning-title"
+        >
+          <div className="bg-white dark:bg-[#1A1B22] rounded-xl shadow-2xl border border-red-300 dark:border-red-800 max-w-lg w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <h2 id="cloud-warning-title" className="text-lg font-bold text-red-700 dark:text-red-400">
+                Alerte Souveraineté — Envoi Cloud
+              </h2>
+            </div>
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-5">
+              <p className="text-sm text-red-800 dark:text-red-200 leading-relaxed">
+                <strong>Attention :</strong> Vos données d'amendements vont quitter votre poste pour être envoyées à un serveur extérieur (<strong>Groq / États-Unis</strong>), hors de l'Union européenne.
               </p>
-              <div className="flex flex-wrap items-center justify-end gap-3">
-                <Dialog.Close asChild>
-                  <button
-                    type="button"
-                    className="rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                  >
-                    Annuler
-                  </button>
-                </Dialog.Close>
-                <button
-                  type="button"
-                  onClick={handleCloudConfirm}
-                  className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors"
-                >
-                  Je confirme l'envoi vers le Cloud
-                </button>
-              </div>
-            </Dialog.Content>
+              <p className="text-sm text-red-800 dark:text-red-200 mt-2">
+                Cette action est <strong>incompatible avec le mode souverain</strong> et la confidentialité des textes non publiés.
+              </p>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
+              Pour un usage confidentiel, ouvrez les ⚙️ Réglages IA et sélectionnez "IA Locale".
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCloudWarning(false)}
+                className="rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleCloudConfirm}
+                className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition-colors"
+              >
+                Je confirme l'envoi vers le Cloud
+              </button>
+            </div>
           </div>
-        </Dialog.Portal>
-      </Dialog.Root>
+        </div>
+      )}
 
       {/* ── MODALE CONSENTEMENT RGPD ── */}
       <ConsentModal
