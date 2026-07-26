@@ -276,9 +276,11 @@ export default function App() {
     return (
       <div className="min-h-screen bg-white dark:bg-[#0B0C10]">
       <header className="bg-[#0B0C10] text-white border-b border-gray-800">
-        <div className="max-w-[95%] mx-auto px-6 py-6 flex items-center gap-4 flex-wrap">
+        <div className="max-w-[95%] mx-auto px-6 py-6 flex items-center justify-between gap-4 flex-wrap">
+          {/* Logo seul à gauche */}
           <img src="/Bourbon.IA-Final.png" alt="Bourbon.IA Logo" className="h-20 w-auto object-contain shrink-0" />
 
+          {/* Tout le bloc d'actions et le badge à droite avec ml-auto */}
           <div className="ml-auto flex items-center gap-3 flex-wrap">
             {sovereigntyBadge}
             <button
@@ -291,8 +293,7 @@ export default function App() {
             {amendments.length > 0 && (
               <>
                 <span className="text-sm text-gray-300/80">
-                  {amendments.length} amendement{amendments.length > 1 ? 's' : ''} chargé
-                  {amendments.length > 1 ? 's' : ''}
+                  {amendments.length} amendement{amendments.length > 1 ? 's' : ''} chargé{amendments.length > 1 ? 's' : ''}
                   {sourceLabel ? ` · ${sourceLabel}` : ''}
                 </span>
                 <button
