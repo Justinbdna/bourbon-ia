@@ -31,10 +31,14 @@ function extraireActionEtNiveau(texte) {
 
 /**
  * Normalise un texte pour comparaison d'identité mécanique.
- * Retire les espaces multiples, met en minuscules.
+ * Retire la ponctuation, les espaces multiples, met en minuscules.
  */
 function normaliserTexte(texte) {
-  return (texte || '').replace(/\s+/g, ' ').trim().toLowerCase()
+  return (texte || '')
+    .replace(/[.,;!?:"'(){}[\]\-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
 }
 
 /**
@@ -70,7 +74,7 @@ export function preSortAmendements(amendements) {
     return String(a.numero || '').localeCompare(String(b.numero || ''), 'fr', { numeric: true })
   })
 
-  // ÉTAPE 3 : Détection mécanique des "Identiques"
+  // ÉTAPE 3 : Détection mécanique des "Identiques" et "Doublons"
   // Clé = article normalisé + dispositif normalisé → liste d'amendements
   const groupes = new Map()
   for (const am of enriched) {
@@ -86,10 +90,31 @@ export function preSortAmendements(amendements) {
   for (const [, members] of groupes) {
     if (members.length >= 2) {
       grpCounter++
-      const groupeId = `grp-identiques-${grpCounter}`
+      const groupeId = `grp-doc-${grpCounter}`
+      
+      // Séparer par auteur principal pour identifier les Doublons vs Identiques
+      const authorMap = new Map()
       for (const m of members) {
-        m._groupe = { type: 'identiques', groupe_id: groupeId }
-        m._skipLLM = true
+        const author = (m.auteurs && m.auteurs.length > 0) ? m.auteurs[0] : (m.rapporteur ? 'Rapporteur' : 'Inconnu')
+        if (!authorMap.has(author)) authorMap.set(author, [])
+        authorMap.get(author).push(m)
+      }
+
+      const isIdentique = authorMap.size > 1
+
+      for (const [author, subMembers] of authorMap) {
+        if (subMembers.length > 1) {
+          // Doublons (même auteur, même texte)
+          for (let i = 0; i < subMembers.length; i++) {
+            const type = (isIdentique && i === 0) ? 'identiques' : 'doublon'
+            subMembers[i]._groupe = { type, groupe_id: groupeId }
+            subMembers[i]._skipLLM = true
+          }
+        } else if (isIdentique) {
+          // Identiques (auteurs différents)
+          subMembers[0]._groupe = { type: 'identiques', groupe_id: groupeId }
+          subMembers[0]._skipLLM = true
+        }
       }
     }
   }

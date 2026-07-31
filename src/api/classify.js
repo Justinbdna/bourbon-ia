@@ -23,6 +23,38 @@ export async function normalizeAmendments(amendements) {
 }
 
 /**
+ * Nettoie le payload de réponse LLM (surtout pour les modèles de raisonnement).
+ * 1. Supprime les blocs <think>...</think>
+ * 2. Extrait le premier { ou [ jusqu'au dernier } ou ]
+ */
+function cleanJsonPayload(rawText) {
+  if (!rawText) return ""
+  let text = rawText.replace(/<think>[\s\S]*?<\/think>/gi, '')
+  
+  const firstBrace = text.indexOf('{')
+  const firstBracket = text.indexOf('[')
+  const lastBrace = text.lastIndexOf('}')
+  const lastBracket = text.lastIndexOf(']')
+
+  let start = -1
+  let end = -1
+
+  if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+    start = firstBrace
+    end = lastBrace
+  } else if (firstBracket !== -1) {
+    start = firstBracket
+    end = lastBracket
+  }
+
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error("Aucun objet JSON valide trouvé dans la réponse")
+  }
+
+  return text.substring(start, end + 1)
+}
+
+/**
  * Temporisation annulable : résout après `ms` millisecondes,
  * mais rejette immédiatement si `signal` est avorté.
  */
@@ -52,16 +84,18 @@ export async function classifyAmendments(amendements, options = {}) {
   const toClassifyByLLM = preSorted.filter(am => !am._skipLLM)
   const preClassified = preSorted.filter(am => am._skipLLM).map(am => ({
     id: am.id,
-    statut: 'Identique',
-    justification: 'Détecté mécaniquement : même article et même dispositif.',
-    alerte_couleur: 'orange',
+    statut: am._groupe?.type === 'doublon' ? 'Doublon' : 'Identique',
+    justification: am._groupe?.type === 'doublon' 
+      ? 'Détecté mécaniquement : Doublon irrecevable (même auteur, même texte).'
+      : 'Détecté mécaniquement : Identique admissible (même texte, auteurs différents).',
+    alerte_couleur: am._groupe?.type === 'doublon' ? 'rouge' : 'orange',
     rang: am._rang,
     groupe: am._groupe
   }))
 
   const avertissements = []
   if (preClassified.length > 0) {
-    avertissements.push(`✅ ${preClassified.length} amendement(s) classé(s) mécaniquement (Identiques).`)
+    avertissements.push(`✅ ${preClassified.length} amendement(s) classé(s) mécaniquement (Identiques/Doublons).`)
   }
 
   // Notifier l'UI pour les amendements pré-classés
@@ -162,13 +196,8 @@ export async function classifyAmendments(amendements, options = {}) {
         const jsonRes = await res.json()
         const contenu = jsonRes.choices[0].message.content.trim()
 
-        // Extracteur blindé
-        const firstBrace = contenu.indexOf('{')
-        const lastBrace = contenu.lastIndexOf('}')
-        if (firstBrace === -1 || lastBrace === -1 || lastBrace < firstBrace) {
-           throw new Error("Aucun objet JSON trouvé dans la réponse")
-        }
-        const jsonStr = contenu.substring(firstBrace, lastBrace + 1)
+        // Extracteur blindé avec suppression des <think>
+        const jsonStr = cleanJsonPayload(contenu)
         parsed = JSON.parse(jsonStr)
       } else {
         // Mode Cloud Groq (Backend FastAPI)

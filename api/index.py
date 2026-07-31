@@ -214,8 +214,13 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
                     f"TEST - Auteur: {donnees_propres.get('auteur', '')}\nTexte: {donnees_propres.get('texte', '')}"
                 )
                 
+                models_to_try = [effective_model]
+                for m in FALLBACK_MODELS:
+                    if m not in models_to_try:
+                        models_to_try.append(m)
+
                 last_error = None
-                for model_name in [effective_model]:
+                for idx, model_name in enumerate(models_to_try):
                     try:
                         response = await client.chat.completions.create(
                             model=model_name,
@@ -228,6 +233,10 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
                         logging.info(f"✅ REPONSE BRUTE GROQ:\n{contenu}")
                         import re
                         raw_text = contenu.strip()
+                        
+                        # Nettoyage des balises <think> (modèles de raisonnement)
+                        raw_text = re.sub(r'<think>[\s\S]*?</think>', '', raw_text, flags=re.IGNORECASE)
+                        
                         if raw_text.startswith("```"):
                             raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
                             raw_text = re.sub(r"\s*```$", "", raw_text)
@@ -244,6 +253,9 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
                         except json.JSONDecodeError:
                             data_json = {"statut": "Erreur", "justification": "Erreur de formatage du modèle."}
                         
+                        if idx > 0:
+                            data_json["justification"] = "⚠️ Changement automatique de modèle suite à une saturation du serveur principal. " + data_json.get("justification", "")
+
                         statut = data_json.get("statut", "Nouveau")
                         couleur = "rouge" if statut == "Doublon" else "orange" if statut in ["Identique", "Incompatible"] else "vert"
                             
@@ -257,8 +269,8 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
                     except Exception as e:
                         last_error = e
                         error_str = str(e).lower()
-                        if "429" in error_str or "rate limit" in error_str or "quota" in error_str:
-                            logging.warning(f"⚠️ Modèle {model_name} épuisé (429/Quota) sur l'amendement {amend_id}, passage au suivant...")
+                        if "429" in error_str or "rate limit" in error_str or "quota" in error_str or "503" in error_str or "overloaded" in error_str:
+                            logging.warning(f"⚠️ Modèle {model_name} épuisé (429/503/Quota) sur l'amendement {amend_id}, passage au suivant...")
                         else:
                             logging.warning(f"⚠️ Modèle {model_name} a échoué sur l'amendement {amend_id} : {e}. Essai du suivant...")
                         continue
