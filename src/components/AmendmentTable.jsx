@@ -66,7 +66,7 @@ function computeGroupSpans(amendments) {
   return spans
 }
 
-export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete }) {
+export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, isClassifying }) {
   const [currentPage, setCurrentPage] = useState(0)
 
   // Compteurs calculés avec un seul reduce (déplacé AVANT le return conditionnel pour éviter l'erreur #310)
@@ -148,6 +148,9 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               const groupe = a.groupe || a.resultat_ia?.groupe
               const isSelected = a.id === selectedId
               
+              const isPending = isClassifying && !a.resultat_ia && !a.statut;
+              const statutToDisplay = isPending ? "En cours..." : statut;
+              
               let auteursText = a.auteurs
               if (Array.isArray(auteursText)) {
                 auteursText = auteursText.join(', ')
@@ -170,7 +173,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 max-w-[120px] truncate" title={auteursText}>{auteursText}</td>
                   <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-40"><ImpactBadge type={a.point_impact?.type || a.point_impact} /></td>
                   <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full max-w-md truncate" title={a.dispositif}>{a.dispositif}</td>
-                  <td className="px-4 py-4 text-sm whitespace-nowrap"><GroupeBadge statut={statut} groupe={groupe} /></td>
+                  <td className="px-4 py-4 text-sm whitespace-nowrap"><GroupeBadge statut={statutToDisplay} groupe={groupe} isPending={isPending} /></td>
                   <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button onClick={(e) => { e.stopPropagation(); onDelete && onDelete(a.id); }} className="text-gray-400 hover:text-red-600 transition-colors">Retirer</button>
                   </td>

@@ -165,6 +165,13 @@ export default function App() {
     setWarnings([])
     abortRef.current = false
 
+    // Nettoyer les anciens résultats avant de démarrer
+    setAmendments(prev => prev.map(a => {
+      const copy = { ...a }
+      delete copy.resultat_ia
+      return copy
+    }))
+
     const controller = new AbortController()
     abortControllerRef.current = controller
 
@@ -344,6 +351,7 @@ export default function App() {
               onSelect={setSelectedId}
               onReorder={handleReorder}
               onDelete={handleDelete}
+              isClassifying={isClassifying}
             />
           </div>
           <div className="w-full">
