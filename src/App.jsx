@@ -290,11 +290,26 @@ export default function App() {
   // ─── Badge de souveraineté (SANS EMOJI, texte brut) ───
   let sovereigntyBadge = null
   if (aiSettings.provider === 'local') {
-    sovereigntyBadge = <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-900/40 border border-emerald-600/50 px-3 py-1 text-xs font-bold text-emerald-300">IA Locale (Souveraine)</span>
+    sovereigntyBadge = (
+      <span className="bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        IA Locale (Souveraine)
+      </span>
+    )
   } else if (aiSettings.provider === 'groq') {
-    sovereigntyBadge = <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-900/40 border border-amber-600/50 px-3 py-1 text-xs font-bold text-amber-300">Clé API (Personnalisée)</span>
+    sovereigntyBadge = (
+      <span className="bg-amber-950/40 border border-amber-500/30 text-amber-400 px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+        Clé API (Personnalisée)
+      </span>
+    )
   } else {
-    sovereigntyBadge = <span className="inline-flex items-center gap-1.5 rounded-full bg-red-900/40 border border-red-600/50 px-3 py-1 text-xs font-bold text-red-300">Groq (Démo non-souveraine)</span>
+    sovereigntyBadge = (
+      <span className="bg-rose-950/40 border border-rose-500/30 text-rose-400 px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+        Groq (Démo non-souveraine)
+      </span>
+    )
   }
 
   if (hasEntered) {
@@ -303,7 +318,7 @@ export default function App() {
       <header className="bg-[#0B0C10] text-white border-b border-gray-800">
         <div className="max-w-[95%] mx-auto px-6 py-6 flex items-center justify-between gap-4 flex-wrap">
           {/* Logo seul à gauche */}
-          <img src="/Bourbon.IA-Final.png" alt="Bourbon.IA Logo" className="h-20 w-auto object-contain shrink-0" />
+          <img src="/Bourbon.IA-Final.png" alt="Bourbon.IA Logo" className="h-12 w-auto object-contain shrink-0" />
 
           {/* Tout le bloc d'actions et le badge à droite avec ml-auto */}
           <div className="ml-auto flex items-center gap-3 flex-wrap">
@@ -313,7 +328,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleResetSession}
-                className="rounded-md bg-red-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-red-700 transition-colors"
+                className="bg-neutral-800/50 hover:bg-rose-950/50 hover:border-rose-500/50 border border-neutral-700/50 text-neutral-300 hover:text-rose-400 px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1.5"
                 title="Réinitialiser la session"
               >
                 🗑️ Reset
