@@ -1,11 +1,38 @@
 [
   {
+    "id": "amdt-CL1",
+    "article": "1",
+    "numero": "1",
+    "auteurs": ["Mme Cathala", "Mme Abomangoli", "M. Alexandre"],
+    "dispositif": "I. – À la première phrase de l’alinéa 2, substituer au mot : « municipales » le mot : « locales ».\n\nII. – En conséquence, à la même phrase du même alinéa, supprimer les mots : « non ressortissants de l’Union européenne ».\n\nIII. – En conséquence, supprimer la deuxième phrase de l’alinéa 2.",
+    "expose_sommaire": "Par cet amendement nous souhaitons défendre un droit de vote et d'éligibilité pour les personnes étrangères aux élections locales plus étendu que celui proposé par la présente proposition de loi.",
+    "point_impact": { "type": "modification_mots", "alinea": 2 }
+  },
+  {
+    "id": "amdt-CL2",
+    "article": "2",
+    "numero": "2",
+    "auteurs": ["M. Portes", "Mme Abomangoli", "M. Alexandre"],
+    "dispositif": "Rédiger ainsi cet article :\n\n« L’article 88-3 de la Constitution est abrogé. »",
+    "expose_sommaire": "Par cet amendement de coordination juridique, nous proposons de supprimer l'article 88-3 de la Constitution qui ne serait plus utile.",
+    "point_impact": { "type": "redaction_globale_article", "alinea": null }
+  },
+  {
     "id": "amdt-CL3",
     "article": "1",
     "numero": "3",
     "auteurs": ["M. Monnier", "M. Baubry", "Mme Blanc"],
     "dispositif": "Supprimer cet article.",
     "expose_sommaire": "Le présent amendement vise à supprimer l'article 1er qui accorde le droit de vote aux résidents étrangers non ressortissants de l'Union européenne.",
+    "point_impact": { "type": "suppression_article", "alinea": null }
+  },
+  {
+    "id": "amdt-CL4",
+    "article": "2",
+    "numero": "4",
+    "auteurs": ["M. Monnier", "M. Baubry", "Mme Blanc"],
+    "dispositif": "Supprimer cet article.",
+    "expose_sommaire": "L'article 2 modifie l'article 88-3 de la Constitution aux fins de rendre possible l'extension du droit de vote aux élections municipales.",
     "point_impact": { "type": "suppression_article", "alinea": null }
   },
   {
@@ -18,21 +45,21 @@
     "point_impact": { "type": "suppression_article", "alinea": null }
   },
   {
+    "id": "amdt-CL6",
+    "article": "2",
+    "numero": "6",
+    "auteurs": ["Mme de Maistre", "Mme Bonnivard", "M. Boucard"],
+    "dispositif": "Supprimer cet article.",
+    "expose_sommaire": "Le présent amendement vise à préserver le caractère exceptionnel et strictement limité du droit de vote des ressortissants de l’Union européenne.",
+    "point_impact": { "type": "suppression_article", "alinea": null }
+  },
+  {
     "id": "amdt-CL7",
     "article": "1",
     "numero": "7",
     "auteurs": ["Mme de Maistre", "Mme Bonnivard", "M. Boucard"],
     "dispositif": "Rédiger ainsi cet article :\n\n« L’article 72-4 de la Constitution est complété par un alinéa ainsi rédigé :\n\n« « Le droit de vote et d’éligibilité aux élections municipales est réservé aux citoyens français, sous réserve des dispositions prévues à l’article 88-3 de la Constitution. » »",
     "expose_sommaire": "Le présent amendement vise à réaffirmer un principe fondamental de la République française : le droit de vote est indissociable de la citoyenneté.",
-    "point_impact": { "type": "redaction_globale_article", "alinea": null }
-  },
-  {
-    "id": "amdt-CL2",
-    "article": "2",
-    "numero": "2",
-    "auteurs": ["M. Portes", "Mme Abomangoli", "M. Alexandre"],
-    "dispositif": "Rédiger ainsi cet article :\n\n« L’article 88-3 de la Constitution est abrogé. »",
-    "expose_sommaire": "Par cet amendement de coordination juridique, nous proposons de supprimer l'article 88-3 de la Constitution qui ne serait plus utile.",
     "point_impact": { "type": "redaction_globale_article", "alinea": null }
   },
   {
@@ -43,5 +70,23 @@
     "dispositif": "Rédiger ainsi cet article :\n\n« L’article 88-3 de la Constitution est ainsi rédigé :\n\n« « Sous réserve de réciprocité et conformément aux engagements résultant des traités sur l’Union européenne, les citoyens de l’Union européenne résidant en France peuvent exercer le droit de vote et d’éligibilité aux élections municipales. » »",
     "expose_sommaire": "Le présent amendement a pour objet de préserver le caractère strictement encadré et exceptionnel du droit de vote des citoyens de l’Union européenne.",
     "point_impact": { "type": "redaction_globale_article", "alinea": null }
+  },
+  {
+    "id": "amdt-CL9",
+    "article": "2",
+    "numero": "9",
+    "auteurs": ["Mme de Maistre", "Mme Bonnivard", "M. Boucard"],
+    "dispositif": "Après l'article 2, insérer un article additionnel.\n(Irrecevable)",
+    "expose_sommaire": "Cet amendement a été déclaré irrecevable en application de l'article 98 du règlement de l'Assemblée nationale.",
+    "point_impact": { "type": "article_additionnel", "alinea": null }
+  },
+  {
+    "id": "amdt-CL10",
+    "article": "1",
+    "numero": "10",
+    "auteurs": ["Mme de Maistre", "Mme Bonnivard", "M. Boucard"],
+    "dispositif": "Compléter cet article par l’alinéa suivant :\n\n« Le droit de vote et d’éligibilité prévu au premier alinéa du présent article est subordonné à la conclusion d’un accord de réciprocité entre la France et l’État dont le ressortissant est originaire. »",
+    "expose_sommaire": "L'amendement vise à instaurer un principe de réciprocité pour l'octroi du droit de vote aux ressortissants étrangers non européens.",
+    "point_impact": { "type": "ajout_alinea", "alinea": 2 }
   }
 ]

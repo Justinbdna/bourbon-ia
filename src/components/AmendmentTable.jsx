@@ -214,9 +214,14 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
       )}
 
       <div className="flex items-center justify-between gap-3 border-t border-ink-100 dark:border-ink-700 bg-ink-50/50 dark:bg-obsidienne/50 px-4 py-3">
-        <p className="text-xs text-ink-500 dark:text-ink-300">
-          Export au format du préjaune de l'Assemblée (RTF) ou en JSON (sauvegarde complète).
-        </p>
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+            {amendments.length} amendement{amendments.length > 1 ? 's' : ''} chargé{amendments.length > 1 ? 's' : ''}
+          </span>
+          <span className="text-xs text-ink-500 dark:text-ink-300">
+            Export au format du préjaune de l'Assemblée (RTF) ou en JSON (sauvegarde complète).
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           {onExportJson && (
             <button
