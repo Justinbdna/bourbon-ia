@@ -75,6 +75,7 @@ function cancellableDelay(ms, signal) {
 }
 
 export async function classifyAmendments(amendements, options = {}) {
+  const startTime = performance.now()
   const {
     aiSettings = {},
     isReasoningMode = false,
@@ -291,6 +292,11 @@ export async function classifyAmendments(amendements, options = {}) {
       }
     }
   }
+
+  const endTime = performance.now()
+  const totalTime = ((endTime - startTime) / 1000).toFixed(2)
+  console.log(`⏱️ [Bourbon.IA] Temps total de traitement IA : ${totalTime} secondes.`)
+  avertissements.push(`⏱️ Traitement IA terminé en ${totalTime} secondes.`)
 
   return {
     classement: [...preClassified, ...resultats],

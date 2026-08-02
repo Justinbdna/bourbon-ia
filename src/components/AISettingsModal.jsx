@@ -164,6 +164,10 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                   placeholder="http://localhost:1234/v1"
                   className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none"
                 />
+                <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-3 bg-neutral-100 dark:bg-neutral-800/50 p-3 rounded-md space-y-2 border border-neutral-200 dark:border-neutral-700/50">
+                  <p>💡 <strong>Navigateur recommandé :</strong> Google Chrome ou Edge (basés sur Chromium).</p>
+                  <p className="text-amber-700 dark:text-amber-400/90">⚠️ <strong>Attention Sécurité (CORS) :</strong> Votre adresse locale DOIT obligatoirement commencer par <strong>https://</strong> (utilisez un tunnel sécurisé comme Ngrok). Les adresses http:// classiques seront systématiquement bloquées par le navigateur.</p>
+                </div>
               </div>
 
               {pingStatus && provider === 'local' && (
