@@ -166,7 +166,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                 />
                 <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-3 bg-neutral-100 dark:bg-neutral-800/50 p-3 rounded-md space-y-2 border border-neutral-200 dark:border-neutral-700/50">
                   <p>💡 <strong>Navigateur recommandé :</strong> Google Chrome ou Edge (basés sur Chromium).</p>
-                  <p className="text-amber-700 dark:text-amber-400/90">⚠️ <strong>Attention Sécurité (CORS) :</strong> Votre adresse locale DOIT obligatoirement commencer par <strong>https://</strong> (utilisez un tunnel sécurisé comme Ngrok). Les adresses http:// classiques seront systématiquement bloquées par le navigateur.</p>
+                  <p className="text-amber-700 dark:text-amber-400/90">⚠️ <strong>Attention Sécurité (CORS) :</strong> Votre adresse locale DOIT obligatoirement commencer par <strong>https://</strong> (utilisez un tunnel sécurisé comme Ngrok pour convertir votre port local http://127.0.0.1:1234).</p>
                 </div>
               </div>
 
