@@ -318,8 +318,8 @@ export default function App() {
       <header className="bg-[#F8F9FA] dark:bg-[#1A1B22] text-slate-800 dark:text-white border-b border-neutral-200/80 dark:border-gray-800 transition-colors">
         <div className="max-w-[95%] mx-auto px-6 py-6 flex items-center justify-between gap-4 flex-wrap">
           {/* Logo seul à gauche (double source light/dark) */}
-          <img src="/bourbon-logo-black.svg" alt="Bourbon.IA Logo" className="h-20 w-auto object-contain shrink-0 dark:hidden block" />
-          <img src="/bourbon-logo-white.svg" alt="Bourbon.IA Logo" className="h-20 w-auto object-contain shrink-0 hidden dark:block" />
+          <img src="/bourbon-logo-black.svg" alt="Bourbon.IA Logo" className="h-24 w-auto object-contain shrink-0 dark:hidden block" />
+          <img src="/bourbon-logo-white.svg" alt="Bourbon.IA Logo" className="h-24 w-auto object-contain shrink-0 hidden dark:block" />
 
           {/* Tout le bloc d'actions et le badge à droite avec ml-auto */}
           <div className="ml-auto flex items-center gap-4 flex-wrap">
@@ -331,15 +331,16 @@ export default function App() {
                   type="button"
                   onClick={handleResetSession}
                   className="bg-white dark:bg-neutral-800/50 hover:bg-rose-50 dark:hover:bg-rose-950/50 border border-neutral-200 dark:border-neutral-700/50 hover:border-rose-200 dark:hover:border-rose-500/50 text-slate-700 dark:text-neutral-300 hover:text-rose-600 dark:hover:text-rose-400 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
-                  title="Réinitialiser la session"
+                  title="Efface l'ensemble des amendements et réinitialise le classement."
                 >
-                  🗑️ Reset
+                  🗑️ Réinitialiser
                 </button>
               )}
 
               <button
                 onClick={() => setIsSettingsOpen(true)}
                 className="bg-white dark:bg-neutral-800/50 hover:bg-neutral-100 dark:hover:bg-neutral-700/50 border border-neutral-200 dark:border-neutral-700/50 text-slate-700 dark:text-neutral-300 hover:text-slate-900 dark:hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 shrink-0"
+                title="Configure l'endpoint local (LM Studio) ou la clé API Cloud."
               >
                 ⚙️ Réglages IA
               </button>

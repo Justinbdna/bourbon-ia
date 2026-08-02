@@ -8,12 +8,12 @@ const LABELS = {
 }
 
 const STYLES = {
-  suppression_article: 'bg-red-50 text-red-700 ring-red-200',
-  redaction_globale_article: 'bg-amber-50 text-amber-700 ring-amber-200',
-  suppression_alinea: 'bg-orange-50 text-orange-700 ring-orange-200',
-  redaction_globale_alinea: 'bg-yellow-50 text-yellow-800 ring-yellow-200',
-  point_restreint: 'bg-slate-100 text-slate-700 ring-slate-300',
-  article_entier: 'bg-slate-100 text-slate-700 ring-slate-300',
+  suppression_article: 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-950/60 dark:ring-red-800/50 dark:text-red-300',
+  redaction_globale_article: 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/60 dark:ring-amber-800/50 dark:text-amber-300',
+  suppression_alinea: 'bg-orange-50 text-orange-700 ring-orange-200 dark:bg-orange-950/60 dark:ring-orange-800/50 dark:text-orange-300',
+  redaction_globale_alinea: 'bg-yellow-50 text-yellow-800 ring-yellow-200 dark:bg-yellow-950/60 dark:ring-yellow-800/50 dark:text-yellow-300',
+  point_restreint: 'bg-slate-100 text-slate-700 ring-slate-300 dark:bg-slate-900/60 dark:ring-slate-700/50 dark:text-slate-300',
+  article_entier: 'bg-slate-100 text-slate-700 ring-slate-300 dark:bg-slate-900/60 dark:ring-slate-700/50 dark:text-slate-300',
 }
 
 export default function ImpactBadge({ type }) {
