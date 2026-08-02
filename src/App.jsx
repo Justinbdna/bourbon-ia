@@ -291,21 +291,21 @@ export default function App() {
   let sovereigntyBadge = null
   if (aiSettings.provider === 'local') {
     sovereigntyBadge = (
-      <span className="bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+      <span className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
         <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
         IA Locale (Souveraine)
       </span>
     )
   } else if (aiSettings.provider === 'groq') {
     sovereigntyBadge = (
-      <span className="bg-amber-950/40 border border-amber-500/30 text-amber-400 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+      <span className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-400 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
         <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
         Clé API (Personnalisée)
       </span>
     )
   } else {
     sovereigntyBadge = (
-      <span className="bg-rose-950/40 border border-rose-500/30 text-rose-400 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+      <span className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-400 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
         <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
         Groq (Démo non-souveraine)
       </span>
@@ -315,10 +315,11 @@ export default function App() {
   if (hasEntered) {
     return (
       <div className="min-h-screen bg-white dark:bg-[#0B0C10]">
-      <header className="bg-[#0B0C10] text-white border-b border-gray-800">
+      <header className="bg-[#F8F9FA] dark:bg-[#1A1B22] text-slate-800 dark:text-white border-b border-neutral-200/80 dark:border-gray-800 transition-colors">
         <div className="max-w-[95%] mx-auto px-6 py-6 flex items-center justify-between gap-4 flex-wrap">
-          {/* Logo seul à gauche */}
-          <img src="/Bourbon.IA-Final.png" alt="Bourbon.IA Logo" className="h-20 w-auto object-contain shrink-0" />
+          {/* Logo seul à gauche (double source light/dark) */}
+          <img src="/bourbon-logo-black.svg" alt="Bourbon.IA Logo" className="h-20 w-auto object-contain shrink-0 dark:hidden block" />
+          <img src="/bourbon-logo-white.svg" alt="Bourbon.IA Logo" className="h-20 w-auto object-contain shrink-0 hidden dark:block" />
 
           {/* Tout le bloc d'actions et le badge à droite avec ml-auto */}
           <div className="ml-auto flex items-center gap-4 flex-wrap">
@@ -329,7 +330,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleResetSession}
-                  className="bg-neutral-800/50 hover:bg-rose-950/50 hover:border-rose-500/50 border border-neutral-700/50 text-neutral-300 hover:text-rose-400 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
+                  className="bg-white dark:bg-neutral-800/50 hover:bg-rose-50 dark:hover:bg-rose-950/50 border border-neutral-200 dark:border-neutral-700/50 hover:border-rose-200 dark:hover:border-rose-500/50 text-slate-700 dark:text-neutral-300 hover:text-rose-600 dark:hover:text-rose-400 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
                   title="Réinitialiser la session"
                 >
                   🗑️ Reset
@@ -338,7 +339,7 @@ export default function App() {
 
               <button
                 onClick={() => setIsSettingsOpen(true)}
-                className="bg-neutral-800/50 hover:bg-neutral-700/50 border border-neutral-700/50 text-neutral-300 hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 shrink-0"
+                className="bg-white dark:bg-neutral-800/50 hover:bg-neutral-100 dark:hover:bg-neutral-700/50 border border-neutral-200 dark:border-neutral-700/50 text-slate-700 dark:text-neutral-300 hover:text-slate-900 dark:hover:text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 shrink-0"
               >
                 ⚙️ Réglages IA
               </button>
@@ -464,7 +465,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#0B0C10] text-plume flex flex-col items-center justify-center p-4 relative">
 
-      <img src="/Bourbon.IA-Final.png" alt="Bourbon.IA Logo" className="h-48 w-auto object-contain animate-pulse mb-10" />
+      <img src="/bourbon-logo-white.svg" alt="Bourbon.IA Logo" className="h-48 w-auto object-contain animate-pulse mb-10" />
       
       <button
         onClick={() => setHasEntered(true)}
