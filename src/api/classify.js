@@ -114,29 +114,16 @@ export async function classifyAmendments(amendements, options = {}) {
     return { classement: preClassified, avertissements, modele_utilise: 'Moteur déterministe (sans IA)' }
   }
 
-  const baseRules = "TU DOIS RENVOYER UNIQUEMENT DU JSON BRUT. AUCUN FORMATAGE MARKDOWN. AUCUNE BALISE.\nRÈGLE ABSOLUE : N'utilise JAMAIS les statuts 'Identique' ou 'Doublon'. Ces statuts sont gérés en amont par le système. Tu dois uniquement détecter les 'Discussion commune' ou 'Isolé'.\n\n"
+  const baseRules = "TU DOIS RENVOYER UNIQUEMENT UN TABLEAU JSON BRUT. AUCUN FORMATAGE MARKDOWN. AUCUNE BALISE.\nRÈGLE ABSOLUE : N'utilise JAMAIS les statuts 'Identique' ou 'Doublon'. Ces statuts sont gérés en amont par le système. Tu dois uniquement détecter les 'Discussion commune' ou 'Isolé'.\n\n"
   const systemPrompt = isReasoningMode
-    ? baseRules + "Tu es un expert. Prends le temps de réfléchir et d'analyser. À la TOUTE FIN de ton analyse, génère le bloc JSON pur respectant EXACTEMENT ce format : {\"statut\": \"Discussion commune\" | \"Isolé\", \"justification\": \"en français\", \"alerte_couleur\": \"vert\" | \"orange\" | \"gris\"}"
-    : baseRules + "TU ES UN AUTOMATE. AUCUNE RÉFLEXION AUTORISÉE. Renvoie UNIQUEMENT le JSON pur respectant EXACTEMENT ce format : {\"statut\": \"Discussion commune\" | \"Isolé\", \"justification\": \"en français\", \"alerte_couleur\": \"vert\" | \"orange\" | \"gris\"}"
+    ? baseRules + "Tu es un expert. Prends le temps de réfléchir. À la TOUTE FIN, génère un tableau JSON pur respectant EXACTEMENT ce format : [{\"id\": \"id_de_lamendement\", \"statut\": \"Discussion commune\" | \"Isolé\", \"justification\": \"...\", \"alerte_couleur\": \"vert\" | \"orange\" | \"gris\"}]"
+    : baseRules + "TU ES UN AUTOMATE. Renvoie UNIQUEMENT un tableau JSON pur respectant EXACTEMENT ce format : [{\"id\": \"id_de_lamendement\", \"statut\": \"Discussion commune\" | \"Isolé\", \"justification\": \"...\", \"alerte_couleur\": \"vert\" | \"orange\" | \"gris\"}]"
 
   const dynamicMaxTokens = isReasoningMode ? 16384 : 4096
 
-  const reference_brut = toClassifyByLLM[0]
-  const refResult = {
-    id: reference_brut.id || reference_brut.numero,
-    statut: 'Isolé',
-    justification: 'Premier du lot (Référence).',
-    alerte_couleur: 'vert',
-    rang: processedCount + 1
-  }
-  
-  const resultats = [refResult]
-  processedCount++
-  onProgress(refResult, processedCount, amendements.length, avertissements)
-
   let localUrl = (aiSettings.localUrl || 'http://localhost:1234/v1').trim()
   localUrl = localUrl.replace(/\/+$/, '').replace(/\/[vV]1$/, '')
-  const endpoint = provider === 'local' ? `${localUrl}/v1/chat/completions` : `${API_BASE_URL}/api/analyze`
+  const endpoint = provider === 'local' ? `${localUrl}/v1/chat/completions` : `${API_BASE_URL}/api/analyze_batch`
 
   // Preflight local
   if (provider === 'local') {
@@ -160,37 +147,43 @@ export async function classifyAmendments(amendements, options = {}) {
     }
   }
 
-  let consecutiveFailures = 0
+  // GROUP BY ARTICLE
+  const articlesMap = new Map()
+  toClassifyByLLM.forEach(am => {
+    const art = am.article || "Inconnu"
+    if (!articlesMap.has(art)) articlesMap.set(art, [])
+    articlesMap.get(art).push(am)
+  })
 
-  for (let i = 1; i < toClassifyByLLM.length; i++) {
-    // Vérification d'annulation AVANT chaque itération
+  let consecutiveFailures = 0
+  const resultats = []
+
+  for (const [article, batch] of articlesMap.entries()) {
     if (abortRef.current || signal?.aborted) {
       avertissements.push("🛑 Classement annulé par l'utilisateur.")
       break
     }
 
-    const am = toClassifyByLLM[i]
-    processedCount++
-
     if (consecutiveFailures >= 2) {
-      const res = { id: am.id || am.numero, statut: 'Erreur', justification: 'Interrompu : trop d\'échecs.', alerte_couleur: 'rouge', rang: processedCount }
-      resultats.push(res)
-      onProgress(res, processedCount, amendements.length, avertissements)
+      batch.forEach(am => {
+        processedCount++
+        const res = { id: am.id || am.numero, statut: 'Erreur', justification: 'Interrompu : trop d\'échecs.', alerte_couleur: 'rouge', rang: processedCount }
+        resultats.push(res)
+        onProgress(res, processedCount, amendements.length, avertissements)
+      })
       continue
     }
 
+    let userPrompt = `Voici les amendements pour l'article ${article} :\n\n`
+    batch.forEach(am => {
+       const expose = isReasoningMode && am.expose_sommaire ? `\nEXPOSE: ${am.expose_sommaire}` : ''
+       userPrompt += `ID: ${am.id || am.numero}\nDISPOSITIF: ${am.dispositif}${expose}\n\n`
+    })
+
     try {
-      let parsed = null
+      let parsedArray = []
 
       if (provider === 'local') {
-        const refPrompt = isReasoningMode && reference_brut.expose_sommaire 
-          ? `REF_DISPOSITIF: ${reference_brut.dispositif}\nREF_EXPOSE: ${reference_brut.expose_sommaire}` 
-          : `REF_DISPOSITIF: ${reference_brut.dispositif}`
-        const amPrompt = isReasoningMode && am.expose_sommaire 
-          ? `TEST_DISPOSITIF: ${am.dispositif}\nTEST_EXPOSE: ${am.expose_sommaire}` 
-          : `TEST_DISPOSITIF: ${am.dispositif}`
-        const userPrompt = `${refPrompt}\n\n${amPrompt}`
-
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -208,21 +201,11 @@ export async function classifyAmendments(amendements, options = {}) {
         if (!res.ok) throw new Error(`API a répondu ${res.status}`)
         const jsonRes = await res.json()
         const contenu = jsonRes.choices[0].message.content.trim()
-
-        // Extracteur blindé avec suppression des <think>
         const jsonStr = cleanJsonPayload(contenu)
-        parsed = JSON.parse(jsonStr)
+        parsedArray = JSON.parse(jsonStr)
       } else {
-        // Mode Cloud Groq (Backend FastAPI)
-        const cloudAmends = isReasoningMode 
-          ? [reference_brut, am] 
-          : [
-              { ...reference_brut, expose_sommaire: undefined }, 
-              { ...am, expose_sommaire: undefined }
-            ]
-
         const payload = {
-          amendements: cloudAmends,
+          user_prompt: userPrompt,
           provider: 'groq',
           api_key: aiSettings.apiKey || null,
           system_prompt: systemPrompt,
@@ -234,61 +217,71 @@ export async function classifyAmendments(amendements, options = {}) {
           signal,
           body: JSON.stringify(payload)
         })
-        if (!res.ok) {
-          const status = res.status
-          if (status === 429) throw new Error('Quota de tokens dépassé.')
-          throw new Error(`Erreur Vercel ${status}`)
-        }
+        if (!res.ok) throw new Error(`Erreur Backend ${res.status}`)
         const data = await res.json()
-        if (Array.isArray(data) && data.length > 0) {
-           parsed = data[0]
+        if (Array.isArray(data)) {
+           parsedArray = data
+        } else if (data && typeof data === 'object' && !Array.isArray(data)) {
+           parsedArray = [data]
         } else {
-           throw new Error("Réponse Vercel invalide")
+           throw new Error("Réponse API invalide")
         }
       }
 
-      const statut = parsed.statut || 'Isolé'
-      const alerte_couleur = parsed.alerte_couleur || (statut === 'Identique' ? 'orange' : 'vert')
-      
-      const finalRes = {
-        id: am.id || am.numero,
-        statut,
-        justification: parsed.justification || '',
-        alerte_couleur,
-        rang: processedCount
-      }
-      
-      // Assignation de groupe
-      if (finalRes.statut === 'Identique') {
-         finalRes.groupe = { type: 'identiques', groupe_id: 'grp-identiques-llm' }
-      } else if (finalRes.statut === 'Discussion commune' || finalRes.statut === 'Incompatible') {
-         finalRes.groupe = { type: 'discussion_commune', groupe_id: 'grp-discussion_commune-1' }
+      if (!Array.isArray(parsedArray)) {
+          throw new Error("Le résultat n'est pas un tableau")
       }
 
-      resultats.push(finalRes)
-      onProgress(finalRes, processedCount, amendements.length, avertissements)
+      // Traiter les résultats
+      batch.forEach(am => {
+        processedCount++
+        const amId = String(am.id || am.numero)
+        const parsed = parsedArray.find(p => String(p.id) === amId) || {}
+
+        const statut = parsed.statut || 'Isolé'
+        const alerte_couleur = parsed.alerte_couleur || (statut === 'Identique' ? 'orange' : 'vert')
+        
+        const finalRes = {
+          id: amId,
+          statut,
+          justification: parsed.justification || '',
+          alerte_couleur,
+          rang: processedCount
+        }
+        
+        if (finalRes.statut === 'Identique') {
+           finalRes.groupe = { type: 'identiques', groupe_id: 'grp-identiques-llm' }
+        } else if (finalRes.statut === 'Discussion commune' || finalRes.statut === 'Incompatible') {
+           finalRes.groupe = { type: 'discussion_commune', groupe_id: 'grp-discussion_commune-1' }
+        }
+
+        resultats.push(finalRes)
+        onProgress(finalRes, processedCount, amendements.length, avertissements)
+      })
+      
       consecutiveFailures = 0
 
     } catch (err) {
-      // Propager les AbortError pour arrêter proprement la boucle
       if (err.name === 'AbortError') {
         avertissements.push("🛑 Classement annulé par l'utilisateur.")
         break
       }
-      console.error('Erreur IA:', err)
+      console.error('Erreur IA Batch:', err)
       consecutiveFailures++
-      const errorRes = {
-        id: am.id || am.numero,
-        statut: 'Erreur IA',
-        justification: err.message || 'Échec de traitement.',
-        alerte_couleur: 'rouge',
-        rang: processedCount
-      }
-      resultats.push(errorRes)
-      onProgress(errorRes, processedCount, amendements.length, avertissements)
+      batch.forEach(am => {
+        processedCount++
+        const errorRes = {
+          id: am.id || am.numero,
+          statut: 'Erreur IA',
+          justification: err.message || 'Échec de traitement.',
+          alerte_couleur: 'rouge',
+          rang: processedCount
+        }
+        resultats.push(errorRes)
+        onProgress(errorRes, processedCount, amendements.length, avertissements)
+      })
     }
 
-    // ⏱️ Temporisation Anti-Rate-Limit — ANNULABLE
     try {
       await cancellableDelay(3000, signal)
     } catch (e) {
@@ -299,6 +292,9 @@ export async function classifyAmendments(amendements, options = {}) {
     }
   }
 
-  const allResults = [...preClassified, ...resultats]
-  return { classement: allResults, avertissements, modele_utilise: provider === 'local' ? 'Local' : 'Groq (Cloud)' }
+  return {
+    classement: [...preClassified, ...resultats],
+    avertissements,
+    modele_utilise: provider === 'local' ? 'Modèle Local Souverain' : 'Groq Cloud (Démo)'
+  }
 }

@@ -313,3 +313,55 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
 def health():
     return {"status": "ok"}
 
+
+class AnalyzeBatchRequest(BaseModel):
+    user_prompt: str
+    system_prompt: str
+    model: str = "mac_mistral"
+    provider: str = "groq"
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    max_tokens: Optional[int] = None
+
+@app.post("/api/analyze_batch")
+async def analyze_batch_endpoint(payload: AnalyzeBatchRequest):
+    try:
+        from openai import AsyncOpenAI
+        if payload.provider == "local":
+            effective_base_url = payload.base_url or "http://localhost:1234/v1"
+            effective_api_key = payload.api_key or "local-key"
+            effective_model = "local-model"
+        else:
+            effective_base_url = "https://api.groq.com/openai/v1"
+            effective_api_key = payload.api_key or os.getenv("GROQ_API_KEY")
+            effective_model = "llama-3.3-70b-versatile"
+            
+        client = AsyncOpenAI(
+            base_url=effective_base_url, 
+            api_key=effective_api_key or "DUMMY_KEY", 
+            timeout=300.0
+        )
+        
+        response = await client.chat.completions.create(
+            model=effective_model,
+            messages=[{"role": "user", "content": f"{payload.system_prompt}\n\n{payload.user_prompt}"}],
+            temperature=0.1,
+            max_tokens=payload.max_tokens or 4096,
+        )
+        contenu = response.choices[0].message.content.strip()
+        import re
+        raw_text = contenu.strip()
+        raw_text = re.sub(r'<think>[\s\S]*?</think>', '', raw_text, flags=re.IGNORECASE)
+        if raw_text.startswith("```"):
+            raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
+            raw_text = re.sub(r"\s*```$", "", raw_text)
+        contenu = raw_text.strip()
+        json_match = re.search(r'\[.*\]|\{.*\}', contenu, re.DOTALL)
+        if json_match:
+            contenu = json_match.group(0)
+            
+        return json.loads(contenu)
+    except Exception as e:
+        import traceback
+        logging.error(f"Erreur analyze_batch: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))

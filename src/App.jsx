@@ -448,12 +448,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#0B0C10] text-plume flex flex-col items-center justify-center p-4 relative">
-      <button
-        onClick={() => setIsSettingsOpen(true)}
-        className="absolute top-4 left-4 z-50 rounded-md border border-ink-600 px-4 py-2 text-sm font-medium text-ink-300 hover:bg-ink-800 transition-colors flex items-center gap-2"
-      >
-        ⚙️ Réglages IA
-      </button>
 
       <img src="/Bourbon.IA-Final.png" alt="Bourbon.IA Logo" className="h-48 w-auto object-contain animate-pulse mb-10" />
       
