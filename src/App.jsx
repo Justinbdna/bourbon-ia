@@ -320,10 +320,10 @@ export default function App() {
               </button>
             )}
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center bg-neutral-800/50 p-1 rounded-lg border border-neutral-700/50 gap-1">
               <button
                 onClick={() => setIsSettingsOpen(true)}
-                className="rounded-md border border-white/30 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/10 transition-colors flex items-center gap-2 shrink-0"
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-white hover:bg-white/10 transition-colors flex items-center gap-2 shrink-0"
               >
                 ⚙️ Réglages IA
               </button>

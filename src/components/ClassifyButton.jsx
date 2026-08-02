@@ -10,7 +10,7 @@ export default function ClassifyButton({ disabled, loading, error, warnings = []
         </div>
 
         <div className="flex items-center gap-4 w-full sm:w-auto">
-          <label className="flex items-center cursor-pointer gap-2 mr-2">
+          <label className="flex items-center cursor-pointer gap-2 mr-2" title="ℹ️ L'analyse profonde étudie le dispositif ET l'exposé sommaire. Le temps de calcul peut être plus long.">
             <div className="relative">
               <input type="checkbox" className="sr-only" checked={isReasoningMode} onChange={(e) => onToggleReasoning(e.target.checked)} disabled={loading} />
               <div className={`block w-10 h-6 rounded-full transition-colors ${isReasoningMode ? 'bg-red-600' : 'bg-slate-300 dark:bg-slate-700'}`}></div>

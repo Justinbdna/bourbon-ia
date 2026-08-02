@@ -283,7 +283,7 @@ export async function classifyAmendments(amendements, options = {}) {
     }
 
     try {
-      await cancellableDelay(3000, signal)
+      await cancellableDelay(provider === 'local' ? 0 : 3000, signal)
     } catch (e) {
       if (e.name === 'AbortError') {
         avertissements.push("🛑 Classement annulé par l'utilisateur.")
