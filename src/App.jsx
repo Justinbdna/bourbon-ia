@@ -318,27 +318,27 @@ export default function App() {
       <header className="bg-[#0B0C10] text-white border-b border-gray-800">
         <div className="max-w-[95%] mx-auto px-6 py-6 flex items-center justify-between gap-4 flex-wrap">
           {/* Logo seul à gauche */}
-          <img src="/Bourbon.IA-Final.png" alt="Bourbon.IA Logo" className="h-12 w-auto object-contain shrink-0" />
+          <img src="/Bourbon.IA-Final.png" alt="Bourbon.IA Logo" className="h-16 w-auto object-contain shrink-0" />
 
           {/* Tout le bloc d'actions et le badge à droite avec ml-auto */}
-          <div className="ml-auto flex items-center gap-3 flex-wrap">
+          <div className="ml-auto flex items-center gap-4 flex-wrap">
             {sovereigntyBadge}
             
-            {amendments.length > 0 && (
-              <button
-                type="button"
-                onClick={handleResetSession}
-                className="bg-neutral-800/50 hover:bg-rose-950/50 hover:border-rose-500/50 border border-neutral-700/50 text-neutral-300 hover:text-rose-400 px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1.5"
-                title="Réinitialiser la session"
-              >
-                🗑️ Reset
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {amendments.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleResetSession}
+                  className="bg-neutral-800/50 hover:bg-rose-950/50 hover:border-rose-500/50 border border-neutral-700/50 text-neutral-300 hover:text-rose-400 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5"
+                  title="Réinitialiser la session"
+                >
+                  🗑️ Reset
+                </button>
+              )}
 
-            <div className="flex items-center bg-neutral-800/50 p-1 rounded-lg border border-neutral-700/50 gap-1">
               <button
                 onClick={() => setIsSettingsOpen(true)}
-                className="rounded-md px-3 py-1.5 text-sm font-medium text-white hover:bg-white/10 transition-colors flex items-center gap-2 shrink-0"
+                className="bg-neutral-800/50 hover:bg-neutral-700/50 border border-neutral-700/50 text-neutral-300 hover:text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 shrink-0"
               >
                 ⚙️ Réglages IA
               </button>

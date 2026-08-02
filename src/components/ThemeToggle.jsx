@@ -14,7 +14,7 @@ export default function ThemeToggle() {
   return (
     <button 
       onClick={() => setIsDark(!isDark)}
-      className="p-2 rounded-md bg-neutre/20 hover:bg-neutre/40 dark:bg-surface dark:hover:bg-surface/80 dark:text-plume text-white font-medium transition-colors shadow-sm text-sm"
+      className="bg-neutral-800/50 hover:bg-neutral-700/50 border border-neutral-700/50 text-neutral-300 hover:text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 shrink-0"
     >
       {isDark ? '☀️ Mode Clair' : '🌙 Mode Foncé'}
     </button>
