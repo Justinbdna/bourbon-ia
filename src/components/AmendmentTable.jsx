@@ -66,7 +66,7 @@ function computeGroupSpans(amendments) {
   return spans
 }
 
-export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, isClassifying }) {
+export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, isClassifying, onExportJson }) {
   const [currentPage, setCurrentPage] = useState(0)
 
   // Compteurs calculés avec un seul reduce (déplacé AVANT le return conditionnel pour éviter l'erreur #310)
@@ -213,16 +213,28 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
 
       <div className="flex items-center justify-between gap-3 border-t border-ink-100 dark:border-ink-700 bg-ink-50/50 dark:bg-obsidienne/50 px-4 py-3">
         <p className="text-xs text-ink-500 dark:text-ink-300">
-          Export au format du préjaune de l'Assemblée (crochets Dc./Id. reconstruits à partir du classement).
+          Export au format du préjaune de l'Assemblée (RTF) ou en JSON (sauvegarde complète).
         </p>
-        <button
-          type="button"
-          disabled={amendments.length === 0}
-          onClick={() => downloadRtf(amendments)}
-          className="rounded-md border border-slate-700 dark:border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-900 dark:text-plume hover:bg-slate-100 dark:hover:bg-slate-800 disabled:border-ink-300 disabled:text-ink-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
-        >
-          Exporter en préjaune (.rtf)
-        </button>
+        <div className="flex items-center gap-2">
+          {onExportJson && (
+            <button
+              type="button"
+              disabled={amendments.length === 0}
+              onClick={onExportJson}
+              className="rounded-md bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 px-3 py-1.5 text-sm font-medium hover:bg-slate-700 dark:hover:bg-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+            >
+              Exporter en JSON
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={amendments.length === 0}
+            onClick={() => downloadRtf(amendments)}
+            className="rounded-md border border-slate-700 dark:border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-900 dark:text-plume hover:bg-slate-100 dark:hover:bg-slate-800 disabled:border-ink-300 disabled:text-ink-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+          >
+            Exporter en préjaune (.rtf)
+          </button>
+        </div>
       </div>
     </div>
   )

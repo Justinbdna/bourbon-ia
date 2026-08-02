@@ -304,36 +304,27 @@ export default function App() {
           {/* Tout le bloc d'actions et le badge à droite avec ml-auto */}
           <div className="ml-auto flex items-center gap-3 flex-wrap">
             {sovereigntyBadge}
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="rounded-md border border-white/30 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/10 transition-colors flex items-center gap-2 shrink-0"
-            >
-              ⚙️ Réglages IA
-            </button>
-            <ThemeToggle />
+            
             {amendments.length > 0 && (
-              <>
-                <span className="text-sm text-gray-300/80">
-                  {amendments.length} amendement{amendments.length > 1 ? 's' : ''} chargé{amendments.length > 1 ? 's' : ''}
-                  {sourceLabel ? ` · ${sourceLabel}` : ''}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleExport}
-                  className="rounded-md bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 px-3 py-1.5 text-sm font-medium hover:bg-slate-700 dark:hover:bg-slate-300 transition-colors"
-                >
-                  Exporter en JSON
-                </button>
-                <button
-                  type="button"
-                  onClick={handleResetSession}
-                  className="rounded-md bg-red-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-red-700 transition-colors"
-                  title="Réinitialiser la session"
-                >
-                  🗑️ Reset
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={handleResetSession}
+                className="rounded-md bg-red-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-red-700 transition-colors"
+                title="Réinitialiser la session"
+              >
+                🗑️ Reset
+              </button>
             )}
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="rounded-md border border-white/30 px-3 py-1.5 text-sm font-medium text-white hover:bg-white/10 transition-colors flex items-center gap-2 shrink-0"
+              >
+                ⚙️ Réglages IA
+              </button>
+              <ThemeToggle />
+            </div>
           </div>
         </div>
       </header>
@@ -374,6 +365,7 @@ export default function App() {
               onReorder={handleReorder}
               onDelete={handleDelete}
               isClassifying={isClassifying}
+              onExportJson={handleExport}
             />
           </div>
           <div className="w-full">
