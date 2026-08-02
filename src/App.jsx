@@ -260,6 +260,10 @@ export default function App() {
   }
 
   function handleExport() {
+    const fileName = window.prompt("Comment souhaitez-vous nommer ce fichier d'export ?", "amendements_export")
+    if (fileName === null) return
+    const finalName = fileName.trim() || "amendements_export"
+
     const payload = { amendements: amendments }
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
       type: 'application/json',
@@ -267,7 +271,7 @@ export default function App() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `amendements-classes-${new Date().toISOString().slice(0, 10)}.json`
+    link.download = `${finalName}.json`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)

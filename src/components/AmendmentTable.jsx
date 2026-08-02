@@ -114,8 +114,10 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
   }
 
   function handleExportRtf() {
-    const dateStr = new Date().toISOString().slice(0, 10)
-    downloadRtf(amendments, `prejaune-${dateStr}.rtf`)
+    const fileName = window.prompt("Comment souhaitez-vous nommer ce fichier d'export ?", "amendements_export")
+    if (fileName === null) return
+    const finalName = fileName.trim() || "amendements_export"
+    downloadRtf(amendments, `${finalName}.rtf`)
   }
 
   return (
@@ -229,7 +231,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
           <button
             type="button"
             disabled={amendments.length === 0}
-            onClick={() => downloadRtf(amendments)}
+            onClick={handleExportRtf}
             className="rounded-md border border-slate-700 dark:border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-900 dark:text-plume hover:bg-slate-100 dark:hover:bg-slate-800 disabled:border-ink-300 disabled:text-ink-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
           >
             Exporter en préjaune (.rtf)
