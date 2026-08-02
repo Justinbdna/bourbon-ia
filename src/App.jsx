@@ -274,10 +274,24 @@ export default function App() {
     URL.revokeObjectURL(url)
   }
 
+  function handleResetSession() {
+    if (window.confirm("Voulez-vous vraiment réinitialiser la session ? Toutes les données non exportées seront perdues.")) {
+      setAmendments([])
+      setSelectedId(null)
+      localStorage.removeItem(STORAGE_KEY)
+      setSourceLabel(null)
+    }
+  }
+
   // ─── Badge de souveraineté (SANS EMOJI, texte brut) ───
-  const sovereigntyBadge = aiSettings.provider === 'local'
-    ? <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-900/40 border border-emerald-600/50 px-3 py-1 text-xs font-bold text-emerald-300">Mode Local Souverain</span>
-    : <span className="inline-flex items-center gap-1.5 rounded-full bg-red-900/40 border border-red-600/50 px-3 py-1 text-xs font-bold text-red-300">Mode Cloud (Groq)</span>
+  let sovereigntyBadge = null
+  if (aiSettings.provider === 'local') {
+    sovereigntyBadge = <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-900/40 border border-emerald-600/50 px-3 py-1 text-xs font-bold text-emerald-300">IA Locale (Souveraine)</span>
+  } else if (aiSettings.provider === 'groq') {
+    sovereigntyBadge = <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-900/40 border border-amber-600/50 px-3 py-1 text-xs font-bold text-amber-300">Clé API (Personnalisée)</span>
+  } else {
+    sovereigntyBadge = <span className="inline-flex items-center gap-1.5 rounded-full bg-red-900/40 border border-red-600/50 px-3 py-1 text-xs font-bold text-red-300">Groq (Démo non-souveraine)</span>
+  }
 
   if (hasEntered) {
     return (
@@ -309,6 +323,14 @@ export default function App() {
                   className="rounded-md bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 px-3 py-1.5 text-sm font-medium hover:bg-slate-700 dark:hover:bg-slate-300 transition-colors"
                 >
                   Exporter en JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetSession}
+                  className="rounded-md bg-red-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-red-700 transition-colors"
+                  title="Réinitialiser la session"
+                >
+                  🗑️ Reset
                 </button>
               </>
             )}

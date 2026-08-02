@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 
 export default function AISettingsModal({ isOpen, onClose, onSave, currentSettings }) {
-  const [provider, setProvider] = useState(currentSettings?.provider || 'groq')
+  const [provider, setProvider] = useState(currentSettings?.provider || 'groq_auto')
   const [apiKey, setApiKey] = useState(currentSettings?.apiKey || '')
   const [localUrl, setLocalUrl] = useState(currentSettings?.localUrl || 'http://localhost:1234/v1')
+  const [pingStatus, setPingStatus] = useState(null)
 
   useEffect(() => {
     if (isOpen) {
@@ -15,7 +16,36 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
 
   if (!isOpen) return null
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (provider === 'local' || provider === 'groq') {
+      try {
+        setPingStatus({ type: 'loading', message: 'Test de connexion...' })
+        let endpoint = provider === 'local' 
+          ? `${localUrl.replace(/\/+$/, '').replace(/\/[vV]1$/, '')}/v1/models` 
+          : 'https://api.groq.com/openai/v1/models'
+        
+        let headers = {}
+        if (provider === 'groq') headers['Authorization'] = `Bearer ${apiKey}`
+
+        const res = await fetch(endpoint, { method: 'GET', headers })
+        if (!res.ok) throw new Error('Status ' + res.status)
+
+        setPingStatus({ type: 'success', message: 'Connexion établie avec succès' })
+        setTimeout(() => {
+          setPingStatus(null)
+          onSave({ provider, apiKey: provider === 'groq_auto' ? '' : apiKey, localUrl })
+          onClose()
+        }, 1500)
+        return
+      } catch (err) {
+        setPingStatus({ type: 'error', message: 'Erreur : Serveur injoignable ou CORS bloqué' })
+        setTimeout(() => setPingStatus(null), 4000)
+        // On permet quand même de sauvegarder si l'utilisateur insiste ?
+        // Non, on bloque pas, on garde juste la modale ouverte sur erreur. 
+        return
+      }
+    }
+    
     onSave({ provider, apiKey: provider === 'groq_auto' ? '' : apiKey, localUrl })
     onClose()
   }
@@ -45,27 +75,27 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                   : 'bg-transparent border-ink-300 text-ink-600 hover:bg-ink-50 dark:border-ink-600 dark:text-ink-300 dark:hover:bg-ink-800'
               }`}
             >
-              ☁️ Groq (Défaut)
+              ☁️ Groq (Démo non-souveraine)
             </button>
             <button
-              onClick={() => setProvider('groq')}
+              onClick={() => { setProvider('groq'); setPingStatus(null); }}
               className={`flex-1 py-2 px-2 rounded-md border font-medium text-sm transition-colors ${
                 provider === 'groq' 
                   ? 'bg-slate-100 border-slate-500 text-slate-900 dark:bg-slate-900/50 dark:border-slate-400 dark:text-plume shadow-sm' 
                   : 'bg-transparent border-ink-300 text-ink-600 hover:bg-ink-50 dark:border-ink-600 dark:text-ink-300 dark:hover:bg-ink-800'
               }`}
             >
-              🔑 Clé API
+              🔑 Clé API (Personnalisée)
             </button>
             <button
-              onClick={() => setProvider('local')}
+              onClick={() => { setProvider('local'); setPingStatus(null); }}
               className={`flex-1 py-2 px-2 rounded-md border font-medium text-sm transition-colors ${
                 provider === 'local'
                   ? 'bg-slate-100 border-slate-500 text-slate-900 dark:bg-slate-900/50 dark:border-slate-400 dark:text-plume shadow-sm' 
                   : 'bg-transparent border-ink-300 text-ink-600 hover:bg-ink-50 dark:border-ink-600 dark:text-ink-300 dark:hover:bg-ink-800'
               }`}
             >
-              💻 IA Locale
+              💻 IA Locale (Souveraine)
             </button>
           </div>
 
@@ -101,7 +131,14 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                   placeholder="gsk_..."
                   className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none"
                 />
-                <p className="text-xs text-ink-700 dark:text-ink-300">
+                
+                {pingStatus && provider === 'groq' && (
+                  <div className={`p-3 mt-2 rounded-md text-sm font-medium ${pingStatus.type === 'success' ? 'bg-green-100 text-green-800 border border-green-300' : pingStatus.type === 'error' ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-blue-100 text-blue-800 border border-blue-300'}`}>
+                    {pingStatus.message}
+                  </div>
+                )}
+                
+                <p className="text-xs text-ink-700 dark:text-ink-300 mt-2">
                   Si les quotas sont atteints, vous pouvez utiliser la vôtre (Groq ou compatible).
                 </p>
               </div>
@@ -128,6 +165,12 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                   className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none"
                 />
               </div>
+
+              {pingStatus && provider === 'local' && (
+                <div className={`p-3 rounded-md text-sm font-medium ${pingStatus.type === 'success' ? 'bg-green-100 text-green-800 border border-green-300' : pingStatus.type === 'error' ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-blue-100 text-blue-800 border border-blue-300'}`}>
+                  {pingStatus.message}
+                </div>
+              )}
               
               <div className="bg-slate-50 dark:bg-obsidienne rounded-lg p-5 border border-slate-200 dark:border-slate-800 shadow-inner">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-plume mb-3">Tutoriel IA Locale</h3>
@@ -147,8 +190,12 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-ink-600 dark:text-ink-300 hover:text-ink-900 dark:hover:text-plume transition-colors">
             Annuler
           </button>
-          <button onClick={handleSave} className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-sm font-medium rounded-md shadow-sm transition-colors">
-            Enregistrer
+          <button 
+            onClick={handleSave} 
+            disabled={pingStatus?.type === 'loading'}
+            className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-sm font-medium rounded-md shadow-sm transition-colors disabled:opacity-50"
+          >
+            {pingStatus?.type === 'loading' ? 'Test en cours...' : 'Enregistrer'}
           </button>
         </div>
       </div>

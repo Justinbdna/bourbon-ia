@@ -183,7 +183,14 @@ export async function classifyAmendments(amendements, options = {}) {
       let parsed = null
 
       if (provider === 'local') {
-        const userPrompt = `REF: ${reference_brut.dispositif}\nTEST: ${am.dispositif}`
+        const refPrompt = isReasoningMode && reference_brut.expose_sommaire 
+          ? `REF_DISPOSITIF: ${reference_brut.dispositif}\nREF_EXPOSE: ${reference_brut.expose_sommaire}` 
+          : `REF_DISPOSITIF: ${reference_brut.dispositif}`
+        const amPrompt = isReasoningMode && am.expose_sommaire 
+          ? `TEST_DISPOSITIF: ${am.dispositif}\nTEST_EXPOSE: ${am.expose_sommaire}` 
+          : `TEST_DISPOSITIF: ${am.dispositif}`
+        const userPrompt = `${refPrompt}\n\n${amPrompt}`
+
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -207,8 +214,15 @@ export async function classifyAmendments(amendements, options = {}) {
         parsed = JSON.parse(jsonStr)
       } else {
         // Mode Cloud Groq (Backend FastAPI)
+        const cloudAmends = isReasoningMode 
+          ? [reference_brut, am] 
+          : [
+              { ...reference_brut, expose_sommaire: undefined }, 
+              { ...am, expose_sommaire: undefined }
+            ]
+
         const payload = {
-          amendements: [reference_brut, am],
+          amendements: cloudAmends,
           provider: 'groq',
           api_key: aiSettings.apiKey || null,
           system_prompt: systemPrompt,

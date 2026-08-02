@@ -77,13 +77,13 @@ function computeSectionHeader(article) {
 // atteindre la colonne du label, 1 pour celle du glyphe, 1 pour celle du
 // contenu — soit toujours 5 tabulations au total, que les colonnes
 // intermédiaires soient vides ou non (schéma cohérent sur toutes les lignes).
-function buildLine(label, glyph, content) {
+function buildLine(label, glyph, escapedContent) {
   let s = '\\tab \\tab \\tab '
   s += label ? rtfEscape(label) : ''
   s += '\\tab '
   s += glyph ? rtfEscape(glyph + ' ') : ''
   s += '\\tab '
-  s += rtfEscape(content)
+  s += escapedContent
   return s
 }
 
@@ -116,9 +116,20 @@ export function generateRtfPrejaune(amendments) {
     }
     const deco = decos[idx]
     const auteursText = a.auteurs && a.auteurs.length ? a.auteurs.join(', ') : 'la commission'
-    const content = `Adt n\u00b0 ${a.numero}${a.rectification ? ' ' + a.rectification : ''} de ${auteursText}`
+    
+    const statut = a.resultat_ia?.statut || a.statut
+    let prefix = ''
+    if (statut === 'Discussion commune' || statut === 'Incompatible') {
+      prefix = '\\b [Dc.]\\b0  '
+    } else if (statut === 'Identique' || statut === 'Identiques') {
+      prefix = '\\b [Id.]\\b0  '
+    }
+    
+    const rawContent = `Adt n\u00b0 ${a.numero}${a.rectification ? ' ' + a.rectification : ''} de ${auteursText}`
+    const escapedContent = prefix + rtfEscape(rawContent)
+    
     parts.push(
-      `\\pard\\f0\\fs22\\tx851\\tx1321\\tx1985 ${buildLine(deco.label, deco.glyph, content)}\\par`
+      `\\pard\\f0\\fs22\\tx851\\tx1321\\tx1985 ${buildLine(deco.label, deco.glyph, escapedContent)}\\par`
     )
   })
 
