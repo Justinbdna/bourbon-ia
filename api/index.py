@@ -166,25 +166,15 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
         )
         
         system_prompt = payload.system_prompt or (
-            "RÈGLE DE CLASSEMENT MVP : Tu es un administrateur de l'Assemblée nationale. Tu dois classer une liste d'amendements. Même si le 'dispositif' est vide, qu'il indique 'Non renseigné' ou 'Irrecevable au titre de l'article 40', TU DOIS LES CLASSER. \n"
-            "- Si plusieurs amendements ciblent exactement le même 'article' et ont le même dispositif (même vide ou irrecevable), classe-les en 'Identiques'.\n"
-            "- S'ils ciblent le même article mais diffèrent légèrement, classe-les en 'Discussion commune'.\n"
-            "- Sinon, classe en 'Isolé'.\n"
-            "Tu n'as pas le droit de renvoyer le statut 'Erreur' ou de refuser de classer. Tu dois trouver des corrélations logiques.\n"
+            "TU DOIS RENVOYER UNIQUEMENT UN TABLEAU JSON BRUT. AUCUN FORMATAGE MARKDOWN. AUCUNE BALISE.\n"
+            "RÈGLE ABSOLUE : N'utilise JAMAIS les statuts 'Identique' ou 'Doublon'. Ces statuts sont gérés en amont par le système. Tu dois uniquement détecter les 'Discussion commune' ou 'Isolé'.\n\n"
+            "TU ES UN AUTOMATE. Renvoie UNIQUEMENT un tableau JSON pur respectant EXACTEMENT ce format :\n"
+            "[{\"id\": \"id_de_lamendement\", \"statut\": \"Discussion commune\" | \"Isolé\", \"justification\": \"...\", \"alerte_couleur\": \"vert\" | \"orange\" | \"gris\"}]\n\n"
             "RÈGLES DE FORMATAGE ABSOLUES ET INTRANSIGEANTES :\n"
             "1. Tu dois renvoyer un tableau JSON valide contenant EXACTEMENT un objet pour chaque amendement fourni.\n"
             "2. Tu DOIS conserver la valeur exacte de la clé 'id' de l'amendement (qui est une chaîne de caractères, ex: 'amdt-185', 'amdt-7rect', 'CD12'). Ne la remplace JAMAIS par un entier.\n"
-            "3. La clé 'statut' ne peut avoir QUE l'une de ces 3 valeurs exactes : 'Identique', 'Discussion commune', ou 'Isolé'. Aucune autre valeur n'est tolérée (n'utilise pas 'Nouveau', ni 'Erreur').\n"
-            "4. Voici le SEUL format JSON accepté en sortie. Tu dois le respecter à la lettre :\n"
-            "[\n"
-            "  {\n"
-            "    \"id\": \"ID_EXACT_FOURNI_EN_ENTRÉE\",\n"
-            "    \"statut\": \"Isolé\",\n"
-            "    \"justification\": \"Ta justification courte ici\",\n"
-            "    \"alerte_couleur\": \"gris\"\n"
-            "  }\n"
-            "]\n"
-            "Ne rajoute aucune autre clé. Ne mets pas de texte avant ou après le tableau JSON."
+            "3. La clé 'statut' ne peut avoir QUE l'une de ces 2 valeurs exactes : 'Discussion commune', ou 'Isolé'. Aucune autre valeur n'est tolérée.\n"
+            "4. Ne rajoute aucune autre clé. Ne mets pas de texte avant ou après le tableau JSON."
         )
         
         if not amendements_tries:
