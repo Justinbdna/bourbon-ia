@@ -13,7 +13,7 @@ export class ClassifyError extends Error {
 export async function normalizeAmendments(amendements) {
   const response = await fetch(`${API_BASE_URL}/api/normalize`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
     body: JSON.stringify({ amendements, model: 'llama3-8b-8192' }),
   })
   if (!response.ok) {
@@ -131,6 +131,7 @@ export async function classifyAmendments(amendements, options = {}) {
     try {
       const preflight = await fetch(`${localUrl}/v1/models`, {
         method: 'GET',
+        headers: { 'ngrok-skip-browser-warning': 'true' },
         signal: signal || AbortSignal.timeout(5000)
       })
       if (!preflight.ok) throw new Error(`Status ${preflight.status}`)
@@ -187,7 +188,7 @@ export async function classifyAmendments(amendements, options = {}) {
       if (provider === 'local') {
         const res = await fetch(endpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
           signal,
           body: JSON.stringify({
             model: 'local-model',
@@ -214,7 +215,7 @@ export async function classifyAmendments(amendements, options = {}) {
         }
         const res = await fetch(endpoint, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
           signal,
           body: JSON.stringify(payload)
         })

@@ -24,7 +24,9 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
           ? `${localUrl.replace(/\/+$/, '').replace(/\/[vV]1$/, '')}/v1/models` 
           : 'https://api.groq.com/openai/v1/models'
         
-        let headers = {}
+        let headers = {
+          'ngrok-skip-browser-warning': 'true'
+        }
         if (provider === 'groq') headers['Authorization'] = `Bearer ${apiKey}`
 
         const res = await fetch(endpoint, { method: 'GET', headers })
