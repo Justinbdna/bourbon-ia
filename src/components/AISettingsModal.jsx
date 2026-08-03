@@ -3,17 +3,25 @@ import { useState, useEffect } from 'react'
 function getModelTypeBadge(modelName) {
   if (!modelName) return null
   const isReasoning = /gemma|qwq|reasoning/i.test(modelName)
-  if (isReasoning) {
+  const isRecommended = /llama-?3\.?1-?8b|mistral-?7b/i.test(modelName)
+  
+  if (isRecommended) {
+    return { 
+      icon: '⭐', 
+      text: 'Modèle Recommandé — Inférence rapide (< 15s) et classification ultra-précise.', 
+      colorClass: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800' 
+    }
+  } else if (isReasoning) {
     return { 
       icon: '🟡', 
-      text: 'Modèle Reasoning — Pensée bridée automatiquement par le front-end pour garantir la vitesse (< 20s).', 
+      text: 'Modèle Reasoning — Mode analyse approfondie optimisé.', 
       colorClass: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800' 
     }
   } else {
     return { 
-      icon: '🟢', 
-      text: 'Modèle Idéal — Inférence rapide (< 15s) et classification ultra-précise.', 
-      colorClass: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800' 
+      icon: '🔵', 
+      text: 'Modèle Personnalisé — Traitement standard.', 
+      colorClass: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800' 
     }
   }
 }
@@ -351,7 +359,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-plume mb-3">Tutoriel IA Locale</h3>
                 <ol className="text-sm text-ink-700 dark:text-ink-300 space-y-2 list-decimal list-inside">
                   <li>Installer <strong>LM Studio</strong>, <strong>Ollama</strong> ou <strong>VLM</strong>.</li>
-                  <li>Télécharger un modèle d'IA local (ex: Mistral ou Llama 3).</li>
+                  <li>Télécharger un modèle d'IA local recommandé : Meta-Llama-3.1-8B-Instruct ou Mistral-7B-Instruct-v0.3.</li>
                   <li><strong>ACTIVER IMPÉRATIVEMENT LE CORS</strong> (Cross-Origin Resource Sharing) dans les paramètres du serveur local.</li>
                   <li>Démarrer le serveur local de l'application.</li>
                   <li>Copier-coller l'adresse IP (ex: <code className="bg-slate-800 text-emerald-400 dark:bg-slate-900 dark:text-emerald-300 px-2 py-0.5 rounded text-xs font-mono">http://localhost:1234/v1</code>) ci-dessus.</li>
