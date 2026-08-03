@@ -1,18 +1,20 @@
 import { useState, useEffect } from 'react'
 
-function getVramWarning(modelName) {
+function getModelTypeBadge(modelName) {
   if (!modelName) return null
-  const name = modelName.toLowerCase()
-  const match = name.match(/(\d+)b/i)
-  if (!match) return null
-  const size = parseInt(match[1], 10)
-
-  if (size < 10) {
-    return { type: 'vert', icon: '🟢', text: 'Léger & Ultra-Rapide (~6-8 Go VRAM) — Recommandé pour classement en < 15s.', colorClass: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800' }
-  } else if (size >= 10 && size <= 16) {
-    return { type: 'jaune', icon: '🟡', text: 'Modéré (~8-12 Go VRAM) — Nécessite un GPU dédié. Si l\'analyse est trop rapide et inaccurate, réactivez \'Thinking\' dans LM Studio.', colorClass: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800' }
+  const isReasoning = /gemma|qwq|reasoning/i.test(modelName)
+  if (isReasoning) {
+    return { 
+      icon: '🟡', 
+      text: 'Modèle Reasoning — Pensée bridée automatiquement par le front-end pour garantir la vitesse (< 20s).', 
+      colorClass: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800' 
+    }
   } else {
-    return { type: 'rouge', icon: '🔴', text: 'Lourd (20 Go+ VRAM) — Risque de bascule sur la RAM système (CPU) et de forte lenteur si la VRAM est insuffisante.', colorClass: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800' }
+    return { 
+      icon: '🟢', 
+      text: 'Modèle Idéal — Inférence rapide (< 15s) et classification ultra-précise.', 
+      colorClass: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800' 
+    }
   }
 }
 
@@ -163,7 +165,8 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
     onClose()
   }
 
-  const vramWarning = provider === 'local' ? getVramWarning(localModel) : null
+  const modelBadgeLocal = provider === 'local' ? getModelTypeBadge(localModel) : null
+  const modelBadgeGroq = provider === 'groq' ? getModelTypeBadge(groqModel) : null
 
   return (
     <div
@@ -271,6 +274,12 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                         <option key={m.id} value={m.id}>{formatModelName(m.id)}</option>
                       ))}
                     </select>
+                    {modelBadgeGroq && (
+                      <div className={`p-2 mt-2 rounded-md border text-xs flex gap-2 items-start ${modelBadgeGroq.colorClass}`}>
+                        <span>{modelBadgeGroq.icon}</span>
+                        <span>{modelBadgeGroq.text}</span>
+                      </div>
+                    )}
                   </div>
                 )}
                 {provider === 'groq' && isFetchingModels && <p className="text-xs text-ink-500">Chargement des modèles...</p>}
@@ -320,10 +329,10 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                             <option key={m.id} value={m.id}>{formatModelName(m.id)}</option>
                           ))}
                         </select>
-                        {vramWarning && (
-                          <div className={`p-2 mt-2 rounded-md border text-xs flex gap-2 items-start ${vramWarning.colorClass}`}>
-                            <span>{vramWarning.icon}</span>
-                            <span>{vramWarning.text}</span>
+                        {modelBadgeLocal && (
+                          <div className={`p-2 mt-2 rounded-md border text-xs flex gap-2 items-start ${modelBadgeLocal.colorClass}`}>
+                            <span>{modelBadgeLocal.icon}</span>
+                            <span>{modelBadgeLocal.text}</span>
                           </div>
                         )}
                       </>
@@ -345,8 +354,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                   <li>Télécharger un modèle d'IA local (ex: Mistral ou Llama 3).</li>
                   <li><strong>ACTIVER IMPÉRATIVEMENT LE CORS</strong> (Cross-Origin Resource Sharing) dans les paramètres du serveur local.</li>
                   <li>Démarrer le serveur local de l'application.</li>
-                  <li>Copier-coller l'adresse IP (ex: <code className="bg-ink-100 dark:bg-ink-800 px-1 py-0.5 rounded text-xs">http://localhost:1234/v1</code>) ci-dessus.</li>
-                  <li><strong>⚡ Vitesse & Précision :</strong> Pour un classement optimal en 15s, privilégiez un modèle Instruct (Llama 3.1 8B / Mistral 7B). Si vous utilisez Gemma 4, conservez 'Enable Thinking' activé avec une Température de 0.2.</li>
+                  <li>Copier-coller l'adresse IP (ex: <code className="bg-slate-800 text-emerald-400 dark:bg-slate-900 dark:text-emerald-300 px-2 py-0.5 rounded text-xs font-mono">http://localhost:1234/v1</code>) ci-dessus.</li>
                 </ol>
               </div>
             </div>

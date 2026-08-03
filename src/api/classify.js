@@ -116,11 +116,19 @@ export async function classifyAmendments(amendements, options = {}) {
   }
 
   const baseRules = "TU DOIS RENVOYER UNIQUEMENT UN TABLEAU JSON BRUT. AUCUN FORMATAGE MARKDOWN. AUCUNE BALISE.\nRÈGLE ABSOLUE : N'utilise JAMAIS les statuts 'Identique' ou 'Doublon'. Ces statuts sont gérés en amont par le système. Tu dois uniquement détecter les 'Discussion commune' ou 'Isolé'.\n\n"
+  
+  const currentModel = provider === 'local' ? (aiSettings.localModel || '') : (aiSettings.groqModel || '')
+  const isModelReasoning = /gemma|qwq|reasoning/i.test(currentModel)
+  
+  const preamble = isModelReasoning 
+    ? "PENSÉE ULTRA-COURTE : Limitez votre raisonnement interne à 2 phrases maximum avant de générer le tableau JSON.\n\n"
+    : ""
+  
   const systemPrompt = isReasoningMode
-    ? baseRules + "Tu es un expert. Prends le temps de réfléchir. À la TOUTE FIN, génère un tableau JSON pur respectant EXACTEMENT ce format : [{\"id\": \"id_de_lamendement\", \"statut\": \"Discussion commune\" | \"Isolé\", \"justification\": \"...\", \"alerte_couleur\": \"vert\" | \"orange\" | \"gris\"}]"
-    : baseRules + "TU ES UN AUTOMATE. Renvoie UNIQUEMENT un tableau JSON pur respectant EXACTEMENT ce format : [{\"id\": \"id_de_lamendement\", \"statut\": \"Discussion commune\" | \"Isolé\", \"justification\": \"...\", \"alerte_couleur\": \"vert\" | \"orange\" | \"gris\"}]"
+    ? preamble + baseRules + "Tu es un expert. Prends le temps de réfléchir. À la TOUTE FIN, génère un tableau JSON pur respectant EXACTEMENT ce format : [{\"id\": \"id_de_lamendement\", \"statut\": \"Discussion commune\" | \"Isolé\", \"justification\": \"...\", \"alerte_couleur\": \"vert\" | \"orange\" | \"gris\"}]"
+    : preamble + baseRules + "TU ES UN AUTOMATE. Renvoie UNIQUEMENT un tableau JSON pur respectant EXACTEMENT ce format : [{\"id\": \"id_de_lamendement\", \"statut\": \"Discussion commune\" | \"Isolé\", \"justification\": \"...\", \"alerte_couleur\": \"vert\" | \"orange\" | \"gris\"}]"
 
-  const dynamicMaxTokens = isReasoningMode ? 16384 : 4096
+  const activeTemperature = isModelReasoning ? 0.2 : 0.1
 
   let localUrl = (aiSettings.localUrl || 'http://localhost:1234/v1').trim()
   localUrl = localUrl.replace(/\/+$/, '').replace(/\/[vV]1$/, '')
@@ -196,8 +204,7 @@ export async function classifyAmendments(amendements, options = {}) {
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt }
             ],
-            temperature: isReasoningMode ? 0.6 : 0.1,
-            max_tokens: dynamicMaxTokens
+            temperature: activeTemperature
           })
         })
         if (!res.ok) throw new Error(`API a répondu ${res.status}`)
@@ -211,8 +218,7 @@ export async function classifyAmendments(amendements, options = {}) {
           provider: 'groq',
           model: aiSettings.groqModel || 'llama3-8b-8192',
           api_key: aiSettings.apiKey || null,
-          system_prompt: systemPrompt,
-          max_tokens: dynamicMaxTokens
+          system_prompt: systemPrompt
         }
         const res = await fetch(endpoint, {
           method: 'POST',

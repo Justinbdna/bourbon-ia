@@ -225,8 +225,7 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
                         response = await client.chat.completions.create(
                             model=model_name,
                             messages=[{"role": "user", "content": f"{system_prompt}\n\n{user_prompt}"}],
-                            temperature=0.1,
-                            max_tokens=payload.max_tokens or 4096,
+                            temperature=0.1
                         )
                         contenu = response.choices[0].message.content.strip()
                         logging.info(f"🚀 PROMPT GROQ:\n{system_prompt}\n\n{user_prompt}")
@@ -345,8 +344,7 @@ async def analyze_batch_endpoint(payload: AnalyzeBatchRequest):
         response = await client.chat.completions.create(
             model=effective_model,
             messages=[{"role": "user", "content": f"{payload.system_prompt}\n\n{payload.user_prompt}"}],
-            temperature=0.1,
-            max_tokens=payload.max_tokens or 4096,
+            temperature=0.1
         )
         contenu = response.choices[0].message.content.strip()
         import re
