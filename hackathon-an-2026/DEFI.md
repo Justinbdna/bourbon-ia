@@ -61,7 +61,7 @@ Pour les besoins du Hackathon, le front-end est déployé, mais le backend néce
 - [ ] `legiwatch-serveur-mcp-parlement` — Serveur MCP Parlement ✺ LegiWatch
 
 ### 🎬 Démonstration Vidéo
-<video src="docs/Bourbon-IA-Démo.mp4" controls width="100%"></video>
+<video src="hackathon-an-2026/docs/Bourbon-IA-Demo.mp4" controls width="100%" poster="hackathon-an-2026/images/01-accueil.png"></video>
 
 ### Galerie
 ![Page d'accueil Bourbon.IA](images/01-accueil.png)

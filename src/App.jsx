@@ -404,7 +404,7 @@ export default function App() {
 
       <footer className="max-w-[95%] mx-auto px-6 pb-8 text-center">
         <p className="text-sm text-neutre dark:text-ink-400 max-w-5xl mx-auto leading-relaxed">
-          ⚠️ Note technique - Version Démo : Pour des raisons de logistique et de puissance de serveurs, l'IA de cette démonstration est temporairement déportée sur un Cloud externe sécurisé (Groq/Llama 3.3). L'architecture logicielle de Bourbon.IA reste conçue pour une exécution 100 % souveraine, locale et hors-ligne, garantissant la stricte confidentialité des données.
+          💡 Note technique : Par défaut, cette démonstration publique utilise le mode Groq (Llama 3.3) pour la fluidité web. L'application reste 100 % conçue pour une exécution souveraine, locale et hors-ligne (sélectionnable dans les ⚙️ Réglages IA).
         </p>
       </footer>
 
@@ -477,7 +477,7 @@ export default function App() {
 
       <div className="absolute bottom-4 left-0 right-0 text-center text-xs text-slate-500 px-6 max-w-2xl mx-auto">
         <p>
-          Bourbon.IA est nativement conçu pour être une IA souveraine et 100% locale, garantissant la stricte confidentialité des données législatives. Pour la fluidité de cette démonstration publique, les calculs sont temporairement déportés sur un Cloud sécurisé.
+          💡 Note technique : Par défaut, cette démonstration publique utilise le mode Groq (Llama 3.3) pour la fluidité web. L'application reste 100 % conçue pour une exécution souveraine, locale et hors-ligne (sélectionnable dans les ⚙️ Réglages IA).
         </p>
       </div>
 
