@@ -1,21 +1,53 @@
 import { useState, useEffect } from 'react'
 
-function getModelTypeBadge(modelName) {
-  if (!modelName) return null
-  const isReasoning = /gemma|qwq|reasoning/i.test(modelName)
-  const isRecommended = /llama-?3\.?1-?8b|mistral-?7b/i.test(modelName)
-  
-  if (isRecommended) {
-    return { 
-      icon: '⭐', 
-      text: 'Modèle Recommandé — Inférence rapide (< 15s) et classification ultra-précise.', 
-      colorClass: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800' 
+function getModelTypeBadge(modelObj) {
+  if (!modelObj) {
+    return {
+      icon: '⚠️',
+      text: 'Aucun modèle détecté. Vérifiez que votre serveur local (LM Studio / Ollama) est démarré.',
+      colorClass: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800'
     }
-  } else if (isReasoning) {
+  }
+
+  const id = typeof modelObj === 'string' ? modelObj : modelObj.id;
+  if (!id) return null;
+  
+  const isReasoning = /gemma|qwq|reasoning/i.test(id)
+  
+  let params = 0;
+  const paramMatch = id.match(/(\d+(?:\.\d+)?)b/i);
+  if (paramMatch) params = parseFloat(paramMatch[1]);
+  
+  let bits = 8;
+  const quantStr = (typeof modelObj === 'object' && modelObj.quantization) ? modelObj.quantization : id;
+  const quantMatch = quantStr.match(/q(\d+)/i);
+  if (quantMatch) bits = parseInt(quantMatch[1], 10);
+  
+  let estimatedVram = params > 0 ? (params * bits / 8) + 1.5 : 0;
+  if (typeof modelObj === 'object' && modelObj.size_bytes) {
+    estimatedVram = (modelObj.size_bytes / 1073741824) + 1.5;
+  }
+  
+  const isVoluminous = estimatedVram > 14 || /32b|70b/i.test(id);
+  const isRecommended = (estimatedVram > 0 && estimatedVram < 10) || /llama-?3\.?1-?8b|mistral-?7b/i.test(id);
+
+  if (isReasoning) {
     return { 
       icon: '🟡', 
       text: 'Modèle Reasoning — Mode analyse approfondie optimisé.', 
       colorClass: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800' 
+    }
+  } else if (isVoluminous) {
+    return {
+      icon: '🔵',
+      text: "Modèle Volumineux — Assurez-vous d'avoir plus de 12 Go de VRAM sur votre GPU.",
+      colorClass: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'
+    }
+  } else if (isRecommended) {
+    return { 
+      icon: '⭐', 
+      text: 'Modèle Recommandé — Inférence rapide (< 15s) et empreinte VRAM faible (~5-8 Go).', 
+      colorClass: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800' 
     }
   } else {
     return { 
@@ -71,10 +103,6 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
 
       if (isMounted) setIsFetchingModels(true)
       try {
-        let endpoint = provider === 'local' 
-          ? `${localUrl.replace(/\/+$/, '').replace(/\/[vV]1$/, '')}/v1/models` 
-          : 'https://api.groq.com/openai/v1/models'
-        
         let headers = { 'ngrok-skip-browser-warning': 'true' }
         if (provider === 'groq') {
           if (!apiKey) {
@@ -84,12 +112,26 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
           headers['Authorization'] = `Bearer ${apiKey}`
         }
 
-        const res = await fetch(endpoint, { method: 'GET', headers })
-        if (!res.ok) throw new Error('Status ' + res.status)
-        const data = await res.json()
+        let data = null;
+        if (provider === 'local') {
+          const baseUrl = localUrl.replace(/\/+$/, '').replace(/\/[vV]1$/, '');
+          try {
+            const resV0 = await fetch(`${baseUrl}/api/v0/models`, { method: 'GET', headers })
+            if (resV0.ok) data = await resV0.json()
+          } catch (e) {
+            // ignore v0 failure
+          }
+          if (!data || !Array.isArray(data.data)) {
+            const resV1 = await fetch(`${baseUrl}/v1/models`, { method: 'GET', headers })
+            if (resV1.ok) data = await resV1.json()
+          }
+        } else {
+          const res = await fetch('https://api.groq.com/openai/v1/models', { method: 'GET', headers })
+          if (res.ok) data = await res.json()
+        }
         
         if (isMounted && data && Array.isArray(data.data)) {
-          const filteredModels = data.data.filter(m => !/embed|nomic|rerank/i.test(m.id))
+          const filteredModels = data.data.filter(m => m.type !== 'embeddings' && !/embed|nomic|rerank/i.test(m.id))
           setModelsList(filteredModels)
           if (provider === 'local' && !localModel && filteredModels.length > 0) setLocalModel(filteredModels[0].id)
           if (provider === 'groq' && !groqModel && filteredModels.length > 0) setGroqModel(filteredModels[0].id)
@@ -173,8 +215,12 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
     onClose()
   }
 
-  const modelBadgeLocal = provider === 'local' ? getModelTypeBadge(localModel) : null
-  const modelBadgeGroq = provider === 'groq' ? getModelTypeBadge(groqModel) : null
+  const selectedLocalModelObj = modelsList.find(m => m.id === localModel) || localModel
+  const modelBadgeLocal = provider === 'local' ? 
+    ((!isFetchingModels && modelsList.length === 0) ? getModelTypeBadge(null) : getModelTypeBadge(selectedLocalModelObj)) : null
+
+  const selectedGroqModelObj = modelsList.find(m => m.id === groqModel) || groqModel
+  const modelBadgeGroq = provider === 'groq' ? getModelTypeBadge(selectedGroqModelObj) : null
 
   return (
     <div
@@ -362,7 +408,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                   <li>Télécharger un modèle d'IA local recommandé : Meta-Llama-3.1-8B-Instruct ou Mistral-7B-Instruct-v0.3.</li>
                   <li><strong>ACTIVER IMPÉRATIVEMENT LE CORS</strong> (Cross-Origin Resource Sharing) dans les paramètres du serveur local.</li>
                   <li>Démarrer le serveur local de l'application.</li>
-                  <li>Copier-coller l'adresse IP (ex: <code className="bg-slate-800 text-emerald-400 dark:bg-slate-900 dark:text-emerald-300 px-2 py-0.5 rounded text-xs font-mono">http://localhost:1234/v1</code>) ci-dessus.</li>
+                  <li>Copier-coller l'adresse IP (ex: <code className="bg-slate-800 text-emerald-400 dark:bg-slate-900 dark:text-emerald-300 px-2 py-0.5 rounded text-xs font-mono">http://localhost:1234/v1</code>). Si votre navigateur bloque les requêtes (CORS/HTTP), utilisez un tunnel Ngrok pour obtenir un lien sécurisé HTTPS.</li>
                 </ol>
               </div>
             </div>
