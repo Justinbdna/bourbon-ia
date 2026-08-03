@@ -216,16 +216,29 @@ export async function classifyAmendments(amendements, options = {}) {
         const payload = {
           user_prompt: userPrompt,
           provider: 'groq',
-          model: aiSettings.groqModel || 'llama3-8b-8192',
+          model: aiSettings.groqModel || 'llama-3.3-70b-versatile',
           api_key: aiSettings.apiKey || null,
           system_prompt: systemPrompt
         }
-        const res = await fetch(endpoint, {
+        let res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
           signal,
           body: JSON.stringify(payload)
         })
+
+        // Mécanisme de fallback automatique Groq
+        if (!res.ok && (res.status === 429 || res.status === 503)) {
+          console.warn(`[Groq] Erreur ${res.status} sur ${payload.model}, tentative de fallback sur llama-3.1-8b-instant...`)
+          payload.model = 'llama-3.1-8b-instant'
+          res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+            signal,
+            body: JSON.stringify(payload)
+          })
+        }
+
         if (!res.ok) throw new Error(`Erreur Backend ${res.status}`)
         const data = await res.json()
         if (Array.isArray(data)) {

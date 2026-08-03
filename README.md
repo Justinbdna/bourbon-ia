@@ -13,7 +13,9 @@ Pour des questions de **confidentialité absolue**, l'usage d'IA Cloud classique
 Bourbon.IA est cette solution.
 
 ### 🎬 Démonstration Vidéo
-<video src="hackathon-an-2026/docs/Bourbon-IA-Demo.mp4" controls width="100%" poster="hackathon-an-2026/images/01-accueil.png"></video>
+[![▶️ Voir la Démonstration Vidéo Bourbon.IA](hackathon-an-2026/images/01-accueil.png)](https://drive.google.com/file/d/1qQ96TeCVFPa59oXvuGqRI4gyOHlKo6OB/view?usp=sharing)
+
+*Cliquez sur l'image ci-dessus pour lire la vidéo de démonstration complète (sur Google Drive).*
 
 ### 📸 Aperçu de l'Interface
 ![Page d'accueil Bourbon.IA](hackathon-an-2026/images/01-accueil.png)
