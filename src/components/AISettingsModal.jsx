@@ -1,56 +1,148 @@
 import { useState, useEffect } from 'react'
 
+function getVramWarning(modelName) {
+  if (!modelName) return null
+  const name = modelName.toLowerCase()
+  const match = name.match(/(\d+)b/i)
+  if (!match) return null
+  const size = parseInt(match[1], 10)
+
+  if (size < 10) {
+    return { type: 'vert', icon: '🟢', text: 'Léger & Ultra-Rapide (~6-8 Go VRAM) — Recommandé pour classement en < 15s.', colorClass: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800' }
+  } else if (size >= 10 && size <= 16) {
+    return { type: 'jaune', icon: '🟡', text: 'Modéré (~8-12 Go VRAM) — Nécessite un GPU dédié. Si l\'analyse est trop rapide et inaccurate, réactivez \'Thinking\' dans LM Studio.', colorClass: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800' }
+  } else {
+    return { type: 'rouge', icon: '🔴', text: 'Lourd (20 Go+ VRAM) — Risque de bascule sur la RAM système (CPU) et de forte lenteur si la VRAM est insuffisante.', colorClass: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800' }
+  }
+}
+
 export default function AISettingsModal({ isOpen, onClose, onSave, currentSettings }) {
   const [provider, setProvider] = useState(currentSettings?.provider || 'groq_auto')
   const [apiKey, setApiKey] = useState(currentSettings?.apiKey || '')
   const [localUrl, setLocalUrl] = useState(currentSettings?.localUrl || 'http://localhost:1234/v1')
+  const [localModel, setLocalModel] = useState(currentSettings?.localModel || '')
+  const [groqModel, setGroqModel] = useState(currentSettings?.groqModel || '')
+  
+  const [modelsList, setModelsList] = useState([])
+  const [isFetchingModels, setIsFetchingModels] = useState(false)
   const [pingStatus, setPingStatus] = useState(null)
 
   useEffect(() => {
     if (isOpen) {
-      setProvider(currentSettings?.provider || 'groq')
+      setProvider(currentSettings?.provider || 'groq_auto')
       setApiKey(currentSettings?.apiKey || '')
       setLocalUrl(currentSettings?.localUrl || 'http://localhost:1234/v1')
+      setLocalModel(currentSettings?.localModel || '')
+      setGroqModel(currentSettings?.groqModel || '')
+      setPingStatus(null)
     }
   }, [isOpen, currentSettings])
+
+  useEffect(() => {
+    if (!isOpen) return
+    let isMounted = true
+
+    const fetchModels = async () => {
+      if (provider === 'groq_auto') {
+        if (isMounted) {
+          setModelsList([{ id: 'llama3-8b-8192' }])
+          setIsFetchingModels(false)
+        }
+        return
+      }
+
+      if (isMounted) setIsFetchingModels(true)
+      try {
+        let endpoint = provider === 'local' 
+          ? `${localUrl.replace(/\/+$/, '').replace(/\/[vV]1$/, '')}/v1/models` 
+          : 'https://api.groq.com/openai/v1/models'
+        
+        let headers = { 'ngrok-skip-browser-warning': 'true' }
+        if (provider === 'groq') {
+          if (!apiKey) {
+            if (isMounted) { setModelsList([]); setIsFetchingModels(false); }
+            return
+          }
+          headers['Authorization'] = `Bearer ${apiKey}`
+        }
+
+        const res = await fetch(endpoint, { method: 'GET', headers })
+        if (!res.ok) throw new Error('Status ' + res.status)
+        const data = await res.json()
+        
+        if (isMounted && data && Array.isArray(data.data)) {
+          setModelsList(data.data)
+          if (provider === 'local' && !localModel && data.data.length > 0) setLocalModel(data.data[0].id)
+          if (provider === 'groq' && !groqModel && data.data.length > 0) setGroqModel(data.data[0].id)
+        } else if (isMounted) {
+          setModelsList([])
+        }
+      } catch (err) {
+        if (isMounted) setModelsList([])
+      }
+      if (isMounted) setIsFetchingModels(false)
+    }
+
+    const timer = setTimeout(() => {
+      fetchModels()
+    }, 500)
+    
+    return () => {
+      isMounted = false
+      clearTimeout(timer)
+    }
+  }, [isOpen, provider, localUrl, apiKey])
 
   if (!isOpen) return null
 
   const handleSave = async () => {
     if (provider === 'local' || provider === 'groq') {
       try {
-        setPingStatus({ type: 'loading', message: 'Test de connexion...' })
-        let endpoint = provider === 'local' 
-          ? `${localUrl.replace(/\/+$/, '').replace(/\/[vV]1$/, '')}/v1/models` 
-          : 'https://api.groq.com/openai/v1/models'
+        setPingStatus({ type: 'loading', message: 'Test de connexion et chargement du modèle...' })
         
+        let chatEndpoint = provider === 'local' 
+          ? `${localUrl.replace(/\/+$/, '').replace(/\/[vV]1$/, '')}/v1/chat/completions` 
+          : 'https://api.groq.com/openai/v1/chat/completions'
+
         let headers = {
+          'Content-Type': 'application/json',
           'ngrok-skip-browser-warning': 'true'
         }
         if (provider === 'groq') headers['Authorization'] = `Bearer ${apiKey}`
 
-        const res = await fetch(endpoint, { method: 'GET', headers })
+        const modelToTest = provider === 'local' ? localModel : groqModel
+
+        const res = await fetch(chatEndpoint, { 
+          method: 'POST', 
+          headers,
+          body: JSON.stringify({
+            model: modelToTest || 'default',
+            messages: [{ role: 'user', content: 'ping' }],
+            max_tokens: 1
+          })
+        })
+        
         if (!res.ok) throw new Error('Status ' + res.status)
 
-        setPingStatus({ type: 'success', message: 'Connexion établie avec succès' })
+        setPingStatus({ type: 'success', message: '🟢 Modèle chargé et connecté' })
         setTimeout(() => {
           setPingStatus(null)
-          onSave({ provider, apiKey: provider === 'groq_auto' ? '' : apiKey, localUrl })
+          onSave({ provider, apiKey: provider === 'groq_auto' ? '' : apiKey, localUrl, localModel, groqModel })
           onClose()
         }, 1500)
         return
       } catch (err) {
-        setPingStatus({ type: 'error', message: 'Erreur : Serveur injoignable ou CORS bloqué' })
+        setPingStatus({ type: 'error', message: '⚠️ Échec du chargement : Mémoire VRAM insuffisante ou modèle indisponible sur le serveur hôte.' })
         setTimeout(() => setPingStatus(null), 4000)
-        // On permet quand même de sauvegarder si l'utilisateur insiste ?
-        // Non, on bloque pas, on garde juste la modale ouverte sur erreur. 
         return
       }
     }
     
-    onSave({ provider, apiKey: provider === 'groq_auto' ? '' : apiKey, localUrl })
+    onSave({ provider, apiKey: provider === 'groq_auto' ? '' : apiKey, localUrl, localModel, groqModel })
     onClose()
   }
+
+  const vramWarning = provider === 'local' ? getVramWarning(localModel) : null
 
   return (
     <div
@@ -143,6 +235,24 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                 <p className="text-xs text-ink-700 dark:text-ink-300 mt-2">
                   Si les quotas sont atteints, vous pouvez utiliser la vôtre (Groq ou compatible).
                 </p>
+                
+                {provider === 'groq' && modelsList.length > 0 && (
+                  <div className="mt-4 space-y-3">
+                    <label className="block text-sm font-medium text-slate-800 dark:text-plume">
+                      Modèle
+                    </label>
+                    <select
+                      value={groqModel}
+                      onChange={e => setGroqModel(e.target.value)}
+                      className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none"
+                    >
+                      {modelsList.map(m => (
+                        <option key={m.id} value={m.id}>{m.id}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {provider === 'groq' && isFetchingModels && <p className="text-xs text-ink-500">Chargement des modèles...</p>}
               </div>
               <div className="flex items-start gap-2 bg-slate-50/50 dark:bg-obsidienne/50 p-3 rounded-md border border-slate-100 dark:border-slate-800/50">
                 <span className="text-sm">🔒</span>
@@ -170,6 +280,35 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                   <p>💡 <strong>Navigateur recommandé :</strong> Google Chrome ou Edge (basés sur Chromium).</p>
                   <p className="text-amber-700 dark:text-amber-400/90">⚠️ <strong>Attention Sécurité (CORS) :</strong> Votre adresse locale DOIT obligatoirement commencer par <strong>https://</strong> (utilisez un tunnel sécurisé comme Ngrok pour convertir votre port local http://127.0.0.1:1234).</p>
                 </div>
+                
+                {provider === 'local' && (modelsList.length > 0 || isFetchingModels) && (
+                  <div className="mt-4 space-y-3">
+                    <label className="block text-sm font-medium text-slate-800 dark:text-plume">
+                      Modèle IA
+                    </label>
+                    {isFetchingModels ? (
+                      <p className="text-xs text-ink-500">Recherche des modèles sur l'hôte local...</p>
+                    ) : (
+                      <>
+                        <select
+                          value={localModel}
+                          onChange={e => setLocalModel(e.target.value)}
+                          className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none"
+                        >
+                          {modelsList.map(m => (
+                            <option key={m.id} value={m.id}>{m.id}</option>
+                          ))}
+                        </select>
+                        {vramWarning && (
+                          <div className={`p-2 mt-2 rounded-md border text-xs flex gap-2 items-start ${vramWarning.colorClass}`}>
+                            <span>{vramWarning.icon}</span>
+                            <span>{vramWarning.text}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               {pingStatus && provider === 'local' && (
@@ -186,6 +325,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                   <li><strong>ACTIVER IMPÉRATIVEMENT LE CORS</strong> (Cross-Origin Resource Sharing) dans les paramètres du serveur local.</li>
                   <li>Démarrer le serveur local de l'application.</li>
                   <li>Copier-coller l'adresse IP (ex: <code className="bg-ink-100 dark:bg-ink-800 px-1 py-0.5 rounded text-xs">http://localhost:1234/v1</code>) ci-dessus.</li>
+                  <li><strong>⚡ Vitesse & Précision :</strong> Pour un classement optimal en 15s, privilégiez un modèle Instruct (Llama 3.1 8B / Mistral 7B). Si vous utilisez Gemma 4, conservez 'Enable Thinking' activé avec une Température de 0.2.</li>
                 </ol>
               </div>
             </div>

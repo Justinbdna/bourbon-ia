@@ -191,7 +191,7 @@ export async function classifyAmendments(amendements, options = {}) {
           headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
           signal,
           body: JSON.stringify({
-            model: 'local-model',
+            model: aiSettings.localModel || 'local-model',
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt }
@@ -209,6 +209,7 @@ export async function classifyAmendments(amendements, options = {}) {
         const payload = {
           user_prompt: userPrompt,
           provider: 'groq',
+          model: aiSettings.groqModel || 'llama3-8b-8192',
           api_key: aiSettings.apiKey || null,
           system_prompt: systemPrompt,
           max_tokens: dynamicMaxTokens
