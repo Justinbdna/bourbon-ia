@@ -32,18 +32,20 @@ Pour les besoins du Hackathon, le prototype est un monolithe volontaire. Ce choi
 
 Pour une mise en production, l'architecture évoluera vers des **Micro-services conteneurisés** (Docker/K8s) avec chiffrement de bout en bout.
 
-### Moteur LLM — Bonsai 27B
-L'application est configurée pour fonctionner en local avec des modèles surpuissants et quantifiés. Notre configuration de référence :
+### 🧠 Moteurs LLM & Inférence Locale Dynamique
+L'application est configurée pour fonctionner en local avec une gestion intelligente de la mémoire vidéo (VRAM). Le Front-end interroge l'API native du serveur local, calcule l'empreinte mémoire au mégaoctet près, décharge automatiquement les anciens modèles pour éviter les crashs (*Out of Memory*), et adapte ses prompts selon l'architecture du modèle.
 
-| Modèle | Paramètres | Usage recommandé |
+Notre configuration de référence :
+| Modèle | Type | Usage recommandé |
 |---|---|---|
-| **Qwen 3.5 27B / Gemma 4 31B** | 27-31 milliards | **Modèles de référence denses et éprouvés** pour la mise en production. |
-| **Bonsai 27B** | 27 milliards | Compression extrême (1-bit/ternaire) très récente, conservée en phase d'expérimentation. |
-| **Mistral 7B Instruct v0.3** | 7 milliards | Rapide et efficace pour les tâches de classification simples. |
-| **Qwen 3.5 9B** | 9 milliards | Très bon compromis pour les machines avec < 12 Go VRAM. |
-| **QWQ 32B** | 32 milliards | Pour les configurations très haut de gamme (Nécessite > 16 Go VRAM). |
+| **Meta-Llama 3.1 8B / Mistral 7B** | Instruct | ⭐ **Modèle Recommandé :** Inférence ultra-rapide (< 15s) et classification parfaite. Idéal pour les GPU standards (8 Go VRAM). |
+| **Gemma 4 12B (QAT)** | Reasoning | 🟡 **Analyse approfondie :** Pensée bridée automatiquement par le front-end pour optimiser la vitesse sans perdre en précision. |
+| **Qwen 3.5 35B / QWQ 32B** | Dense | 🔵 **Traitement volumineux :** Modèles lourds réservés aux serveurs disposant de plus de 16 Go de VRAM. |
 
-L'intégration de l'API Cloud **Groq** (Llama 3.3 70B) n'est présente que pour assurer la fluidité de la démonstration publique, dans l'attente du déploiement d'une infrastructure GPU souveraine.
+### ⚡ Innovations V1.5 (Gestion Adaptative)
+- Déchargement automatique de la VRAM (Unload) lors de la bascule de modèle local dans la modale.
+- Adaptation dynamique des prompts et des températures (0.1 vs 0.2) selon l'architecture du modèle (Reasoning vs Instruct).
+- Détection heuristique de la VRAM via l'API native `v0` de LM Studio.
 
 ---
 
@@ -106,4 +108,4 @@ uvicorn api.index:app --reload
 
 ---
 
-*Hackathon Assemblée nationale 2025 — Équipe Bourbon.IA*
+*Hackathon Assemblée nationale 2026 — Équipe Bourbon.IA*
