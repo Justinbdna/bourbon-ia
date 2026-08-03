@@ -129,3 +129,39 @@ export function preSortAmendements(amendements) {
     return result
   })
 }
+
+/**
+ * Version asynchrone du pré-tri : déporte le calcul dans un Web Worker
+ * pour éviter de bloquer le Main Thread du navigateur sur les gros volumes.
+ * Fallback synchrone si les Workers ne sont pas disponibles.
+ */
+export function preSortAmendementsAsync(amendements) {
+  if (!amendements || amendements.length === 0) return Promise.resolve([])
+  
+  // Seuil : utiliser le Worker uniquement si le volume le justifie (> 200 amendements)
+  if (amendements.length <= 200 || typeof Worker === 'undefined') {
+    return Promise.resolve(preSortAmendements(amendements))
+  }
+
+  return new Promise((resolve, reject) => {
+    try {
+      const worker = new Worker(
+        new URL('./sortingWorker.js', import.meta.url),
+        { type: 'module' }
+      )
+      worker.onmessage = (e) => {
+        resolve(e.data)
+        worker.terminate()
+      }
+      worker.onerror = (err) => {
+        console.warn('[Bourbon.IA] Web Worker indisponible, fallback synchrone.', err)
+        resolve(preSortAmendements(amendements))
+        worker.terminate()
+      }
+      worker.postMessage(amendements)
+    } catch (e) {
+      console.warn('[Bourbon.IA] Web Worker non supporté, fallback synchrone.', e)
+      resolve(preSortAmendements(amendements))
+    }
+  })
+}

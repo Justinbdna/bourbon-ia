@@ -1,4 +1,4 @@
-import { preSortAmendements } from '../utils/sortingEngine'
+import { preSortAmendements, preSortAmendementsAsync } from '../utils/sortingEngine'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:8000')
 
@@ -85,8 +85,8 @@ export async function classifyAmendments(amendements, options = {}) {
   } = options
   const provider = aiSettings.provider || 'local'
 
-  // PRÉ-TRI MÉCANIQUE
-  const preSorted = preSortAmendements(amendements)
+  // PRÉ-TRI MÉCANIQUE (off-Main-Thread via Web Worker si > 200 amendements)
+  const preSorted = await preSortAmendementsAsync(amendements)
   const toClassifyByLLM = preSorted.filter(am => !am._skipLLM)
   const preClassified = preSorted.filter(am => am._skipLLM).map(am => ({
     id: am.id,

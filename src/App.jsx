@@ -61,11 +61,11 @@ export default function App() {
     restore()
   }, [consentGiven])
 
-  // ─── Auto-save chiffré ───
+  // ─── Auto-save chiffré (debounce 3s pour éviter la saturation CPU pendant la classification) ───
   useEffect(() => {
     if (!consentGiven || amendments.length === 0) return
     let cancelled = false
-    async function save() {
+    const debounceTimer = setTimeout(async () => {
       try {
         const cipher = await encrypt(JSON.stringify(amendments))
         if (!cancelled) {
@@ -74,9 +74,8 @@ export default function App() {
       } catch (e) {
         console.warn('Échec de l\'auto-save chiffré.', e)
       }
-    }
-    save()
-    return () => { cancelled = true }
+    }, 3000)
+    return () => { cancelled = true; clearTimeout(debounceTimer) }
   }, [amendments, consentGiven])
 
   // ─── Nettoyage au démontage (anti memory leak) ───
