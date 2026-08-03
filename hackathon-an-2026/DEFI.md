@@ -60,14 +60,15 @@ Pour les besoins du Hackathon, le front-end est déployé, mais le backend néce
 - [ ] `legiwatch-database-parlement` — Base de données Parlement ✺ LegiWatch
 - [ ] `legiwatch-serveur-mcp-parlement` — Serveur MCP Parlement ✺ LegiWatch
 
+### 🎬 Démonstration Vidéo
+<video src="docs/Bourbon-IA-Démo.mp4" controls width="100%"></video>
+
 ### Galerie
 ![Page d'accueil Bourbon.IA](images/01-accueil.png)
 ![Interface de travail - Mode Sombre](images/02-interface-sombre.png)
 ![Interface de travail - Mode Clair](images/03-interface-claire.png)
 ![Modale de configuration IA locale](images/04-reglages-ia.png)
-
-### 🎥 Vidéo de Démonstration
-[👉 Visionner la démonstration vidéo de Bourbon.IA](lien_vers_la_video_a_remplacer_par_le_tech_lead)
+![Résultats du classement automatique](images/05-resultats-classement.png)
 
 ### Documents
 - [Diapositives de présentation Bourbon.IA](docs/bourbon.ia.pdf)

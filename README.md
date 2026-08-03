@@ -12,11 +12,15 @@ Pour des questions de **confidentialité absolue**, l'usage d'IA Cloud classique
 
 Bourbon.IA est cette solution.
 
+### 🎬 Démonstration Vidéo
+<video src="hackathon-an-2026/docs/Bourbon-IA-Démo.mp4" controls width="100%"></video>
+
 ### 📸 Aperçu de l'Interface
 ![Page d'accueil Bourbon.IA](hackathon-an-2026/images/01-accueil.png)
 ![Interface de travail - Mode Sombre](hackathon-an-2026/images/02-interface-sombre.png)
 ![Interface de travail - Mode Clair](hackathon-an-2026/images/03-interface-claire.png)
 ![Modale de configuration IA locale](hackathon-an-2026/images/04-reglages-ia.png)
+![Résultats du classement automatique](hackathon-an-2026/images/05-resultats-classement.png)
 
 ---
 
