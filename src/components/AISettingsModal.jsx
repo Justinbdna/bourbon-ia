@@ -16,6 +16,14 @@ function getVramWarning(modelName) {
   }
 }
 
+function formatModelName(id) {
+  if (!id) return ''
+  const parts = id.split('/')
+  const baseName = parts[parts.length - 1]
+  let formatted = baseName.replace(/[-_]/g, ' ')
+  return formatted.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+}
+
 export default function AISettingsModal({ isOpen, onClose, onSave, currentSettings }) {
   const [provider, setProvider] = useState(currentSettings?.provider || 'groq_auto')
   const [apiKey, setApiKey] = useState(currentSettings?.apiKey || '')
@@ -71,9 +79,10 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
         const data = await res.json()
         
         if (isMounted && data && Array.isArray(data.data)) {
-          setModelsList(data.data)
-          if (provider === 'local' && !localModel && data.data.length > 0) setLocalModel(data.data[0].id)
-          if (provider === 'groq' && !groqModel && data.data.length > 0) setGroqModel(data.data[0].id)
+          const filteredModels = data.data.filter(m => !/embed|nomic|rerank/i.test(m.id))
+          setModelsList(filteredModels)
+          if (provider === 'local' && !localModel && filteredModels.length > 0) setLocalModel(filteredModels[0].id)
+          if (provider === 'groq' && !groqModel && filteredModels.length > 0) setGroqModel(filteredModels[0].id)
         } else if (isMounted) {
           setModelsList([])
         }
@@ -100,6 +109,18 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
       try {
         setPingStatus({ type: 'loading', message: 'Test de connexion et chargement du modèle...' })
         
+        if (provider === 'local') {
+          try {
+            const unloadEndpoint = `${localUrl.replace(/\/+$/, '').replace(/\/[vV]1$/, '')}/v1/models/unload`
+            await fetch(unloadEndpoint, { 
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' }
+            })
+          } catch (e) {
+            console.warn("Échec du déchargement du modèle", e)
+          }
+        }
+
         let chatEndpoint = provider === 'local' 
           ? `${localUrl.replace(/\/+$/, '').replace(/\/[vV]1$/, '')}/v1/chat/completions` 
           : 'https://api.groq.com/openai/v1/chat/completions'
@@ -247,7 +268,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                       className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none"
                     >
                       {modelsList.map(m => (
-                        <option key={m.id} value={m.id}>{m.id}</option>
+                        <option key={m.id} value={m.id}>{formatModelName(m.id)}</option>
                       ))}
                     </select>
                   </div>
@@ -296,7 +317,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                           className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none"
                         >
                           {modelsList.map(m => (
-                            <option key={m.id} value={m.id}>{m.id}</option>
+                            <option key={m.id} value={m.id}>{formatModelName(m.id)}</option>
                           ))}
                         </select>
                         {vramWarning && (
