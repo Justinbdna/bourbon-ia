@@ -9,32 +9,32 @@ export default function ClassifyButton({ disabled, loading, error, warnings = []
           </p>
         </div>
 
-        <div className="flex items-center gap-4 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
           <label className="flex items-center cursor-pointer gap-2 mr-2" title="Étudie le dispositif ET l'exposé sommaire de chaque amendement.">
-            <div className="relative">
+            <div className="relative shrink-0">
               <input type="checkbox" className="sr-only" checked={isReasoningMode} onChange={(e) => onToggleReasoning(e.target.checked)} disabled={loading} />
               <div className={`block w-10 h-6 rounded-full transition-colors ${isReasoningMode ? 'bg-red-600' : 'bg-slate-300 dark:bg-slate-700'}`}></div>
               <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${isReasoningMode ? 'transform translate-x-4' : ''}`}></div>
             </div>
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            <span className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300">
               Analyse Profonde
             </span>
           </label>
 
           {loading ? (
-            <div className="flex items-center gap-4">
-              <div className="flex flex-col items-end">
-                <span className="text-sm font-bold text-bourbon">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+              <div className="flex flex-col items-start sm:items-end">
+                <span className="text-xs sm:text-sm font-bold text-bourbon">
                   🧠 L'IA analyse l'amendement {progressInfo?.current || 0} sur {progressInfo?.total || 0}...
                 </span>
-                <span className="text-xs text-slate-500 flex items-center gap-1 animate-pulse">
+                <span className="text-[10px] sm:text-xs text-slate-500 flex items-center gap-1 animate-pulse">
                   Temps écoulé : {progressInfo?.elapsed || 0} s
                 </span>
               </div>
               <button
                 type="button"
                 onClick={onStop}
-                className="rounded-md bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition-all shadow-[0_0_15px_rgba(220,38,38,0.5)] flex items-center gap-2"
+                className="w-full sm:w-auto rounded-md bg-red-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-red-700 transition-all shadow-[0_0_15px_rgba(220,38,38,0.5)] flex items-center justify-center gap-2"
               >
                 Annuler
               </button>
@@ -44,7 +44,7 @@ export default function ClassifyButton({ disabled, loading, error, warnings = []
               type="button"
               disabled={disabled}
               onClick={onClick}
-              className="rounded-md bg-bourbon px-5 py-2.5 text-sm font-semibold text-white hover:bg-bourbon/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-[0_0_15px_rgba(217,18,39,0.5)] hover:shadow-[0_0_20px_rgba(217,18,39,0.7)] flex items-center justify-center gap-2"
+              className="w-full sm:w-auto rounded-md bg-bourbon px-5 py-2.5 text-xs sm:text-sm font-semibold text-white hover:bg-bourbon/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-[0_0_15px_rgba(217,18,39,0.5)] hover:shadow-[0_0_20px_rgba(217,18,39,0.7)] flex items-center justify-center gap-2 text-center"
             >
               Lancer le classement IA
             </button>

@@ -87,20 +87,20 @@ export default function ImportPanel({ onImport }) {
   }
 
   return (
-    <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 p-5">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+    <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 p-4 sm:p-5">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="font-display text-lg text-slate-900 dark:text-plume">Récupérer des amendements</h2>
-          <p className="text-sm text-ink-500 dark:text-ink-300 mt-0.5">
+          <h2 className="font-display text-base sm:text-lg text-slate-900 dark:text-plume">Récupérer des amendements</h2>
+          <p className="text-xs sm:text-sm text-ink-500 dark:text-ink-300 mt-0.5">
             Importe un fichier JSON, ou colle directement les données.
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="rounded-md bg-slate-900 text-white hover:bg-black dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white px-4 py-2 text-sm font-medium transition-colors"
+            className="w-full sm:w-auto rounded-md bg-slate-900 text-white hover:bg-black dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white px-4 py-2 text-xs sm:text-sm font-medium transition-colors text-center"
           >
             Importer un fichier JSON
           </button>
@@ -115,7 +115,7 @@ export default function ImportPanel({ onImport }) {
           <button
             type="button"
             onClick={() => setPasteOpen((v) => !v)}
-            className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium text-slate-700 dark:text-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 dark:hover:border-neutral-600 transition-colors"
+            className="w-full sm:w-auto rounded-md border border-neutral-300 px-4 py-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 dark:hover:border-neutral-600 transition-colors text-center"
           >
             Coller du JSON
           </button>

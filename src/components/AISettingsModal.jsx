@@ -224,12 +224,12 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-title"
     >
-      <div className="bg-white dark:bg-surface text-ink-900 dark:text-plume border border-ink-200 dark:border-ink-700 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
+      <div className="bg-white dark:bg-surface text-ink-900 dark:text-plume border border-ink-200 dark:border-ink-700 rounded-xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden">
         <div className="px-6 py-4 border-b border-ink-200 dark:border-ink-700 bg-slate-50/50 dark:bg-obsidienne flex justify-between items-center">
           <h2 id="settings-title" className="text-lg font-bold text-slate-900 dark:text-plume">⚙️ Réglages IA</h2>
           <button onClick={onClose} className="text-ink-500 hover:text-ink-700 dark:text-ink-400 dark:hover:text-plume transition-colors" aria-label="Fermer">
@@ -237,37 +237,37 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
           </button>
         </div>
         
-        <div className="p-6 space-y-6">
-          <div className="flex gap-4">
+        <div className="p-4 sm:p-6 space-y-6 overflow-y-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button
               onClick={() => setProvider('groq_auto')}
-              className={`flex-1 py-2 px-2 rounded-md border font-medium text-sm transition-colors ${
+              className={`w-full py-2 px-2 rounded-md border font-medium text-xs sm:text-sm text-center transition-colors ${
                 provider === 'groq_auto' 
                   ? 'bg-slate-100 border-slate-500 text-slate-900 dark:bg-slate-900/50 dark:border-slate-400 dark:text-plume shadow-sm' 
                   : 'bg-transparent border-ink-300 text-ink-600 hover:bg-ink-50 dark:border-ink-600 dark:text-ink-300 dark:hover:bg-ink-800'
               }`}
             >
-              ☁️ Groq (Démo non-souveraine)
+              ☁️ Groq (Démo)
             </button>
             <button
               onClick={() => { setProvider('groq'); setPingStatus(null); }}
-              className={`flex-1 py-2 px-2 rounded-md border font-medium text-sm transition-colors ${
+              className={`w-full py-2 px-2 rounded-md border font-medium text-xs sm:text-sm text-center transition-colors ${
                 provider === 'groq' 
                   ? 'bg-slate-100 border-slate-500 text-slate-900 dark:bg-slate-900/50 dark:border-slate-400 dark:text-plume shadow-sm' 
                   : 'bg-transparent border-ink-300 text-ink-600 hover:bg-ink-50 dark:border-ink-600 dark:text-ink-300 dark:hover:bg-ink-800'
               }`}
             >
-              🔑 Clé API (Personnalisée)
+              🔑 Clé API
             </button>
             <button
               onClick={() => { setProvider('local'); setPingStatus(null); }}
-              className={`flex-1 py-2 px-2 rounded-md border font-medium text-sm transition-colors ${
+              className={`w-full py-2 px-2 rounded-md border font-medium text-xs sm:text-sm text-center transition-colors ${
                 provider === 'local'
                   ? 'bg-slate-100 border-slate-500 text-slate-900 dark:bg-slate-900/50 dark:border-slate-400 dark:text-plume shadow-sm' 
                   : 'bg-transparent border-ink-300 text-ink-600 hover:bg-ink-50 dark:border-ink-600 dark:text-ink-300 dark:hover:bg-ink-800'
               }`}
             >
-              💻 IA Locale (Souveraine)
+              💻 IA Locale
             </button>
           </div>
 
@@ -408,7 +408,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                   <li>Télécharger un modèle d'IA local recommandé : Meta-Llama-3.1-8B-Instruct ou Mistral-7B-Instruct-v0.3.</li>
                   <li><strong>ACTIVER IMPÉRATIVEMENT LE CORS</strong> (Cross-Origin Resource Sharing) dans les paramètres du serveur local.</li>
                   <li>Démarrer le serveur local de l'application.</li>
-                  <li>Copier-coller l'adresse IP (ex: <code className="bg-slate-800 text-emerald-400 dark:bg-slate-900 dark:text-emerald-300 px-2 py-0.5 rounded text-xs font-mono">http://localhost:1234/v1</code>). Si votre navigateur bloque les requêtes (CORS/HTTP), utilisez un tunnel Ngrok pour obtenir un lien sécurisé HTTPS.</li>
+                  <li>Copier-coller l'adresse IP (ex: <code className="bg-slate-800 text-emerald-400 dark:bg-slate-900 dark:text-emerald-300 px-2 py-0.5 rounded text-xs font-mono break-all">http://localhost:1234/v1</code>). Si votre navigateur bloque les requêtes (CORS/HTTP), utilisez un tunnel Ngrok pour obtenir un lien sécurisé HTTPS.</li>
                 </ol>
               </div>
             </div>

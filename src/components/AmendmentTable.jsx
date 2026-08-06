@@ -213,7 +213,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 border-t border-ink-100 dark:border-ink-700 bg-ink-50/50 dark:bg-obsidienne/50 px-4 py-3">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-t border-ink-100 dark:border-ink-700 bg-ink-50/50 dark:bg-obsidienne/50 px-4 py-3">
         <div className="flex flex-col gap-1">
           <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
             {amendments.length} amendement{amendments.length > 1 ? 's' : ''} chargé{amendments.length > 1 ? 's' : ''}
@@ -222,13 +222,13 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
             Export au format du préjaune de l'Assemblée (RTF) ou en JSON (sauvegarde complète).
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
           {onExportJson && (
             <button
               type="button"
               disabled={amendments.length === 0}
               onClick={onExportJson}
-              className="rounded-md bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 px-3 py-1.5 text-sm font-medium hover:bg-slate-700 dark:hover:bg-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+              className="w-full sm:w-auto rounded-md bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 px-3 py-1.5 text-xs sm:text-sm font-medium hover:bg-slate-700 dark:hover:bg-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap text-center"
             >
               Exporter en JSON
             </button>
@@ -237,7 +237,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
             type="button"
             disabled={amendments.length === 0}
             onClick={handleExportRtf}
-            className="rounded-md border border-slate-700 dark:border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-900 dark:text-plume hover:bg-slate-100 dark:hover:bg-slate-800 disabled:border-ink-300 disabled:text-ink-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+            className="w-full sm:w-auto rounded-md border border-slate-700 dark:border-slate-300 px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-900 dark:text-plume hover:bg-slate-100 dark:hover:bg-slate-800 disabled:border-ink-300 disabled:text-ink-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap text-center"
           >
             Exporter en préjaune (.rtf)
           </button>
