@@ -325,3 +325,50 @@ export async function classifyAmendments(amendements, options = {}) {
     modele_utilise: provider === 'local' ? 'Modèle Local Souverain' : 'Groq Cloud (Démo)'
   }
 }
+
+
+/**
+ * Pipeline V2 — Appel unique au backend qui orchestre tout
+ * (Tri déterministe → Cache SQLite → LLM Sémantique → Data Mapper)
+ *
+ * Retourne directement les amendements enrichis + classés, prêts pour React.
+ */
+export async function classifyAmendmentsV2(amendements, options = {}) {
+  const {
+    aiSettings = {},
+    signal,
+    onProgress = () => {},
+  } = options
+
+  const localUrl = (aiSettings.localUrl || 'http://localhost:1234/v1').trim().replace(/\/+$/, '')
+
+  const response = await fetch(`${API_BASE_URL}/api/v2/analyser`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+    signal,
+    body: JSON.stringify({
+      amendements,
+      model: aiSettings.localModel || 'local-model',
+      base_url: localUrl,
+      api_key: aiSettings.apiKey || 'local-key',
+      temperature: 0.1,
+      max_tokens: 1024,
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Erreur inconnue')
+    throw new ClassifyError(`Pipeline V2 : ${errorText}`, response.status)
+  }
+
+  const results = await response.json()
+
+  // Notification progressive de l'UI
+  results.forEach((res, i) => {
+    if (res.resultat_ia) {
+      onProgress(res.resultat_ia, i + 1, results.length, [])
+    }
+  })
+
+  return results
+}

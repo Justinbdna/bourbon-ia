@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import ImpactBadge from './ImpactBadge'
 import GroupeBadge from './GroupeBadge'
 import { downloadRtf } from '../utils/exportRtf'
+import SkeletonLoader from './amendment/SkeletonLoader'
 
 const PAGE_SIZE = 50
 
@@ -175,7 +176,25 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 max-w-[120px] truncate" title={auteursText}>{auteursText}</td>
                   <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-40"><ImpactBadge type={a.point_impact?.type || a.point_impact} /></td>
                   <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full max-w-md truncate" title={a.dispositif}>{a.dispositif}</td>
-                  <td className="px-4 py-4 text-sm whitespace-nowrap"><GroupeBadge statut={statutToDisplay} groupe={groupe} isPending={isPending} /></td>
+                  <td className="px-4 py-4 text-sm whitespace-nowrap">
+                    <div className="flex items-center gap-1">
+                      <GroupeBadge statut={statutToDisplay} groupe={groupe} isPending={isPending} />
+                      {/* 💡 Tooltip Chain of Thought (inline) */}
+                      {a.resultat_ia?.analyse_intention && (
+                        <div className="group relative inline-flex">
+                          <span className="cursor-help text-sm" title={a.resultat_ia.analyse_intention}>💡</span>
+                          <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bottom-full right-0 mb-2 w-64 bg-slate-900 text-white text-xs rounded-lg shadow-xl p-2.5 leading-relaxed">
+                            <p className="font-semibold text-amber-300 mb-1">🧠 Raisonnement IA</p>
+                            <p>{a.resultat_ia.analyse_intention}</p>
+                            {a.resultat_ia.niveau_confiance != null && (
+                              <p className="text-slate-400 mt-1">Confiance : {(a.resultat_ia.niveau_confiance * 100).toFixed(0)}%</p>
+                            )}
+                            <div className="absolute top-full right-4 -mt-[1px] border-4 border-transparent border-t-slate-900" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button onClick={(e) => { e.stopPropagation(); onDelete && onDelete(a.id); }} className="text-gray-400 hover:text-red-600 transition-colors">Retirer</button>
                   </td>

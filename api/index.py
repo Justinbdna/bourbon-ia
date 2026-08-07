@@ -22,6 +22,18 @@ try:
 except ModuleNotFoundError:
     from sorting_engine import trier_amendements
 
+# ── Imports V2 (Pipeline enrichi) ──
+try:
+    from api.deterministic_engine import process_deterministic_sorting, normalize_text
+    from api.schemas import EnrichedAmendment, StatutMecanique
+    from api.llm_semantic_engine import evaluate_similitude
+    from api.cache_manager import get_cached_classification, save_classification
+except ModuleNotFoundError:
+    from deterministic_engine import process_deterministic_sorting, normalize_text
+    from schemas import EnrichedAmendment, StatutMecanique
+    from llm_semantic_engine import evaluate_similitude
+    from cache_manager import get_cached_classification, save_classification
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 app = FastAPI(
@@ -301,6 +313,299 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ROUTE V2 — Pipeline End-to-End (Déterministe → Cache → LLM → Data Mapper)
+# ══════════════════════════════════════════════════════════════════════════
+
+class V2AnalyzeRequest(BaseModel):
+    """Payload d'entrée pour le pipeline V2."""
+    amendements: list
+    model: str = "local-model"
+    base_url: str = "http://localhost:1234/v1"
+    api_key: str = "local-key"
+    temperature: float = 0.1
+    max_tokens: int = 1024
+
+
+def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
+    """
+    Convertit un amendement brut (format AN / normalisé) en EnrichedAmendment Pydantic.
+    Tolère les données manquantes grâce aux valeurs par défaut du schéma.
+    """
+    am = raw.get("amendement", raw)
+
+    # ── Identifiants ──
+    uid = am.get("uid") or am.get("id") or f"amdt-{index}"
+    numero = str(am.get("identification", {}).get("numeroLong", "") or am.get("numero", ""))
+
+    # ── Texte juridique ──
+    corps = am.get("corps", {})
+    dispositif_raw = (
+        corps.get("contenuAuteur", {}).get("dispositif", "")
+        or corps.get("cartoucheInformatif", "")
+        or am.get("dispositif", "")
+    )
+    expose = corps.get("contenuAuteur", {}).get("exposeSommaire", "") or am.get("expose_sommaire", "")
+
+    # ── Division / Article ──
+    division = am.get("pointeurFragmentTexte", {}).get("division", {})
+    article = division.get("articleDesignationCourte", "") or division.get("titre", "") or am.get("article", "")
+
+    # ── Auteur ──
+    signataires = am.get("signataires", {})
+    auteur_block = signataires.get("auteur", {}) if isinstance(signataires, dict) else {}
+    auteur_ref = auteur_block.get("acteurRef", "") if isinstance(auteur_block, dict) else ""
+    groupe_ref = auteur_block.get("groupePolitiqueRef", "") if isinstance(auteur_block, dict) else ""
+
+    # ── Identiques officiels ──
+    est_identique = bool(am.get("discussionIdentique") or am.get("estIdentique") or am.get("est_identique_officiel"))
+    id_discussion = am.get("idDiscussionIdentique") or am.get("id_discussion_identique")
+
+    return EnrichedAmendment(
+        amendement_uid=str(uid),
+        numero_long=numero,
+        dispositif_raw=str(dispositif_raw) if dispositif_raw else "",
+        expose_sommaire=str(expose) if expose else "",
+        article_vise=str(article) if article else "",
+        auteur_ref=str(auteur_ref),
+        auteur_nom=am.get("auteur_nom", "") or "",
+        auteur_prenom=am.get("auteur_prenom", "") or "",
+        auteur_trigramme=am.get("auteur_trigramme", "") or "",
+        groupe_politique_ref=str(groupe_ref),
+        groupe_politique=am.get("groupe_politique", "") or "",
+        dossier_ref=am.get("texteLegislatifRef", "") or am.get("dossier_ref", "") or "",
+        dossier_titre=am.get("dossier_titre", "") or "",
+        est_identique_officiel=est_identique,
+        id_discussion_identique=str(id_discussion) if id_discussion else None,
+    )
+
+
+def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) -> dict:
+    """
+    Data Mapper : convertit l'objet Pydantic snake_case en dict camelCase
+    consommable directement par les composants React.
+    """
+    base = {
+        # ── Identifiants (utilisés par AmendmentTable) ──
+        "uid": amend.amendement_uid,
+        "id": amend.amendement_uid,
+        "numero": amend.numero_long,
+        "article": amend.article_vise,
+
+        # ── Auteur (pour <AuthorBadge>) ──
+        "auteur_nom": amend.auteur_nom,
+        "auteur_prenom": amend.auteur_prenom,
+        "auteur_trigramme": amend.auteur_trigramme,
+        "auteurs": [" ".join(p for p in [amend.auteur_prenom, amend.auteur_nom] if p)] if amend.auteur_nom else [amend.auteur_ref or "—"],
+        "auteur": " ".join(p for p in [amend.auteur_prenom, amend.auteur_nom] if p) or amend.auteur_ref or "—",
+
+        # ── Groupe politique (pour <PoliticalGroupTag>) ──
+        "groupRef": amend.groupe_politique_ref,
+        "groupe_politique": amend.groupe_politique,
+
+        # ── Dossier législatif (pour <LegislativeContext>) ──
+        "dossier_ref": amend.dossier_ref,
+        "title": amend.dossier_titre,
+
+        # ── Identiques officiels (pour <IdentiqueAlert>) ──
+        "isIdentical": amend.est_identique_officiel,
+        "discussionId": amend.id_discussion_identique,
+
+        # ── Texte juridique ──
+        "dispositif": amend.dispositif_raw,
+        "dispositif_clean": amend.dispositif_clean,
+        "expose_sommaire": amend.expose_sommaire,
+
+        # ── Classification mécanique ──
+        "point_impact": {"type": amend.point_impact or ""},
+        "statut_mecanique": amend.statut_mecanique,
+        "justification_mecanique": amend.justification_mecanique,
+        "groupe_identique_id": amend.groupe_identique_id,
+    }
+
+    # ── Résultat LLM sémantique (si disponible) ──
+    if llm_result:
+        statut_llm = llm_result.get("statut", "NOUVEAU")
+        couleur = "orange" if statut_llm == "DISCUSSION_COMMUNE" else "vert"
+        base["resultat_ia"] = {
+            "id": amend.amendement_uid,
+            "statut": statut_llm,
+            "analyse_intention": llm_result.get("analyse_intention", ""),
+            "analyse_politique": llm_result.get("analyse_politique", ""),
+            "id_discussion_cible": llm_result.get("id_discussion_cible"),
+            "niveau_confiance": llm_result.get("niveau_confiance", 0.0),
+            "justification": llm_result.get("analyse_intention", ""),
+            "alerte_couleur": couleur,
+            "cached": llm_result.get("cached", False),
+        }
+
+    # ── Résultat déterministe injecté comme resultat_ia si pas de LLM ──
+    if not base.get("resultat_ia") and amend.statut_mecanique != StatutMecanique.NOUVEAU:
+        statut_display = {
+            StatutMecanique.IDENTIQUE_MECANIQUE: "Identique",
+            StatutMecanique.DOUBLON_MECANIQUE: "Doublon",
+            StatutMecanique.IDENTIQUE_OFFICIEL: "Identique",
+        }.get(amend.statut_mecanique, amend.statut_mecanique)
+        couleur = "rouge" if "DOUBLON" in str(amend.statut_mecanique) else "orange"
+        base["resultat_ia"] = {
+            "id": amend.amendement_uid,
+            "statut": statut_display,
+            "justification": amend.justification_mecanique,
+            "alerte_couleur": couleur,
+            "analyse_intention": f"Détecté mécaniquement : {amend.justification_mecanique}",
+            "analyse_politique": "Classification déterministe (100 % fiable, sans IA).",
+            "niveau_confiance": 1.0,
+        }
+
+    return base
+
+
+@app.post("/api/v2/analyser")
+async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
+    """
+    Pipeline V2 complet : Normalisation → Tri déterministe → Cache → LLM → Data Mapper.
+    Retourne une liste de dicts camelCase prêts pour le front-end React.
+    """
+    start = time.time()
+    logging.info(f"🚀 V2 Pipeline démarré pour {len(payload.amendements)} amendement(s)")
+
+    try:
+        # ── Phase 1 : Conversion en EnrichedAmendment ──
+        enriched: list[EnrichedAmendment] = []
+        for i, raw in enumerate(payload.amendements):
+            try:
+                enriched.append(_build_enriched(raw, i))
+            except Exception as exc:
+                logging.warning(f"⚠️ Amendement {i} ignoré (conversion) : {exc}")
+
+        if not enriched:
+            return []
+
+        # ── Phase 2 : Tri déterministe (Identiques, Doublons, Hiérarchie AN) ──
+        enriched = process_deterministic_sorting(enriched)
+
+        # ── Phase 3 : Filtre sémantique LLM (uniquement sur les NOUVEAUX) ──
+        resultats_finaux = []
+        nouveaux_count = sum(1 for a in enriched if a.statut_mecanique == StatutMecanique.NOUVEAU)
+        processed_llm = 0
+
+        for rang, amend in enumerate(enriched, start=1):
+            # Vérifier si le client a annulé
+            if await raw_request.is_disconnected():
+                logging.info("🛑 Client déconnecté, arrêt du pipeline.")
+                break
+
+            llm_data = None
+
+            if amend.statut_mecanique == StatutMecanique.NOUVEAU:
+                processed_llm += 1
+
+                # ── 3a. Vérifier le cache SQLite ──
+                cached = get_cached_classification(amend.amendement_uid)
+                if cached:
+                    cached["cached"] = True
+                    llm_data = cached
+                    logging.info(f"📦 Cache HIT {amend.amendement_uid} ({processed_llm}/{nouveaux_count})")
+                else:
+                    # ── 3b. Appel LLM via asyncio.to_thread (non-bloquant) ──
+                    logging.info(f"🧠 LLM START {amend.amendement_uid} ({processed_llm}/{nouveaux_count})")
+
+                    # Construire le dict enrichi pour le moteur sémantique
+                    amend_dict = {
+                        "amendement": {
+                            "uid": amend.amendement_uid,
+                            "numeroLong": amend.numero_long,
+                            "dispositif": amend.dispositif_raw,
+                            "exposeSommaire": amend.expose_sommaire,
+                            "divisionArticleDesignation": amend.article_vise,
+                        },
+                        "auteur": {
+                            "nom": amend.auteur_nom,
+                            "prenom": amend.auteur_prenom,
+                            "trigramme": amend.auteur_trigramme,
+                            "groupePolitiqueRef": {"libelle": amend.groupe_politique},
+                        },
+                        "dossier": {
+                            "titre": amend.dossier_titre,
+                        },
+                    }
+
+                    # Discussions candidates = les autres NOUVEAUX du même article
+                    candidats = [
+                        {
+                            "id_discussion": a.amendement_uid,
+                            "amendement": {
+                                "divisionArticleDesignation": a.article_vise,
+                                "dispositif": a.dispositif_raw,
+                            },
+                            "auteur": {"groupePolitiqueRef": {"libelle": a.groupe_politique}},
+                        }
+                        for a in enriched
+                        if a.amendement_uid != amend.amendement_uid
+                        and a.article_vise == amend.article_vise
+                        and a.statut_mecanique == StatutMecanique.NOUVEAU
+                    ]
+
+                    try:
+                        # evaluate_similitude utilise le client openai synchrone
+                        # → asyncio.to_thread évite de bloquer l'event loop FastAPI
+                        resultat = await asyncio.to_thread(
+                            evaluate_similitude,
+                            amend_dict,
+                            candidats,
+                            payload.base_url,
+                            model=payload.model,
+                            api_key=payload.api_key,
+                            timeout=120.0,
+                            max_tokens=payload.max_tokens,
+                            temperature=payload.temperature,
+                        )
+                        llm_data = resultat.model_dump()
+
+                        # ── Sauvegarder en cache ──
+                        save_classification(amend.amendement_uid, llm_data)
+
+                    except Exception as exc:
+                        logging.error(f"❌ LLM FAIL {amend.amendement_uid} : {exc}")
+                        llm_data = {
+                            "statut": "NOUVEAU",
+                            "analyse_intention": f"Erreur LLM : {str(exc)[:120]}",
+                            "analyse_politique": "Analyse sémantique indisponible.",
+                            "id_discussion_cible": None,
+                            "niveau_confiance": 0.0,
+                        }
+
+            # ── Data Mapper : snake_case → camelCase ──
+            mapped = _to_frontend(amend, llm_data)
+            mapped["rang"] = rang
+            if mapped.get("resultat_ia"):
+                mapped["resultat_ia"]["rang"] = rang
+            resultats_finaux.append(mapped)
+
+        elapsed = time.time() - start
+        logging.info(f"✅ V2 Pipeline terminé en {elapsed:.1f}s — {len(resultats_finaux)} résultat(s)")
+        return resultats_finaux
+
+    except Exception as exc:
+        logging.error(f"❌ V2 Pipeline CRASH : {exc}", exc_info=True)
+        # Fallback de survie
+        return [
+            {
+                "id": raw.get("amendement", raw).get("uid", f"err-{i}"),
+                "numero": "Erreur",
+                "article": "",
+                "auteurs": [],
+                "resultat_ia": {
+                    "id": f"err-{i}",
+                    "statut": "Erreur",
+                    "justification": f"Erreur pipeline V2 : {str(exc)[:200]}",
+                    "alerte_couleur": "rouge",
+                },
+            }
+            for i, raw in enumerate(payload.amendements)
+        ]
 
 
 class AnalyzeBatchRequest(BaseModel):
