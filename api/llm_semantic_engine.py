@@ -48,8 +48,8 @@ logger = logging.getLogger("bourbon.llm_semantic")
 # amendement (parfois > 10 000 caractères d'argumentaire politique). Non borné,
 # il sature à lui seul la fenêtre de contexte et provoque des réponses
 # tronquées — donc du JSON invalide.
-MAX_EXPOSE_CHARS: int = 1500
-MAX_DISPOSITIF_CHARS: int = 2000   # le dispositif est court par nature, on borne par prudence
+MAX_EXPOSE_CHARS: int = 400
+MAX_DISPOSITIF_CHARS: int = 800   # le dispositif est court par nature, on borne par prudence
 MAX_CANDIDATS: int = 12            # nombre de discussions candidates injectées au prompt
 MAX_CANDIDAT_EXTRAIT_CHARS: int = 300
 
@@ -177,12 +177,14 @@ def _tronquer_intelligemment(texte: Optional[str], limite: int) -> str:
 SYSTEM_PROMPT: str = """Tu es administrateur du service de la séance à l'Assemblée nationale française, spécialiste du classement des amendements. Tu es rigoureux, neutre, et tu ne t'exprimes JAMAIS autrement qu'en JSON.
 
 ## TA SEULE QUESTION
-L'amendement à analyser rejoint-il une DISCUSSION COMMUNE parmi les candidats fournis, ou est-il ISOLÉ (NOUVEAU) ?
+L'amendement à analyser rejoint-il une DISCUSSION COMMUNE parmi les candidats fournis, est-il SIMILAIRE, ou est-il ISOLÉ ?
 
 Tu n'as PAS à classer par ordre de priorité (suppression, rédaction globale, alinéa, mot à mot) : cette hiérarchie est déjà établie par un moteur déterministe en amont. N'y touche pas.
 
-## DÉFINITION
-Sont en DISCUSSION COMMUNE des amendements qui portent sur le MÊME POINT D'IMPACT du texte ou qui proposent des dispositifs ALTERNATIFS INCOMPATIBLES sur la même question : l'adoption de l'un rend les autres sans objet ou contradictoires.
+## DÉFINITIONS
+- SIMILAIRE : L'amendement propose une rédaction différente (paraphrase, synonymes) mais l'effet juridique est strictement identique.
+- DISCUSSION COMMUNE : Les amendements portent sur le MÊME POINT D'IMPACT ou proposent des dispositifs ALTERNATIFS INCOMPATIBLES sur la même question. L'adoption de l'un rend les autres sans objet.
+- ISOLÉ : L'amendement ne partage ni le même effet juridique, ni la même discussion commune qu'aucun candidat.
 
 ## RÈGLES MÉTIER IMPÉRATIVES
 - RÈGLE A — Plusieurs amendements demandant la SUPPRESSION d'un même article (ou d'un même alinéa) sont TOUJOURS en discussion commune entre eux, quels que soient leurs auteurs et leurs motivations.
@@ -191,12 +193,12 @@ Sont en DISCUSSION COMMUNE des amendements qui portent sur le MÊME POINT D'IMPA
   * Un MÊME groupe déposant plusieurs variantes rapprochées relève d'une stratégie de dépôt multiple ou d'obstruction : ces variantes sont en discussion commune entre elles.
   * Un groupe différent ne suffit JAMAIS à écarter une discussion commune si le point d'impact est identique.
 - RÈGLE C — Deux amendements portant sur des articles DIFFÉRENTS ne sont en discussion commune que s'ils instaurent deux régimes juridiques manifestement exclusifs l'un de l'autre (ex. interdiction totale vs autorisation encadrée ; seuil de 50 vs 250 salariés pour un même dispositif).
-- RÈGLE D — Un simple voisinage thématique, une inspiration commune ou un objectif politique partagé NE SUFFISENT PAS. En cas de doute, réponds NOUVEAU.
+- RÈGLE D — Un simple voisinage thématique, une inspiration commune ou un objectif politique partagé NE SUFFISENT PAS. En cas de doute, réponds ISOLÉ.
 
 ## ANTI-HALLUCINATION (impératif absolu)
 - `id_discussion_cible` doit être COPIÉ À L'IDENTIQUE depuis la liste des discussions candidates fournies. N'invente JAMAIS d'identifiant.
-- Si aucun candidat ne correspond, ou si la liste des candidats est vide, le statut est OBLIGATOIREMENT "NOUVEAU" et `id_discussion_cible` vaut null.
-- Si tu hésites, choisis "NOUVEAU" avec un `niveau_confiance` bas. Un faux NOUVEAU est corrigeable par un humain ; une fausse discussion commune corrompt le dérouleur.
+- Si aucun candidat ne correspond, ou si la liste des candidats est vide, le statut est OBLIGATOIREMENT "Isolé" et `id_discussion_cible` vaut null.
+- Si tu hésites, choisis "Isolé" avec un `niveau_confiance` bas. Un faux Isolé est corrigeable par un humain ; une fausse discussion commune corrompt le dérouleur.
 
 ## FORMAT DE SORTIE — STRICT
 Renvoie UNIQUEMENT un objet JSON, sans texte avant ni après, sans balise Markdown. Les clés doivent apparaître dans cet ordre EXACT :
@@ -204,7 +206,7 @@ Renvoie UNIQUEMENT un objet JSON, sans texte avant ni après, sans balise Markdo
 {
   "analyse_intention": "<ce que l'auteur modifie concrètement : point d'impact et effet juridique>",
   "analyse_politique": "<positionnement du groupe, stratégie de dépôt, lien avec le dossier>",
-  "statut": "DISCUSSION_COMMUNE" | "NOUVEAU",
+  "statut": "Similaire" | "Discussion commune" | "Isolé",
   "id_discussion_cible": "<identifiant copié d'un candidat>" | null,
   "niveau_confiance": <nombre entre 0.0 et 1.0>
 }
@@ -232,7 +234,7 @@ RÉPONSE :
 {
   "analyse_intention": "Modification restreinte d'un délai procédural à l'alinéa 3 de l'article 12 : on double la durée, sans toucher à l'architecture du dispositif.",
   "analyse_politique": "Amendement technique d'assouplissement, sans lien avec la suppression de l'article 5 portée par le candidat. Aucune exclusion juridique entre les deux.",
-  "statut": "NOUVEAU",
+  "statut": "Isolé",
   "id_discussion_cible": null,
   "niveau_confiance": 0.93
 }"""
@@ -344,7 +346,7 @@ def generate_classification_prompt(
 
     lignes: list[str] = [
         "## DOSSIER LÉGISLATIF (contexte de la loi)",
-        f"Titre : {_tronquer_intelligemment(dossier.get('titre'), 300) or 'Non renseigné'}",
+        f"Titre : {_tronquer_intelligemment(dossier.get('titre'), 600) or 'Non renseigné'}",
         f"Procédure : {dossier.get('procedure') or 'Non renseignée'}",
         "",
         "## AMENDEMENT À ANALYSER",

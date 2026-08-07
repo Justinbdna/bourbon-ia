@@ -436,7 +436,14 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         statut_llm = llm_result.get("statut", "NOUVEAU")
         if statut_llm == "NOUVEAU":
             statut_llm = "Isolé"
-        couleur = "orange" if statut_llm == "DISCUSSION_COMMUNE" else "vert"
+            
+        if statut_llm == "Discussion commune":
+            couleur = "orange"
+        elif statut_llm == "Similaire":
+            couleur = "vert"
+        else:
+            couleur = "gris" # Isolé
+            
         base["resultat_ia"] = {
             "id": amend.amendement_uid,
             "statut": statut_llm,
@@ -451,11 +458,7 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
 
     # ── Résultat déterministe injecté comme resultat_ia si pas de LLM ──
     if not base.get("resultat_ia") and amend.statut_mecanique != StatutMecanique.NOUVEAU:
-        statut_display = {
-            StatutMecanique.IDENTIQUE_MECANIQUE: "Identique",
-            StatutMecanique.DOUBLON_MECANIQUE: "Doublon",
-            StatutMecanique.IDENTIQUE_OFFICIEL: "Identique",
-        }.get(amend.statut_mecanique, amend.statut_mecanique)
+        statut_display = "Identique" # Strict mapping anti-jargon
         couleur = "rouge" if "DOUBLON" in str(amend.statut_mecanique) else "orange"
         base["resultat_ia"] = {
             "id": amend.amendement_uid,
@@ -522,6 +525,9 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
         nouveaux_count = sum(1 for a in enriched if a.statut_mecanique == StatutMecanique.NOUVEAU)
         processed_llm = [0] # Liste pour mutabilité dans process_llm
         
+        # Sémaphore pour limiter l'exécution LLM concurrente à 2 (anti OOM)
+        semaphore = asyncio.Semaphore(2)
+        
         async def process_llm(amend: EnrichedAmendment, rang: int) -> dict:
             llm_data = None
             if amend.statut_mecanique == StatutMecanique.NOUVEAU:
@@ -563,25 +569,27 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                         and a.article_vise == amend.article_vise
                         and a.statut_mecanique == StatutMecanique.NOUVEAU
                     ]
-                    try:
-                        resultat = await asyncio.to_thread(
-                            evaluate_similitude,
-                            amend_dict, candidats,
-                            llm_endpoint=payload.llm_endpoint or payload.base_url,
-                            model=payload.model, api_key=payload.api_key,
-                            timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
-                        )
-                        llm_data = resultat.model_dump()
-                        save_classification(amend.amendement_uid, llm_data)
-                    except Exception as exc:
-                        logging.error(f"❌ LLM FAIL {amend.amendement_uid} : {exc}")
-                        llm_data = {
-                            "statut": "NOUVEAU",
-                            "analyse_intention": f"Erreur LLM : {str(exc)[:120]}",
-                            "analyse_politique": "Analyse sémantique indisponible.",
-                            "id_discussion_cible": None,
-                            "niveau_confiance": 0.0,
-                        }
+                    
+                    async with semaphore:
+                        try:
+                            resultat = await asyncio.to_thread(
+                                evaluate_similitude,
+                                amend_dict, candidats,
+                                llm_endpoint=payload.llm_endpoint or payload.base_url,
+                                model=payload.model, api_key=payload.api_key,
+                                timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
+                            )
+                            llm_data = resultat.model_dump()
+                            save_classification(amend.amendement_uid, llm_data)
+                        except Exception as exc:
+                            logging.error(f"❌ LLM FAIL {amend.amendement_uid} : {exc}")
+                            llm_data = {
+                                "statut": "NOUVEAU",
+                                "analyse_intention": f"Erreur LLM : {str(exc)[:120]}",
+                                "analyse_politique": "Analyse sémantique indisponible.",
+                                "id_discussion_cible": None,
+                                "niveau_confiance": 0.0,
+                            }
             
             mapped = _to_frontend(amend, llm_data)
             mapped["rang"] = rang

@@ -418,13 +418,11 @@ export default function App() {
         />
 
         {/* ── État d'analyse en cours (V2) ── */}
-        {isClassifying && currentAnalyzing && (
+        {isClassifying && (
           <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3 animate-pulse">
             <span className="text-lg">🧠</span>
-            <p className="text-sm text-blue-800 dark:text-blue-300">
-              L'IA analyse l'amendement n°<strong>{currentAnalyzing.numero}</strong>
-              {' '}({currentAnalyzing.index}/{currentAnalyzing.total})
-              <span className="text-blue-600 dark:text-blue-400 ml-1">— Génération de la réflexion en cours...</span>
+            <p className="text-sm text-blue-800 dark:text-blue-300 font-medium">
+              Analyse sémantique IA en cours (Traitement parallélisé)...
             </p>
           </div>
         )}
