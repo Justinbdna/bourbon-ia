@@ -349,7 +349,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
     body: JSON.stringify({
       amendements,
       model: aiSettings.localModel || 'local-model',
-      base_url: localUrl,
+      llm_endpoint: localUrl,
       api_key: aiSettings.apiKey || 'local-key',
       temperature: 0.1,
       max_tokens: 1024,

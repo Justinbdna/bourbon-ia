@@ -323,7 +323,8 @@ class V2AnalyzeRequest(BaseModel):
     """Payload d'entrée pour le pipeline V2."""
     amendements: list
     model: str = "local-model"
-    base_url: str = "http://localhost:1234/v1"
+    llm_endpoint: Optional[str] = None
+    base_url: str = "http://localhost:1234/v1" # rétrocompatibilité V1
     api_key: str = "local-key"
     temperature: float = 0.1
     max_tokens: int = 1024
@@ -555,7 +556,7 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                             evaluate_similitude,
                             amend_dict,
                             candidats,
-                            payload.base_url,
+                            llm_endpoint=payload.llm_endpoint or payload.base_url,
                             model=payload.model,
                             api_key=payload.api_key,
                             timeout=120.0,

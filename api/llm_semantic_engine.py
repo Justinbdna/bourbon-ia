@@ -470,7 +470,7 @@ def _repli_nouveau(motif: str) -> LLMClassificationResponse:
 def evaluate_similitude(
     amendement_enrichi: dict[str, Any],
     contexte: Any = None,
-    api_endpoint: str = DEFAULT_ENDPOINT,
+    llm_endpoint: Optional[str] = None,
     *,
     model: str = DEFAULT_MODEL,
     api_key: str = "local-key",
@@ -488,7 +488,7 @@ def evaluate_similitude(
     Args:
         amendement_enrichi : sortie du pipeline d'enrichissement.
         contexte           : discussions candidates (cf. generate_classification_prompt).
-        api_endpoint       : base URL compatible OpenAI (LM Studio / Ollama).
+        llm_endpoint       : base URL compatible OpenAI (LM Studio / Ollama / Ngrok).
         model              : identifiant du modèle ; « local-model » convient à LM Studio.
         timeout            : secondes avant abandon (les modèles locaux sont lents).
         max_tokens         : doit couvrir le raisonnement CoT + le JSON final.
@@ -505,7 +505,8 @@ def evaluate_similitude(
         # le build serverless si la dépendance manque au moment du bundling.
         from openai import OpenAI
 
-        client = OpenAI(base_url=api_endpoint, api_key=api_key, timeout=timeout)
+        effective_endpoint = llm_endpoint if llm_endpoint else DEFAULT_ENDPOINT
+        client = OpenAI(base_url=effective_endpoint, api_key=api_key, timeout=timeout)
         reponse = client.chat.completions.create(
             model=model,
             messages=[

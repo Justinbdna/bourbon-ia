@@ -21,8 +21,8 @@ from typing import Any, Optional
 
 logger = logging.getLogger("bourbon.cache")
 
-# Chemin relatif au répertoire racine du projet
-_DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "bourbon_cache.db")
+# Chemin absolu vers /tmp pour la compatibilité Vercel Serverless (Read-Only FS)
+_DB_PATH = "/tmp/bourbon_cache.db"
 
 _CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS llm_cache (
