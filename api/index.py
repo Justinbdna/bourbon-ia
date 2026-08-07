@@ -399,8 +399,13 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         "auteur_nom": amend.auteur_nom,
         "auteur_prenom": amend.auteur_prenom,
         "auteur_trigramme": amend.auteur_trigramme,
+        "auteur": {
+            "nom": amend.auteur_nom,
+            "prenom": amend.auteur_prenom,
+            "trigramme": amend.auteur_trigramme,
+        },
+        "auteur_string": " ".join(p for p in [amend.auteur_prenom, amend.auteur_nom] if p) or amend.auteur_ref or "—",
         "auteurs": [" ".join(p for p in [amend.auteur_prenom, amend.auteur_nom] if p)] if amend.auteur_nom else [amend.auteur_ref or "—"],
-        "auteur": " ".join(p for p in [amend.auteur_prenom, amend.auteur_nom] if p) or amend.auteur_ref or "—",
 
         # ── Groupe politique (pour <PoliticalGroupTag>) ──
         "groupRef": amend.groupe_politique_ref,
@@ -429,6 +434,8 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
     # ── Résultat LLM sémantique (si disponible) ──
     if llm_result:
         statut_llm = llm_result.get("statut", "NOUVEAU")
+        if statut_llm == "NOUVEAU":
+            statut_llm = "Isolé"
         couleur = "orange" if statut_llm == "DISCUSSION_COMMUNE" else "vert"
         base["resultat_ia"] = {
             "id": amend.amendement_uid,
@@ -459,8 +466,32 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
             "analyse_politique": "Classification déterministe (100 % fiable, sans IA).",
             "niveau_confiance": 1.0,
         }
+    elif not base.get("resultat_ia") and amend.statut_mecanique == StatutMecanique.NOUVEAU:
+        base["resultat_ia"] = {
+            "id": amend.amendement_uid,
+            "statut": "Isolé",
+            "justification": "En attente d'analyse IA...",
+            "alerte_couleur": "gris",
+            "analyse_intention": "",
+            "analyse_politique": "",
+            "niveau_confiance": 0.0,
+        }
 
     return base
+
+@app.post("/api/v2/mecanique")
+async def v2_mecanique(payload: V2AnalyzeRequest):
+    """
+    Route ultra-rapide (sans LLM) pour renvoyer le tri mécanique immédiatement.
+    """
+    enriched = []
+    for i, raw in enumerate(payload.amendements):
+        try:
+            enriched.append(_build_enriched(raw, i))
+        except Exception as exc:
+            logging.warning(f"⚠️ Amendement {i} ignoré (conversion) : {exc}")
+    enriched = process_deterministic_sorting(enriched)
+    return [_to_frontend(a) for a in enriched]
 
 
 @app.post("/api/v2/analyser")
@@ -488,32 +519,20 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
         enriched = process_deterministic_sorting(enriched)
 
         # ── Phase 3 : Filtre sémantique LLM (uniquement sur les NOUVEAUX) ──
-        resultats_finaux = []
         nouveaux_count = sum(1 for a in enriched if a.statut_mecanique == StatutMecanique.NOUVEAU)
-        processed_llm = 0
-
-        for rang, amend in enumerate(enriched, start=1):
-            # Vérifier si le client a annulé
-            if await raw_request.is_disconnected():
-                logging.info("🛑 Client déconnecté, arrêt du pipeline.")
-                break
-
+        processed_llm = [0] # Liste pour mutabilité dans process_llm
+        
+        async def process_llm(amend: EnrichedAmendment, rang: int) -> dict:
             llm_data = None
-
             if amend.statut_mecanique == StatutMecanique.NOUVEAU:
-                processed_llm += 1
-
-                # ── 3a. Vérifier le cache SQLite ──
+                processed_llm[0] += 1
                 cached = get_cached_classification(amend.amendement_uid)
                 if cached:
                     cached["cached"] = True
                     llm_data = cached
-                    logging.info(f"📦 Cache HIT {amend.amendement_uid} ({processed_llm}/{nouveaux_count})")
+                    logging.info(f"📦 Cache HIT {amend.amendement_uid} ({processed_llm[0]}/{nouveaux_count})")
                 else:
-                    # ── 3b. Appel LLM via asyncio.to_thread (non-bloquant) ──
-                    logging.info(f"🧠 LLM START {amend.amendement_uid} ({processed_llm}/{nouveaux_count})")
-
-                    # Construire le dict enrichi pour le moteur sémantique
+                    logging.info(f"🧠 LLM START {amend.amendement_uid} ({processed_llm[0]}/{nouveaux_count})")
                     amend_dict = {
                         "amendement": {
                             "uid": amend.amendement_uid,
@@ -528,12 +547,8 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                             "trigramme": amend.auteur_trigramme,
                             "groupePolitiqueRef": {"libelle": amend.groupe_politique},
                         },
-                        "dossier": {
-                            "titre": amend.dossier_titre,
-                        },
+                        "dossier": {"titre": amend.dossier_titre},
                     }
-
-                    # Discussions candidates = les autres NOUVEAUX du même article
                     candidats = [
                         {
                             "id_discussion": a.amendement_uid,
@@ -548,26 +563,16 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                         and a.article_vise == amend.article_vise
                         and a.statut_mecanique == StatutMecanique.NOUVEAU
                     ]
-
                     try:
-                        # evaluate_similitude utilise le client openai synchrone
-                        # → asyncio.to_thread évite de bloquer l'event loop FastAPI
                         resultat = await asyncio.to_thread(
                             evaluate_similitude,
-                            amend_dict,
-                            candidats,
+                            amend_dict, candidats,
                             llm_endpoint=payload.llm_endpoint or payload.base_url,
-                            model=payload.model,
-                            api_key=payload.api_key,
-                            timeout=120.0,
-                            max_tokens=payload.max_tokens,
-                            temperature=payload.temperature,
+                            model=payload.model, api_key=payload.api_key,
+                            timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
                         )
                         llm_data = resultat.model_dump()
-
-                        # ── Sauvegarder en cache ──
                         save_classification(amend.amendement_uid, llm_data)
-
                     except Exception as exc:
                         logging.error(f"❌ LLM FAIL {amend.amendement_uid} : {exc}")
                         llm_data = {
@@ -577,13 +582,16 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                             "id_discussion_cible": None,
                             "niveau_confiance": 0.0,
                         }
-
-            # ── Data Mapper : snake_case → camelCase ──
+            
             mapped = _to_frontend(amend, llm_data)
             mapped["rang"] = rang
             if mapped.get("resultat_ia"):
                 mapped["resultat_ia"]["rang"] = rang
-            resultats_finaux.append(mapped)
+            return mapped
+
+        # Exécution parallèle de tous les LLM
+        tasks = [process_llm(amend, rang) for rang, amend in enumerate(enriched, start=1)]
+        resultats_finaux = await asyncio.gather(*tasks)
 
         elapsed = time.time() - start
         logging.info(f"✅ V2 Pipeline terminé en {elapsed:.1f}s — {len(resultats_finaux)} résultat(s)")

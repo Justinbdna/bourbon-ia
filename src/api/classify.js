@@ -338,32 +338,53 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
     aiSettings = {},
     signal,
     onProgress = () => {},
+    onMechanical = () => {},
   } = options
 
   const localUrl = (aiSettings.localUrl || 'http://localhost:1234/v1').trim().replace(/\/+$/, '')
 
-  const response = await fetch(`${API_BASE_URL}/api/v2/analyser`, {
+  const payload = {
+    amendements,
+    model: aiSettings.localModel || 'local-model',
+    llm_endpoint: localUrl,
+    api_key: aiSettings.apiKey || 'local-key',
+    temperature: 0.1,
+    max_tokens: 1024,
+  }
+
+  // 1. Tri mécanique immédiat (sans LLM)
+  const resMec = await fetch(`${API_BASE_URL}/api/v2/mecanique`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
     signal,
-    body: JSON.stringify({
-      amendements,
-      model: aiSettings.localModel || 'local-model',
-      llm_endpoint: localUrl,
-      api_key: aiSettings.apiKey || 'local-key',
-      temperature: 0.1,
-      max_tokens: 1024,
-    }),
+    body: JSON.stringify(payload),
+  })
+  
+  if (!resMec.ok) {
+    const errorText = await resMec.text().catch(() => 'Erreur inconnue')
+    throw new ClassifyError(`Pipeline V2 Mécanique : ${errorText}`, resMec.status)
+  }
+  
+  const mecaniques = await resMec.json()
+  // Met à jour l'UI instantanément
+  onMechanical(mecaniques)
+
+  // 2. Lancement du LLM (sur le backend)
+  const resLLM = await fetch(`${API_BASE_URL}/api/v2/analyser`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+    signal,
+    body: JSON.stringify(payload),
   })
 
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Erreur inconnue')
-    throw new ClassifyError(`Pipeline V2 : ${errorText}`, response.status)
+  if (!resLLM.ok) {
+    const errorText = await resLLM.text().catch(() => 'Erreur inconnue')
+    throw new ClassifyError(`Pipeline V2 LLM : ${errorText}`, resLLM.status)
   }
 
-  const results = await response.json()
+  const results = await resLLM.json()
 
-  // Notification progressive de l'UI
+  // Notification de fin progressive (le backend V2 parallélisé retourne tout d'un coup, on simule)
   results.forEach((res, i) => {
     if (res.resultat_ia) {
       onProgress(res.resultat_ia, i + 1, results.length, [])

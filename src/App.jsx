@@ -190,6 +190,10 @@ export default function App() {
           const v2Results = await classifyAmendmentsV2(amendments, {
             aiSettings,
             signal: controller.signal,
+            onMechanical: (mecResults) => {
+              // Met à jour l'état avec le tri mécanique pur immédiatement
+              setAmendments(mecResults)
+            },
             onProgress: (partialResult, idx, total) => {
               setCurrentAnalyzing({ 
                 uid: partialResult.id, 
