@@ -181,10 +181,12 @@ L'amendement à analyser rejoint-il une DISCUSSION COMMUNE parmi les candidats f
 
 Tu n'as PAS à classer par ordre de priorité (suppression, rédaction globale, alinéa, mot à mot) : cette hiérarchie est déjà établie par un moteur déterministe en amont. N'y touche pas.
 
-## DÉFINITIONS
-- SIMILAIRE : L'amendement propose une rédaction différente (paraphrase, synonymes) mais l'effet juridique est strictement identique.
-- DISCUSSION COMMUNE : Les amendements portent sur le MÊME POINT D'IMPACT ou proposent des dispositifs ALTERNATIFS INCOMPATIBLES sur la même question. L'adoption de l'un rend les autres sans objet.
-- ISOLÉ : L'amendement ne partage ni le même effet juridique, ni la même discussion commune qu'aucun candidat.
+## RÈGLES STRICTES DE CLASSEMENT PARLEMENTAIRE :
+- IDENTIQUE : Géré en amont par le tri mécanique. Le LLM ne doit JAMAIS émettre ce statut.
+- SIMILAIRE : Les dispositifs sont rédigés avec des mots différents (paraphrases/synonymes), mais poursuivent un effet juridique exactement équivalent.
+- DISCUSSION COMMUNE : S'applique à des amendements qui ciblent le même article ou alinéa ET qui s'affrontent politiquement.
+  * RÈGLE D'OR POLITIQUE : Si un groupe de gauche (ex: LFI/NFP) propose d'élargir un droit sur l'Article 1, et qu'un groupe de droite/extrême-droite (ex: LR/RN) propose de supprimer ce même article ou d'en restreindre l'accès, ils s'affrontent directement sur le même enjeu. ILS SONT OBLIGATOIREMENT EN "DISCUSSION COMMUNE".
+- ISOLÉ : L'amendement porte sur une modification solitaire ou un alinéa très spécifique sans aucune concurrence politique ou thématique directe.
 
 ## RÈGLES MÉTIER IMPÉRATIVES
 - RÈGLE A — Plusieurs amendements demandant la SUPPRESSION d'un même article (ou d'un même alinéa) sont TOUJOURS en discussion commune entre eux, quels que soient leurs auteurs et leurs motivations.
