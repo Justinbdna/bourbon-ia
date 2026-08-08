@@ -156,27 +156,19 @@ def process_deterministic_sorting(
         if len(indices) < 2:
             continue  # Amendement unique → reste NOUVEAU
 
-        # Récupérer les auteurs pour distinguer IDENTIQUE vs DOUBLON
-        authors_in_group = [amendments[i].auteur_ref for i in indices]
+        # Le premier est le référent, il reste NOUVEAU.
+        referent_idx = indices[0]
+        referent_uid = amendments[referent_idx].amendement_uid
 
-        for i in indices:
+        # Seuls les suivants reçoivent le statut Identique
+        for i in indices[1:]:
             amend = amendments[i]
-
-            # Si le même auteur apparaît 2+ fois dans le groupe → DOUBLON
-            if authors_in_group.count(amend.auteur_ref) > 1:
-                amend.statut_mecanique = StatutMecanique.DOUBLON_MECANIQUE
-                amend.justification_mecanique = (
-                    f"Dispositif identique à {len(indices) - 1} autre(s) "
-                    f"amendement(s) du même auteur ({amend.auteur_ref}) "
-                    f"sur {amend.article_vise or 'article non spécifié'}."
-                )
-            else:
-                amend.statut_mecanique = StatutMecanique.IDENTIQUE_MECANIQUE
-                amend.justification_mecanique = (
-                    f"Dispositif identique à {len(indices) - 1} autre(s) "
-                    f"amendement(s) d'auteur(s) différent(s) "
-                    f"sur {amend.article_vise or 'article non spécifié'}."
-                )
+            amend.statut_mecanique = StatutMecanique.IDENTIQUE_MECANIQUE
+            amend.groupe_identique_id = referent_uid
+            amend.justification_mecanique = (
+                f"Identique mécanique au référent {referent_uid} "
+                f"sur {amend.article_vise or 'article non spécifié'}."
+            )
 
             amend.groupe_identique_id = fp
 

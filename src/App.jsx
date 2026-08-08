@@ -422,7 +422,7 @@ export default function App() {
           <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3 animate-pulse">
             <span className="text-lg">🧠</span>
             <p className="text-sm text-blue-800 dark:text-blue-300 font-medium">
-              Analyse sémantique IA en cours (Traitement parallélisé)...
+              Analyse IA en cours (Traitement parallélisé)...
             </p>
           </div>
         )}

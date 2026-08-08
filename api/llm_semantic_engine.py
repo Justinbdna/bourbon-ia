@@ -92,10 +92,9 @@ class LLMClassificationResponse(BaseModel):
     )
 
     # ── Verdict (après raisonnement) ──
-    statut: Literal["DISCUSSION_COMMUNE", "NOUVEAU"] = Field(
+    statut: Literal["Identique", "Similaire", "Discussion commune", "Isolé", "NOUVEAU"] = Field(
         ...,
-        description="DISCUSSION_COMMUNE si l'amendement rejoint une discussion "
-                    "candidate fournie ; NOUVEAU s'il est isolé.",
+        description="Verdict final de l'analyse sémantique.",
     )
     id_discussion_cible: Optional[str] = Field(
         default=None,
