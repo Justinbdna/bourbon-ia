@@ -48,10 +48,11 @@ logger = logging.getLogger("bourbon.llm_semantic")
 # amendement (parfois > 10 000 caractères d'argumentaire politique). Non borné,
 # il sature à lui seul la fenêtre de contexte et provoque des réponses
 # tronquées — donc du JSON invalide.
-MAX_EXPOSE_CHARS: int = 400
-MAX_DISPOSITIF_CHARS: int = 800   # le dispositif est court par nature, on borne par prudence
+MAX_EXPOSE_CHARS: int = 1000
+MAX_DISPOSITIF_CHARS: int = 1500   # le dispositif est court par nature, on borne par prudence
 MAX_CANDIDATS: int = 12            # nombre de discussions candidates injectées au prompt
 MAX_CANDIDAT_EXTRAIT_CHARS: int = 300
+MAX_DOSSIER_CHARS: int = 1200
 
 # Marqueur de coupe : signale explicitement au modèle que le texte est partiel,
 # pour qu'il ne raisonne pas comme s'il disposait de l'argumentaire complet.
@@ -345,7 +346,7 @@ def generate_classification_prompt(
 
     lignes: list[str] = [
         "## DOSSIER LÉGISLATIF (contexte de la loi)",
-        f"Titre : {_tronquer_intelligemment(dossier.get('titre'), 600) or 'Non renseigné'}",
+        f"Titre : {_tronquer_intelligemment(dossier.get('titre'), MAX_DOSSIER_CHARS) or 'Non renseigné'}",
         f"Procédure : {dossier.get('procedure') or 'Non renseignée'}",
         "",
         "## AMENDEMENT À ANALYSER",
@@ -363,6 +364,9 @@ def generate_classification_prompt(
         "",
         "## DISCUSSIONS CANDIDATES",
     ]
+
+    if amendement_enrichi.get("contexte_rag"):
+        lignes.append(amendement_enrichi["contexte_rag"])
 
     if candidats:
         lignes.append(json.dumps(candidats, ensure_ascii=False, indent=2))

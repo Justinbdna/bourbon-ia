@@ -204,7 +204,7 @@ async def analyze_endpoint(raw_request: Request, payload: AnalyzeRequest):
             alerte_couleur="vert"
         )]
         FALLBACK_MODELS = ["llama-3.1-8b-instant", "qwen/qwen3.6-27b", "llama-3.3-70b-versatile"]
-        sem = asyncio.Semaphore(4)
+        sem = asyncio.Semaphore(2)
 
         async def process_amendment(amend):
             async with sem:
@@ -525,7 +525,7 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
         nouveaux_count = sum(1 for a in enriched if a.statut_mecanique == StatutMecanique.NOUVEAU)
         processed_llm = [0] # Liste pour mutabilité dans process_llm
         
-        # Sémaphore pour limiter l'exécution LLM concurrente à 2 (anti OOM)
+        # Sémaphore pour limiter le nombre de requêtes simultanées
         semaphore = asyncio.Semaphore(2)
         
         async def process_llm(amend: EnrichedAmendment, rang: int) -> dict:
@@ -539,6 +539,36 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                     logging.info(f"📦 Cache HIT {amend.amendement_uid} ({processed_llm[0]}/{nouveaux_count})")
                 else:
                     logging.info(f"🧠 LLM START {amend.amendement_uid} ({processed_llm[0]}/{nouveaux_count})")
+                    contexte_rag = ""
+                    try:
+                        from api.tricoteuses_client import fetch_amendements
+                        def fetch_rag():
+                            res = fetch_amendements(uid=amend.amendement_uid, timeout=1.9)
+                            if not res: return ""
+                            
+                            auteur_dict = res.get("auteur", {}) or {}
+                            nom = auteur_dict.get("nom", "")
+                            prenom = auteur_dict.get("prenom", "")
+                            groupe = (auteur_dict.get("groupePolitiqueRef") or {}).get("libelle", "Inconnu")
+                            nom_auteur = f"{prenom} {nom}".strip() or "Inconnu"
+                            
+                            dossier = res.get("dossierRef", {}) or {}
+                            statut_texte = dossier.get("titre", "Non renseigné")
+                            
+                            cosign = res.get("coSignataires", []) or []
+                            signataires = ", ".join([f"{s.get('prenom', '')} {s.get('nom', '')}".strip() for s in cosign]) if cosign else "Aucun"
+                            
+                            return (
+                                f"\n## CONTEXTE POLITIQUE (RAG API)\n"
+                                f"- Auteur : {nom_auteur} ({groupe})\n"
+                                f"- Co-signataires : {signataires}\n"
+                                f"- Statut du texte : {statut_texte}\n"
+                            )
+                        
+                        contexte_rag = await asyncio.to_thread(fetch_rag)
+                    except Exception as e:
+                        logging.warning(f"RAG echoué pour {amend.amendement_uid}: {e}")
+
                     amend_dict = {
                         "amendement": {
                             "uid": amend.amendement_uid,
@@ -554,6 +584,7 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                             "groupePolitiqueRef": {"libelle": amend.groupe_politique},
                         },
                         "dossier": {"titre": amend.dossier_titre},
+                        "contexte_rag": contexte_rag,
                     }
                     candidats = [
                         {
