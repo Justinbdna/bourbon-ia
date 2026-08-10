@@ -68,6 +68,7 @@ class EnrichedAmendment(BaseModel):
     auteur_nom: str = Field("", description="Nom de famille du député")
     auteur_prenom: str = Field("", description="Prénom du député")
     auteur_trigramme: str = Field("", description="Trigramme parlementaire (ex: MCH)")
+    auteurs_raw: list[str] = Field(default_factory=list, description="Liste brute des auteurs préservée depuis le frontend")
 
     # ── Groupe politique (dénormalisé) ──
     groupe_politique_ref: str = Field("", description="Clé FK vers l'organe politique (ex: PO845401)")
@@ -86,6 +87,8 @@ class EnrichedAmendment(BaseModel):
     point_impact: Optional[PointImpact] = Field(None, description="Classification hiérarchique AN")
     groupe_identique_id: Optional[str] = Field(None, description="Hash du groupe d'identiques (partagé entre les amendements jumeaux)")
     justification_mecanique: str = Field("", description="Explication courte du statut mécanique")
+    
+    raw_dict: dict = Field(default_factory=dict, description="Données d'origine pour préserver les métadonnées")
 
     class Config:
         use_enum_values = True

@@ -378,12 +378,14 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
         auteur_nom=am.get("auteur_nom", "") or "",
         auteur_prenom=am.get("auteur_prenom", "") or "",
         auteur_trigramme=am.get("auteur_trigramme", "") or "",
+        auteurs_raw=am.get("auteurs", []),
         groupe_politique_ref=str(groupe_ref),
         groupe_politique=am.get("groupe_politique", "") or "",
         dossier_ref=am.get("texteLegislatifRef", "") or am.get("dossier_ref", "") or "",
         dossier_titre=am.get("dossier_titre", "") or "",
         est_identique_officiel=est_identique,
         id_discussion_identique=str(id_discussion) if id_discussion else None,
+        raw_dict=raw,
     )
 
 
@@ -408,8 +410,8 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
             "prenom": amend.auteur_prenom,
             "trigramme": amend.auteur_trigramme,
         },
-        "auteur_string": " ".join(p for p in [amend.auteur_prenom, amend.auteur_nom] if p) or amend.auteur_ref or "—",
-        "auteurs": [" ".join(p for p in [amend.auteur_prenom, amend.auteur_nom] if p)] if amend.auteur_nom else [amend.auteur_ref or "—"],
+        "auteur_string": " ".join(p for p in [amend.auteur_prenom, amend.auteur_nom] if p) or (amend.auteurs_raw[0] if amend.auteurs_raw else (amend.auteur_ref or "—")),
+        "auteurs": amend.auteurs_raw if amend.auteurs_raw else ([" ".join(p for p in [amend.auteur_prenom, amend.auteur_nom] if p)] if amend.auteur_nom else [amend.auteur_ref or "—"]),
 
         # ── Groupe politique (pour <PoliticalGroupTag>) ──
         "groupRef": amend.groupe_politique_ref,
@@ -484,7 +486,9 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
             "niveau_confiance": 0.0,
         }
 
-    return base
+    # On fusionne avec le raw_dict d'origine pour ne perdre aucune métadonnée
+    # (par exemple des champs spécifiques ajoutés par le front-end)
+    return {**amend.raw_dict, **base}
 
 @app.post("/api/v2/mecanique")
 async def v2_mecanique(payload: V2AnalyzeRequest):
