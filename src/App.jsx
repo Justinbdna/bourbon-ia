@@ -195,12 +195,14 @@ export default function App() {
               setAmendments(mecResults)
             },
             onProgress: (partialResult, idx, total) => {
-              setCurrentAnalyzing({ 
-                uid: partialResult.id, 
-                numero: partialResult.id?.split('-').pop() || '?',
-                index: idx, 
-                total 
-              })
+              if (partialResult) {
+                setCurrentAnalyzing({ 
+                  uid: partialResult.id, 
+                  numero: partialResult.id?.split('-').pop() || '?',
+                  index: idx, 
+                  total 
+                })
+              }
               setProgressInfo(prev => prev ? { ...prev, current: idx, total } : null)
             },
           })
@@ -422,7 +424,7 @@ export default function App() {
           <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3 animate-pulse">
             <span className="text-lg">🧠</span>
             <p className="text-sm text-blue-800 dark:text-blue-300 font-medium">
-              Analyse IA en cours (Traitement parallélisé)...
+              Analyse IA en cours...
             </p>
           </div>
         )}

@@ -372,10 +372,15 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
   // 2. Boucle LLM Séquentielle (Frontend Orchestrator)
   // Isoler ceux qui nécessitent l'IA
   const aTraiter = mecaniques.filter(a => a.statut_mecanique === 'NOUVEAU')
+  const nb_classes = mecaniques.length - aTraiter.length
+  
+  // Appel immédiat pour que le compteur s'incrémente des triés mécaniques
+  onProgress(null, nb_classes, mecaniques.length, [])
+
   const resultatsGlobaux = [...mecaniques]
   
   let currentIdx = 0
-  const total = aTraiter.length
+  const total = mecaniques.length
 
   for (const amd of aTraiter) {
     if (signal?.aborted) {
@@ -411,7 +416,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
       
       // Remonter la progression au composant React
       if (res.resultat_ia) {
-        onProgress(res.resultat_ia, currentIdx, total, [])
+        onProgress(res.resultat_ia, nb_classes + currentIdx, total, [])
       }
 
     } catch (err) {

@@ -184,7 +184,9 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                         <div className="group relative inline-flex">
                           <span className="cursor-help text-sm" title={a.resultat_ia.analyse_intention}>💡</span>
                           <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bottom-full right-0 mb-2 w-64 bg-slate-900 text-white text-xs rounded-lg shadow-xl p-2.5 leading-relaxed">
-                            <p className="font-semibold text-amber-300 mb-1">🧠 Raisonnement IA</p>
+                            <p className="font-semibold text-amber-300 mb-1">
+                              {(statutToDisplay === 'Identique' || a.resultat_ia.analyse_intention?.startsWith('Détecté mécaniquement')) ? '⚙️ Tri Mécanique' : '🧠 Raisonnement IA'}
+                            </p>
                             <p>{a.resultat_ia.analyse_intention}</p>
                             {a.resultat_ia.niveau_confiance != null && (
                               <p className="text-slate-400 mt-1">Confiance : {(a.resultat_ia.niveau_confiance * 100).toFixed(0)}%</p>
