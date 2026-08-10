@@ -690,28 +690,51 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
             else:
                 contexte_rag = ""
                 try:
-                    from api.tricoteuses_client import fetch_amendements
+                    from api.tricoteuses_client import fetch_amendements, fetch_acteurs
                     def fetch_rag():
                         res = fetch_amendements(uid=target.amendement_uid, timeout=1.9)
-                        if not res: return ""
-                        auteur_dict = res.get("auteur", {}) or {}
-                        nom = auteur_dict.get("nom", "")
-                        prenom = auteur_dict.get("prenom", "")
-                        groupe = (auteur_dict.get("groupePolitiqueRef") or {}).get("libelle", "Inconnu")
-                        nom_auteur = f"{prenom} {nom}".strip() or "Inconnu"
-                        dossier = res.get("dossierRef", {}) or {}
+                        if not res: return "", "Inconnu", "", "Inconnu"
+                        
+                        amend_data = res.get("data", {})
+                        acteur_ref = amend_data.get("signataires", {}).get("auteur", {}).get("acteurRef")
+                        
+                        nom_auteur = "Inconnu"
+                        prenom_auteur = ""
+                        groupe = "Inconnu"
+                        
+                        if acteur_ref:
+                            try:
+                                acteur_res = fetch_acteurs(uid=acteur_ref, timeout=1.5)
+                                if acteur_res:
+                                    acteur_data = acteur_res.get("data", {})
+                                    ident = acteur_data.get("etatCivil", {}).get("ident", {})
+                                    nom_auteur = ident.get("nom", "Inconnu")
+                                    prenom_auteur = ident.get("prenom", "")
+                                    groupe = (acteur_data.get("groupePolitiqueRef") or acteur_data.get("groupe") or {}).get("libelle", "Inconnu")
+                            except Exception as e:
+                                logging.warning(f"RAG fetch_acteurs echoué pour {acteur_ref}: {e}")
+                        
+                        nom_complet = f"{prenom_auteur} {nom_auteur}".strip() or "Inconnu"
+                        dossier = amend_data.get("dossierRef", {}) or {}
                         statut_texte = dossier.get("titre", "Non renseigné")
-                        cosign = res.get("coSignataires", []) or []
-                        signataires = ", ".join([f"{s.get('prenom', '')} {s.get('nom', '')}".strip() for s in cosign]) if cosign else "Aucun"
-                        return (
+                        cosign = amend_data.get("signataires", {}).get("cosignataires", []) or []
+                        signataires = f"{len(cosign)} cosignataires" if cosign else "Aucun"
+                        
+                        contexte = (
                             f"\n## CONTEXTE POLITIQUE (RAG API)\n"
-                            f"- Auteur : {nom_auteur} ({groupe})\n"
+                            f"- Auteur : {nom_complet} ({groupe})\n"
                             f"- Co-signataires : {signataires}\n"
                             f"- Statut du texte : {statut_texte}\n"
                         )
-                    contexte_rag = await asyncio.to_thread(fetch_rag)
+                        return contexte, nom_auteur, prenom_auteur, groupe
+                        
+                    contexte_rag, req_nom, req_prenom, req_groupe = await asyncio.to_thread(fetch_rag)
+                    if req_nom != "Inconnu":
+                        target.auteur_nom = req_nom
+                        target.auteur_prenom = req_prenom
+                        target.groupe_politique = req_groupe
                 except Exception as e:
-                    logging.warning(f"RAG echoué pour {target.amendement_uid}: {e}")
+                    logging.warning(f"RAG global echoué pour {target.amendement_uid}: {e}")
 
                 amend_dict = {
                     "amendement": {
