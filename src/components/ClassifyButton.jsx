@@ -24,6 +24,11 @@ export default function ClassifyButton({ disabled, loading, error, warnings = []
           {loading ? (
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
               <div className="flex flex-col items-start sm:items-end">
+                {progressInfo?.total > 0 && (
+                  <span className="text-xs sm:text-sm font-bold text-bourbon">
+                    🧠 L'IA analyse l'amendement {progressInfo.current || 0} sur {progressInfo.total}...
+                  </span>
+                )}
                 <span className="text-[10px] sm:text-xs text-slate-500 flex items-center gap-1 animate-pulse">
                   Temps écoulé : {progressInfo?.elapsed || 0} s
                 </span>

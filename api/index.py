@@ -329,6 +329,10 @@ class V2AnalyzeRequest(BaseModel):
     temperature: float = 0.1
     max_tokens: int = 1024
 
+class V2AnalyzeSingleRequest(V2AnalyzeRequest):
+    """Payload d'entrée pour l'analyse d'un seul amendement (avec contexte global)."""
+    target_uid: str
+
 
 def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
     """
@@ -656,6 +660,120 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
         ]
 
 
+@app.post("/api/v2/analyser-llm")
+async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
+    """
+    Route unitaire : analyse un seul amendement (statut NOUVEAU) via RAG + LLM.
+    """
+    try:
+        enriched: list[EnrichedAmendment] = []
+        for i, raw in enumerate(payload.amendements):
+            try:
+                enriched.append(_build_enriched(raw, i))
+            except Exception:
+                pass
+        
+        enriched = process_deterministic_sorting(enriched)
+        
+        target = next((a for a in enriched if a.amendement_uid == payload.target_uid), None)
+        if not target:
+            return {"error": "Target amendment not found"}
+            
+        target_rang = next((i for i, a in enumerate(enriched, start=1) if a.amendement_uid == payload.target_uid), 1)
+
+        llm_data = None
+        if target.statut_mecanique == StatutMecanique.NOUVEAU:
+            cached = get_cached_classification(target.amendement_uid)
+            if cached:
+                cached["cached"] = True
+                llm_data = cached
+            else:
+                contexte_rag = ""
+                try:
+                    from api.tricoteuses_client import fetch_amendements
+                    def fetch_rag():
+                        res = fetch_amendements(uid=target.amendement_uid, timeout=1.9)
+                        if not res: return ""
+                        auteur_dict = res.get("auteur", {}) or {}
+                        nom = auteur_dict.get("nom", "")
+                        prenom = auteur_dict.get("prenom", "")
+                        groupe = (auteur_dict.get("groupePolitiqueRef") or {}).get("libelle", "Inconnu")
+                        nom_auteur = f"{prenom} {nom}".strip() or "Inconnu"
+                        dossier = res.get("dossierRef", {}) or {}
+                        statut_texte = dossier.get("titre", "Non renseigné")
+                        cosign = res.get("coSignataires", []) or []
+                        signataires = ", ".join([f"{s.get('prenom', '')} {s.get('nom', '')}".strip() for s in cosign]) if cosign else "Aucun"
+                        return (
+                            f"\n## CONTEXTE POLITIQUE (RAG API)\n"
+                            f"- Auteur : {nom_auteur} ({groupe})\n"
+                            f"- Co-signataires : {signataires}\n"
+                            f"- Statut du texte : {statut_texte}\n"
+                        )
+                    contexte_rag = await asyncio.to_thread(fetch_rag)
+                except Exception as e:
+                    logging.warning(f"RAG echoué pour {target.amendement_uid}: {e}")
+
+                amend_dict = {
+                    "amendement": {
+                        "uid": target.amendement_uid,
+                        "numeroLong": target.numero_long,
+                        "dispositif": target.dispositif_raw,
+                        "exposeSommaire": target.expose_sommaire,
+                        "divisionArticleDesignation": target.article_vise,
+                    },
+                    "auteur": {
+                        "nom": target.auteur_nom,
+                        "prenom": target.auteur_prenom,
+                        "trigramme": target.auteur_trigramme,
+                        "groupePolitiqueRef": {"libelle": target.groupe_politique},
+                    },
+                    "dossier": {"titre": target.dossier_titre},
+                    "contexte_rag": contexte_rag,
+                }
+                candidats = [
+                    {
+                        "id_discussion": a.amendement_uid,
+                        "amendement": {
+                            "divisionArticleDesignation": a.article_vise,
+                            "dispositif": a.dispositif_raw,
+                        },
+                        "auteur": {"groupePolitiqueRef": {"libelle": a.groupe_politique}},
+                    }
+                    for a in enriched
+                    if a.amendement_uid != target.amendement_uid
+                    and a.article_vise == target.article_vise
+                    and a.statut_mecanique == StatutMecanique.NOUVEAU
+                ]
+                
+                try:
+                    resultat = await asyncio.to_thread(
+                        evaluate_similitude,
+                        amend_dict, candidats,
+                        llm_endpoint=payload.llm_endpoint or payload.base_url,
+                        model=payload.model, api_key=payload.api_key,
+                        timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
+                    )
+                    llm_data = resultat.model_dump()
+                    save_classification(target.amendement_uid, llm_data)
+                except Exception as exc:
+                    logging.error(f"❌ LLM FAIL {target.amendement_uid} : {exc}")
+                    llm_data = {
+                        "statut": "NOUVEAU",
+                        "analyse_intention": f"Erreur LLM : {str(exc)[:120]}",
+                        "analyse_politique": "Analyse sémantique indisponible.",
+                        "id_discussion_cible": None,
+                        "niveau_confiance": 0.0,
+                    }
+
+        mapped = _to_frontend(target, llm_data)
+        mapped["rang"] = target_rang
+        if mapped.get("resultat_ia"):
+            mapped["resultat_ia"]["rang"] = target_rang
+        return mapped
+        
+    except Exception as exc:
+        logging.error(f"❌ V2 LLM CRASH : {exc}", exc_info=True)
+        return {"error": str(exc)}
 class AnalyzeBatchRequest(BaseModel):
     user_prompt: str
     system_prompt: str

@@ -366,30 +366,60 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
   }
   
   const mecaniques = await resMec.json()
-  // Met à jour l'UI instantanément
+  // Met à jour l'UI instantanément avec le tri mécanique
   onMechanical(mecaniques)
 
-  // 2. Lancement du LLM (sur le backend)
-  const resLLM = await fetch(`${API_BASE_URL}/api/v2/analyser`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-    signal,
-    body: JSON.stringify(payload),
-  })
+  // 2. Boucle LLM Séquentielle (Frontend Orchestrator)
+  // Isoler ceux qui nécessitent l'IA
+  const aTraiter = mecaniques.filter(a => a.statut_mecanique === 'NOUVEAU')
+  const resultatsGlobaux = [...mecaniques]
+  
+  let currentIdx = 0
+  const total = aTraiter.length
 
-  if (!resLLM.ok) {
-    const errorText = await resLLM.text().catch(() => 'Erreur inconnue')
-    throw new ClassifyError(`Pipeline V2 LLM : ${errorText}`, resLLM.status)
+  for (const amd of aTraiter) {
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError')
+    }
+
+    const singlePayload = {
+      ...payload,
+      target_uid: amd.id // le mapped utilise 'id' (qui vient de amendement_uid)
+    }
+
+    try {
+      const resSingle = await fetch(`${API_BASE_URL}/api/v2/analyser-llm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+        signal,
+        body: JSON.stringify(singlePayload),
+      })
+
+      if (!resSingle.ok) {
+        throw new Error(await resSingle.text().catch(() => 'Erreur API unitaire'))
+      }
+
+      const res = await resSingle.json()
+      
+      // Mettre à jour le tableau global
+      const indexObj = resultatsGlobaux.findIndex(r => r.id === amd.id)
+      if (indexObj !== -1) {
+        resultatsGlobaux[indexObj] = res
+      }
+
+      currentIdx++
+      
+      // Remonter la progression au composant React
+      if (res.resultat_ia) {
+        onProgress(res.resultat_ia, currentIdx, total, [])
+      }
+
+    } catch (err) {
+      if (err.name === 'AbortError') throw err
+      console.error(`Erreur LLM sur ${amd.id}:`, err)
+      // On continue sur le suivant en cas d'erreur isolée
+    }
   }
 
-  const results = await resLLM.json()
-
-  // Notification de fin progressive (le backend V2 parallélisé retourne tout d'un coup, on simule)
-  results.forEach((res, i) => {
-    if (res.resultat_ia) {
-      onProgress(res.resultat_ia, i + 1, results.length, [])
-    }
-  })
-
-  return results
+  return resultatsGlobaux
 }
