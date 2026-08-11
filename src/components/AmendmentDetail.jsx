@@ -72,13 +72,13 @@ export default function AmendmentDetail({ amendment, onClose, isLoading }) {
           {/* ── Auteur enrichi ── */}
           <div>
             <p className="text-ink-500 dark:text-ink-400 text-xs mb-1">Auteur(s)</p>
-            <AuthorBadge data={{
-              auteur_nom: a.auteur_nom,
-              auteur_prenom: a.auteur_prenom,
-              auteur_trigramme: a.auteur_trigramme
-            }} />
-            {/* Fallback texte si pas de données enrichies */}
-            {!a.auteur_nom && (
+            {a.auteur_nom && a.auteur_nom !== "Inconnu" ? (
+              <AuthorBadge data={{
+                auteur_nom: a.auteur_nom,
+                auteur_prenom: a.auteur_prenom,
+                auteur_trigramme: a.auteur_trigramme
+              }} />
+            ) : (
               <div className="max-h-24 overflow-y-auto text-sm bg-gray-100 text-slate-900 dark:bg-[#1A1B22] dark:text-white border border-gray-300 dark:border-gray-700 p-2 rounded mt-1">
                 <p className="font-medium">
                   {a.rapporteur ? 'Rapporteur — ' : ''}

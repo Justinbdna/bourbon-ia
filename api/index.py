@@ -623,11 +623,12 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                         except Exception as exc:
                             logging.error(f"❌ LLM FAIL {amend.amendement_uid} : {exc}")
                             llm_data = {
-                                "statut": "NOUVEAU",
-                                "analyse_intention": f"Erreur LLM : {str(exc)[:120]}",
+                                "statut": "Erreur IA",
+                                "analyse_intention": "⚠️ Impossible de joindre l'IA (Serveur local ou tunnel Ngrok hors-ligne). Vérifiez vos réglages IA.",
                                 "analyse_politique": "Analyse sémantique indisponible.",
                                 "id_discussion_cible": None,
                                 "niveau_confiance": 0.0,
+                                "alerte_couleur": "rouge",
                             }
             
             mapped = _to_frontend(amend, llm_data)
@@ -785,11 +786,12 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                 except Exception as exc:
                     logging.error(f"❌ LLM FAIL {target.amendement_uid} : {exc}")
                     llm_data = {
-                        "statut": "NOUVEAU",
-                        "analyse_intention": f"Erreur LLM : {str(exc)[:120]}",
+                        "statut": "Erreur IA",
+                        "analyse_intention": "⚠️ Impossible de joindre l'IA (Serveur local ou tunnel Ngrok hors-ligne). Vérifiez vos réglages IA.",
                         "analyse_politique": "Analyse sémantique indisponible.",
                         "id_discussion_cible": None,
                         "niveau_confiance": 0.0,
+                        "alerte_couleur": "rouge",
                     }
 
         mapped = _to_frontend(target, llm_data)
