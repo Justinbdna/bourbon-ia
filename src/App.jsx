@@ -36,11 +36,39 @@ export default function App() {
   const timerRef = useRef(null)
 
   // Provider LOCAL par défaut (souveraineté)
-  const [aiSettings, setAiSettings] = useState(() => {
-    const saved = localStorage.getItem('bourbon_ai_settings')
-    if (saved) return JSON.parse(saved)
-    return { provider: 'local', apiKey: '', localUrl: 'http://localhost:1234/v1' }
-  })
+  const [aiSettings, setAiSettings] = useState({ provider: 'local', apiKey: '', localUrl: 'http://localhost:1234/v1' })
+
+  // ─── Restauration des paramètres IA chiffrés ───
+  useEffect(() => {
+    async function restoreSettings() {
+      // 1. Nettoyage de sécurité : supprimer toute ancienne version en clair si elle existe
+      const plainSaved = localStorage.getItem('bourbon_ai_settings')
+      if (plainSaved) {
+        try {
+          const parsed = JSON.parse(plainSaved)
+          if (parsed && typeof parsed === 'object') {
+            setAiSettings(parsed)
+          }
+        } catch (e) {}
+        localStorage.removeItem('bourbon_ai_settings')
+      }
+
+      // 2. Déchiffrement sécurisé des paramètres stockés
+      const cipher = localStorage.getItem('bourbon_ai_settings_encrypted')
+      if (cipher) {
+        try {
+          const json = await decrypt(cipher)
+          const parsed = JSON.parse(json)
+          if (parsed && typeof parsed === 'object') {
+            setAiSettings(parsed)
+          }
+        } catch (e) {
+          console.warn('Impossible de déchiffrer les paramètres IA stockés.', e)
+        }
+      }
+    }
+    restoreSettings()
+  }, [])
 
   // ─── Restauration de session chiffrée ───
   useEffect(() => {
@@ -116,9 +144,15 @@ export default function App() {
     localStorage.removeItem(STORAGE_KEY)
   }
 
-  function handleSaveSettings(newSettings) {
+  async function handleSaveSettings(newSettings) {
     setAiSettings(newSettings)
-    localStorage.setItem('bourbon_ai_settings', JSON.stringify(newSettings))
+    localStorage.removeItem('bourbon_ai_settings') // Sécurité : pas de stockage en clair
+    try {
+      const cipher = await encrypt(JSON.stringify(newSettings))
+      localStorage.setItem('bourbon_ai_settings_encrypted', cipher)
+    } catch (e) {
+      console.warn('Échec du chiffrement des paramètres IA.', e)
+    }
   }
 
   const selected = amendments.find((a) => a.id === selectedId) || null

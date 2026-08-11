@@ -412,6 +412,7 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         },
         "auteur_string": " ".join(p for p in [amend.auteur_prenom, amend.auteur_nom] if p) or (amend.auteurs_raw[0] if amend.auteurs_raw else (amend.auteur_ref or "—")),
         "auteurs": amend.auteurs_raw if amend.auteurs_raw else ([" ".join(p for p in [amend.auteur_prenom, amend.auteur_nom] if p)] if amend.auteur_nom else [amend.auteur_ref or "—"]),
+        "auteurs_raw": amend.auteurs_raw,
 
         # ── Groupe politique (pour <PoliticalGroupTag>) ──
         "groupRef": amend.groupe_politique_ref,
@@ -486,9 +487,23 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
             "niveau_confiance": 0.0,
         }
 
-    # On fusionne avec le raw_dict d'origine pour ne perdre aucune métadonnée
-    # (par exemple des champs spécifiques ajoutés par le front-end)
-    return {**amend.raw_dict, **base}
+    # ── Whitelist et filtrage de sécurité (C-03) ──
+    # Ne préserver que les clés inoffensives provenant des données d'origine
+    WHITELIST_RAW_KEYS = {
+        "rapporteur", "sort", "dateDepot", "dateSort", "statut", "signataires", "coSignataires",
+        "texte", "numOrdre", "dossierRef", "triAmendement"
+    }
+
+    filtered_raw = {}
+    if amend.raw_dict and isinstance(amend.raw_dict, dict):
+        for k, v in amend.raw_dict.items():
+            if not k.startswith("_") and (k in WHITELIST_RAW_KEYS or k in base):
+                filtered_raw[k] = v
+
+    filtered_raw.update(base)
+
+    # Filtrage strict de sécurité : élimination absolue de toute clé privée/technique commençant par '_'
+    return {k: v for k, v in filtered_raw.items() if not k.startswith("_")}
 
 @app.post("/api/v2/mecanique")
 async def v2_mecanique(payload: V2AnalyzeRequest):

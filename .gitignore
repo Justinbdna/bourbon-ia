@@ -33,7 +33,8 @@ data/raw/
 data/clean/
 
 # Variables d'environnement
-.env
+.env*
+!.env.example
 
 # Présentation
 !docs/bourbon.ia.pdf
