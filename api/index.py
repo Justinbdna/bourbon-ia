@@ -636,9 +636,16 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                     save_classification(target.amendement_uid, llm_data)
                 except Exception as exc:
                     logging.error(f"❌ LLM FAIL {target.amendement_uid} : {exc}")
+                    exc_str = str(exc)
+                    exc_name = type(exc).__name__
+                    if "AuthenticationError" in exc_name or "401" in exc_str or "Invalid API Key" in exc_str or "invalid_api_key" in exc_str:
+                        error_msg = "⚠️ Clé API invalide ou expirée. Veuillez vérifier et mettre à jour votre clé dans les Réglages IA."
+                    else:
+                        error_msg = "⚠️ Impossible de joindre l'IA (Serveur local ou tunnel Ngrok hors-ligne). Vérifiez vos réglages IA."
+
                     llm_data = {
                         "statut": "Erreur IA",
-                        "analyse_intention": "⚠️ Impossible de joindre l'IA (Serveur local ou tunnel Ngrok hors-ligne). Vérifiez vos réglages IA.",
+                        "analyse_intention": error_msg,
                         "analyse_politique": "Analyse sémantique indisponible.",
                         "id_discussion_cible": None,
                         "niveau_confiance": 0.0,

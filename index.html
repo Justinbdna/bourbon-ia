@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Bourbon.IA — Classement des amendements</title>
+    <script>
+      (function() {
+        const saved = localStorage.getItem('bourbon_theme_preference');
+        if (saved === 'dark' || (saved === null && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      })();
+    </script>
   </head>
   <body class="bg-ink-100 text-ink-900 font-body antialiased transition-colors duration-300 dark:bg-obsidienne dark:text-plume">
     <div id="root"></div>

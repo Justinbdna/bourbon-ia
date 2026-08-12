@@ -462,8 +462,9 @@ def _repli_nouveau(motif: str) -> LLMClassificationResponse:
     humaine dans le dashboard.
     """
     logger.warning(f"⚠️  Repli sémantique → NOUVEAU. Motif : {motif}")
+    intention = motif if motif.startswith("⚠️") else f"Analyse sémantique indisponible ({motif})."
     return LLMClassificationResponse(
-        analyse_intention=f"Analyse sémantique indisponible ({motif}).",
+        analyse_intention=intention,
         analyse_politique="Aucune analyse politique produite : repli technique. "
                           "Classement laissé au moteur déterministe.",
         statut="NOUVEAU",
@@ -529,9 +530,13 @@ def evaluate_similitude(
     except ImportError:
         return _repli_nouveau("bibliothèque openai indisponible")
     except Exception as exc:
+        exc_str = str(exc)
+        exc_name = type(exc).__name__
+        if "AuthenticationError" in exc_name or "401" in exc_str or "Invalid API Key" in exc_str or "invalid_api_key" in exc_str:
+            return _repli_nouveau("⚠️ Clé API invalide ou expirée. Veuillez vérifier et mettre à jour votre clé dans les Réglages IA.")
         # Couvre APITimeoutError, APIConnectionError (LM Studio éteint, CORS,
         # pare-feu), erreurs HTTP, réponses inattendues du serveur local.
-        return _repli_nouveau(f"{type(exc).__name__}: {str(exc)[:180]}")
+        return _repli_nouveau(f"{exc_name}: {exc_str[:180]}")
 
     # ── Parsing ──
     try:
