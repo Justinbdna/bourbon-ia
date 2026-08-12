@@ -4,7 +4,7 @@ import AmendmentTable from './components/AmendmentTable'
 import AmendmentDetail from './components/AmendmentDetail'
 import ClassifyButton from './components/ClassifyButton'
 import sampleAmendments from './data/sampleAmendments.json'
-import { classifyAmendments, classifyAmendmentsV2, normalizeAmendments } from './api/classify'
+import { classifyAmendmentsV2, normalizeAmendments } from './api/classify'
 import ThemeToggle from './components/ThemeToggle'
 import AISettingsModal from './components/AISettingsModal'
 import ConsentModal from './components/ConsentModal'
@@ -217,62 +217,36 @@ export default function App() {
     }, 1000)
 
     try {
-      // ── Tentative Pipeline V2 (Déterministe → Cache → LLM → Data Mapper) ──
-      if (aiSettings.provider === 'local') {
-        try {
-          setCurrentAnalyzing({ uid: '', numero: '...', index: 0, total: amendments.length })
-          const v2Results = await classifyAmendmentsV2(amendments, {
-            aiSettings,
-            signal: controller.signal,
-            onMechanical: (mecResults) => {
-              // Met à jour l'état avec le tri mécanique pur immédiatement
-              setAmendments(mecResults)
-            },
-            onProgress: (partialResult, idx, total) => {
-              if (partialResult) {
-                setCurrentAnalyzing({ 
-                  uid: partialResult.id, 
-                  numero: partialResult.id?.split('-').pop() || '?',
-                  index: idx, 
-                  total 
-                })
-              }
-              setProgressInfo(prev => prev ? { ...prev, current: idx, total } : null)
-            },
-          })
+      setCurrentAnalyzing({ uid: '', numero: '...', index: 0, total: amendments.length })
+      const v2Results = await classifyAmendmentsV2(amendments, {
+        aiSettings,
+        signal: controller.signal,
+        onMechanical: (mecResults) => {
+          // Met à jour l'état avec le tri mécanique pur immédiatement
+          setAmendments(mecResults)
+        },
+        onProgress: (partialResult, idx, total) => {
+          if (partialResult) {
+            setCurrentAnalyzing({ 
+              uid: partialResult.id, 
+              numero: partialResult.id?.split('-').pop() || '?',
+              index: idx, 
+              total 
+            })
+          }
+          setProgressInfo(prev => prev ? { ...prev, current: idx, total } : null)
+        },
+      })
 
-          // Le V2 retourne les amendements COMPLETS (pas juste resultat_ia)
-          setAmendments(v2Results)
-          setCurrentAnalyzing(null)
-
-        } catch (v2Err) {
-          if (v2Err.name === 'AbortError') throw v2Err
-          console.warn('⚠️ Pipeline V2 indisponible, fallback V1 :', v2Err.message)
-          setCurrentAnalyzing(null)
-          // Fallback V1 (flux existant)
-          await _executeV1(amendments, controller, aiSettings, isReasoningMode, abortRef)
-        }
-      } else {
-        // Mode Cloud → V1 uniquement
-        await _executeV1(amendments, controller, aiSettings, isReasoningMode, abortRef)
-      }
+      // Le V2 retourne les amendements COMPLETS (pas juste resultat_ia)
+      setAmendments(v2Results)
+      setCurrentAnalyzing(null)
 
     } catch (err) {
       if (err.name === 'AbortError') {
         setWarnings(prev => [...prev, "Classement annulé par l'utilisateur."])
       } else {
-        console.error('Erreur classement:', err)
-        const fallbackAmendments = amendments.map((a, i) => ({
-          ...a,
-          resultat_ia: a.resultat_ia || {
-            id: a.id,
-            statut: 'Erreur',
-            justification: err.message || 'Erreur inconnue lors du classement.',
-            alerte_couleur: 'rouge',
-            rang: i + 1
-          }
-        }))
-        setAmendments(fallbackAmendments)
+        console.error('Erreur classement V2:', err)
         setClassifyError(err.message || 'Erreur inconnue lors du classement.')
       }
     } finally {
@@ -282,39 +256,6 @@ export default function App() {
       setProgressInfo(null)
       setCurrentAnalyzing(null)
     }
-  }
-
-  // ── Exécution V1 (fallback) ──
-  async function _executeV1(amdts, controller, settings, reasoningMode, abortRefLocal) {
-    await classifyAmendments(amdts, {
-      aiSettings: settings,
-      isReasoningMode: reasoningMode,
-      abortRef: abortRefLocal,
-      signal: controller.signal,
-      onProgress: (partialResult, idx, total, warningsList) => {
-        setAmendments(prev => {
-          const newAmdts = [...prev]
-          const targetIndex = newAmdts.findIndex(a => (a.id || a.numero) === partialResult.id)
-          if (targetIndex !== -1) {
-            newAmdts[targetIndex] = { ...newAmdts[targetIndex], resultat_ia: partialResult }
-          }
-          return newAmdts
-        })
-        setProgressInfo(prev => prev ? { ...prev, current: idx, total } : null)
-        if (warningsList && warningsList.length > 0) {
-          setWarnings([...warningsList])
-        }
-      }
-    })
-    setAmendments(prev => {
-      const sorted = [...prev]
-      sorted.sort((a, b) => {
-        const rangA = a.resultat_ia?.rang ?? Infinity
-        const rangB = b.resultat_ia?.rang ?? Infinity
-        return rangA - rangB
-      })
-      return sorted
-    })
   }
 
   function handleReorder(fromIndex, toIndex) {
