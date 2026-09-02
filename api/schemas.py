@@ -27,6 +27,7 @@ class StatutMecanique(str, Enum):
     IDENTIQUE_MECANIQUE = "IDENTIQUE_MECANIQUE"   # Même dispositif, auteurs différents
     DOUBLON_MECANIQUE = "DOUBLON_MECANIQUE"        # Même dispositif, même auteur
     IDENTIQUE_OFFICIEL = "IDENTIQUE_OFFICIEL"      # Marqué par l'AN via discussionIdentique
+    ISOLE_MECANIQUE = "ISOLE_MECANIQUE"            # Seul sur sa zone d'impact (skip LLM)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -86,6 +87,8 @@ class EnrichedAmendment(BaseModel):
     statut_mecanique: StatutMecanique = Field(StatutMecanique.NOUVEAU, description="Résultat du tri mécanique")
     point_impact: Optional[PointImpact] = Field(None, description="Classification hiérarchique AN")
     groupe_identique_id: Optional[str] = Field(None, description="Hash du groupe d'identiques (partagé entre les amendements jumeaux)")
+    cluster_id: Optional[str] = Field(None, description="Identifiant du cluster de concurrence (même alinéa/zone d'impact)")
+    skip_llm: bool = Field(False, description="True si classé mécaniquement sans besoin d'analyse LLM")
     justification_mecanique: str = Field("", description="Explication courte du statut mécanique")
     
     raw_dict: dict = Field(default_factory=dict, description="Données d'origine pour préserver les métadonnées")

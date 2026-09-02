@@ -115,8 +115,8 @@ def test_doublon_same_author_detected():
     assert result[1].statut_mecanique == StatutMecanique.IDENTIQUE_MECANIQUE
 
 
-def test_different_text_stays_nouveau():
-    """Deux amendements avec des textes différents restent NOUVEAU."""
+def test_different_text_on_same_alinea_forms_cluster_and_stays_nouveau():
+    """Deux amendements en concurrence sur le même alinéa forment un cluster et restent NOUVEAU pour le LLM."""
     a1 = EnrichedAmendment(
         amendement_uid="AMDT-005",
         numero_long="5",
@@ -127,7 +127,7 @@ def test_different_text_stays_nouveau():
     a2 = EnrichedAmendment(
         amendement_uid="AMDT-006",
         numero_long="6",
-        dispositif_raw="<p>Compléter l'alinéa 7 par les mots : « et des territoires ».</p>",
+        dispositif_raw="<p>Compléter l'alinéa 3 par les mots : « et des territoires ».</p>",
         article_vise="ART. 5",
         auteur_ref="PA000002",
     )
@@ -136,6 +136,64 @@ def test_different_text_stays_nouveau():
 
     assert result[0].statut_mecanique == StatutMecanique.NOUVEAU
     assert result[1].statut_mecanique == StatutMecanique.NOUVEAU
+    assert result[0].skip_llm is False
+    assert result[1].skip_llm is False
+    assert result[0].cluster_id is not None
+    assert result[0].cluster_id == result[1].cluster_id
+
+
+def test_single_amendment_on_alinea_is_isolated():
+    """Un amendement seul sur son alinéa / point d'impact ressort obligatoirement Isolé avec skip_llm = True."""
+    a_seul = EnrichedAmendment(
+        amendement_uid="AMDT-SEUL-1",
+        numero_long="101",
+        dispositif_raw="<p>À l'alinéa 12, substituer au montant : « 100 » le montant : « 200 ».</p>",
+        article_vise="ART. 3",
+        auteur_ref="PA999001",
+    )
+
+    result = process_deterministic_sorting([a_seul])
+
+    assert result[0].statut_mecanique == StatutMecanique.ISOLE_MECANIQUE
+    assert result[0].skip_llm is True
+    assert "Seul amendement" in result[0].justification_mecanique
+
+
+def test_clustering_partitioning_scale_up():
+    """Vérifie le partitionnement : 2 amendements sur l'alinéa 1 (cluster) et 1 seul sur l'alinéa 4 (isolé)."""
+    a_al1_a = EnrichedAmendment(
+        amendement_uid="AMDT-A",
+        numero_long="1",
+        dispositif_raw="<p>Supprimer l'alinéa 1.</p>",
+        article_vise="ART. 2",
+    )
+    a_al1_b = EnrichedAmendment(
+        amendement_uid="AMDT-B",
+        numero_long="2",
+        dispositif_raw="<p>Rédiger ainsi l'alinéa 1 : nouvelle rédaction.</p>",
+        article_vise="ART. 2",
+    )
+    a_al4_seul = EnrichedAmendment(
+        amendement_uid="AMDT-C",
+        numero_long="3",
+        dispositif_raw="<p>Compléter l'alinéa 4 par les mots suivants.</p>",
+        article_vise="ART. 2",
+    )
+
+    result = process_deterministic_sorting([a_al1_a, a_al1_b, a_al4_seul])
+
+    by_uid = {a.amendement_uid: a for a in result}
+
+    # Les 2 sur l'alinéa 1 doivent être en cluster et rester NOUVEAU pour le LLM
+    assert by_uid["AMDT-A"].statut_mecanique == StatutMecanique.NOUVEAU
+    assert by_uid["AMDT-B"].statut_mecanique == StatutMecanique.NOUVEAU
+    assert by_uid["AMDT-A"].skip_llm is False
+    assert by_uid["AMDT-B"].skip_llm is False
+    assert by_uid["AMDT-A"].cluster_id == by_uid["AMDT-B"].cluster_id
+
+    # L'amendement seul sur l'alinéa 4 doit être isolé mécaniquement
+    assert by_uid["AMDT-C"].statut_mecanique == StatutMecanique.ISOLE_MECANIQUE
+    assert by_uid["AMDT-C"].skip_llm is True
 
 
 def test_official_identique_flag():
@@ -193,7 +251,9 @@ if __name__ == "__main__":
         test_classify_point_restreint,
         test_identical_amendments_detected,
         test_doublon_same_author_detected,
-        test_different_text_stays_nouveau,
+        test_different_text_on_same_alinea_forms_cluster_and_stays_nouveau,
+        test_single_amendment_on_alinea_is_isolated,
+        test_clustering_partitioning_scale_up,
         test_official_identique_flag,
         test_sorting_order_respects_hierarchy,
     ]

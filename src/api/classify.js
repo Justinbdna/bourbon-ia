@@ -65,7 +65,8 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
   onMechanical(mecaniques)
 
   // 2. Boucle LLM Séquentielle (Frontend Orchestrator)
-  const aTraiter = mecaniques.filter(a => a.statut_mecanique === 'NOUVEAU')
+  // Les amendements marqués _skipLLM (identiques ou isolés mécaniquement) ne sollicitent pas le LLM
+  const aTraiter = mecaniques.filter(a => a.statut_mecanique === 'NOUVEAU' && !a._skipLLM && !a.skip_llm)
   const nb_classes = mecaniques.length - aTraiter.length
 
   // Appel immédiat pour que le compteur s'incrémente des triés mécaniques

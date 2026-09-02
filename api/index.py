@@ -301,16 +301,27 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
 
     # ── Résultat déterministe injecté comme resultat_ia si pas de LLM ──
     if not base.get("resultat_ia") and amend.statut_mecanique != StatutMecanique.NOUVEAU:
-        statut_display = "Identique" # Strict mapping anti-jargon
-        couleur = "rouge" if "DOUBLON" in str(amend.statut_mecanique) else "orange"
+        if amend.statut_mecanique == StatutMecanique.ISOLE_MECANIQUE:
+            statut_display = "Isolé"
+            couleur = "gris"
+            intention = f"Détecté mécaniquement : {amend.justification_mecanique}"
+            politique = "Amendement sans concurrence sur sa zone d'impact (isolé d'office sans LLM)."
+            confiance = 1.0
+        else:
+            statut_display = "Identique" # Strict mapping anti-jargon
+            couleur = "rouge" if "DOUBLON" in str(amend.statut_mecanique) else "orange"
+            intention = f"Détecté mécaniquement : {amend.justification_mecanique}"
+            politique = "Classification déterministe (100 % fiable, sans IA)."
+            confiance = 1.0
+
         base["resultat_ia"] = {
             "id": amend.amendement_uid,
             "statut": statut_display,
             "justification": amend.justification_mecanique,
             "alerte_couleur": couleur,
-            "analyse_intention": f"Détecté mécaniquement : {amend.justification_mecanique}",
-            "analyse_politique": "Classification déterministe (100 % fiable, sans IA).",
-            "niveau_confiance": 1.0,
+            "analyse_intention": intention,
+            "analyse_politique": politique,
+            "niveau_confiance": confiance,
         }
     elif not base.get("resultat_ia") and amend.statut_mecanique == StatutMecanique.NOUVEAU:
         base["resultat_ia"] = {
@@ -322,6 +333,11 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
             "analyse_politique": "",
             "niveau_confiance": 0.0,
         }
+
+    # ── Drapeaux de clustering et d'optimisation LLM ──
+    base["_skipLLM"] = bool(amend.skip_llm or amend.statut_mecanique != StatutMecanique.NOUVEAU)
+    base["skip_llm"] = base["_skipLLM"]
+    base["cluster_id"] = amend.cluster_id
 
     # ── Whitelist et filtrage de sécurité (C-03) ──
     # Ne préserver que les clés inoffensives provenant des données d'origine
@@ -338,8 +354,8 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
 
     filtered_raw.update(base)
 
-    # Filtrage strict de sécurité : élimination absolue de toute clé privée/technique commençant par '_'
-    return {k: v for k, v in filtered_raw.items() if not k.startswith("_")}
+    # Filtrage strict de sécurité : élimination absolue de toute clé privée/technique commençant par '_' (sauf _skipLLM requis pour l'orchestrateur frontend)
+    return {k: v for k, v in filtered_raw.items() if not k.startswith("_") or k == "_skipLLM"}
 
 @app.post("/api/v2/mecanique")
 async def v2_mecanique(payload: V2AnalyzeRequest):

@@ -82,19 +82,71 @@ def classify_point_impact(dispositif_clean: str) -> tuple[int, PointImpact]:
     """
     text = dispositif_clean.lower()
 
-    if text.startswith("supprimer cet article") or text.startswith("supprimer larticle"):
+    if (
+        "supprimer cet article" in text
+        or "supprimer l article" in text
+        or "supprimer larticle" in text
+    ):
         return (1, PointImpact.SUPPRESSION_ARTICLE)
 
-    if text.startswith("rediger ainsi cet article") or text.startswith("rediger ainsi larticle"):
+    if (
+        "rediger ainsi cet article" in text
+        or "rediger ainsi l article" in text
+        or "rediger ainsi larticle" in text
+        or "rédiger ainsi cet article" in text
+        or "rédiger ainsi l article" in text
+        or "rédiger ainsi larticle" in text
+    ):
         return (2, PointImpact.REDACTION_GLOBALE_ARTICLE)
 
-    if "supprimer lalinea" in text or "supprimer les alineas" in text:
+    if (
+        re.search(r"supprimer\s+l\s*alin[eé]as?", text)
+        or re.search(r"supprimer\s+les\s+alin[eé]as?", text)
+        or "supprimer lalinea" in text
+    ):
         return (3, PointImpact.SUPPRESSION_ALINEA)
 
-    if "rediger ainsi lalinea" in text or "rediger ainsi cet alinea" in text:
+    if (
+        re.search(r"r[eé]diger\s+ainsi\s+(?:l|cet)?\s*alin[eé]as?", text)
+        or "rediger ainsi lalinea" in text
+    ):
         return (4, PointImpact.REDACTION_ALINEA)
 
     return (5, PointImpact.POINT_RESTREINT)
+
+
+_ALINEA_REGEX = re.compile(r"\balin[eé]as?\s*(\d+)", re.IGNORECASE)
+
+
+def extract_alinea_number(dispositif_clean: str, alinea_vise: str = "") -> str:
+    """Extrait le numéro d'alinéa s'il est spécifié dans le champ ou présent dans le dispositif."""
+    if alinea_vise and str(alinea_vise).strip():
+        return str(alinea_vise).strip()
+    match = _ALINEA_REGEX.search(dispositif_clean or "")
+    if match:
+        return match.group(1)
+    return ""
+
+
+def get_impact_zone_key(amend: EnrichedAmendment) -> str:
+    """
+    Calcule la clé composite de zone d'impact pour partitionner les amendements :
+    (article_vise, point_impact, alinea_vise).
+    """
+    art = (amend.article_vise or "ART_GLOBAL").strip().upper()
+    impact = amend.point_impact or PointImpact.POINT_RESTREINT
+
+    # Pour suppression / rédaction globale d'article : zone = article entier
+    if impact in (PointImpact.SUPPRESSION_ARTICLE, PointImpact.REDACTION_GLOBALE_ARTICLE):
+        return f"{art}||GLOBAL_{impact.value}"
+
+    # Pour un alinéa ou point restreint
+    al = extract_alinea_number(amend.dispositif_clean, amend.alinea_vise)
+    if al:
+        amend.alinea_vise = al
+        return f"{art}||ALINEA_{al}"
+
+    return f"{art}||{impact.value}"
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -105,27 +157,24 @@ def process_deterministic_sorting(
     amendments: list[EnrichedAmendment],
 ) -> list[EnrichedAmendment]:
     """
-    Moteur de tri déterministe 100 % exact.
+    Moteur de tri déterministe 100 % exact avec clustering mécanique.
 
     Pour chaque amendement :
       1. Normalise le dispositif → `dispositif_clean`
       2. Calcule le point d'impact hiérarchique
       3. Détecte les identiques officiels (champ AN)
-      4. Détecte les identiques/doublons mécaniques par empreinte
+      4. Détecte les identiques mécaniques par empreinte exacte
+      5. Clustering mécanique par zone d'impact (article, alinéa/impact) :
+         - Si amendement unique sur sa zone → ISOLE_MECANIQUE (_skipLLM = True)
+         - Si plusieurs amendements en concurrence → cluster_id (éligibles LLM)
+      6. Tri stable par hiérarchie de l'Assemblée nationale
 
-    Complexité : O(n) — un seul passage + un groupement par dict.
-
-    Args:
-        amendments: Liste d'EnrichedAmendment (dispositif_raw doit être rempli).
-
-    Returns:
-        La même liste, enrichie avec statut_mecanique, point_impact, etc.
+    Complexité : O(n) — partitionnements par dicts.
     """
 
     # ── Phase 1 : Normalisation + classification hiérarchique ──
     for amend in amendments:
         amend.dispositif_clean = normalize_text(amend.dispositif_raw)
-
         priority, impact = classify_point_impact(amend.dispositif_clean)
         amend.point_impact = impact
 
@@ -133,20 +182,18 @@ def process_deterministic_sorting(
     for amend in amendments:
         if amend.est_identique_officiel or amend.id_discussion_identique:
             amend.statut_mecanique = StatutMecanique.IDENTIQUE_OFFICIEL
+            amend.skip_llm = True
             amend.justification_mecanique = (
                 f"Marqué 'discussion identique' par l'AN "
                 f"(id: {amend.id_discussion_identique or 'non spécifié'})."
             )
 
     # ── Phase 3 : Détection mécanique par empreinte ──
-    # Clé composite : (dispositif normalisé, article visé)
-    # → deux amendements sont identiques s'ils modifient le même article
-    #   avec exactement le même texte.
     groups: dict[str, list[int]] = defaultdict(list)
 
     for idx, amend in enumerate(amendments):
         if amend.statut_mecanique == StatutMecanique.IDENTIQUE_OFFICIEL:
-            continue  # Déjà traité en phase 2
+            continue
 
         composite_key = f"{amend.dispositif_clean}||{amend.article_vise}"
         fp = fingerprint(composite_key)
@@ -154,25 +201,50 @@ def process_deterministic_sorting(
 
     for fp, indices in groups.items():
         if len(indices) < 2:
-            continue  # Amendement unique → reste NOUVEAU
+            continue  # Unique textuellement
 
-        # Le premier est le référent, il reste NOUVEAU.
         referent_idx = indices[0]
         referent_uid = amendments[referent_idx].amendement_uid
 
-        # Seuls les suivants reçoivent le statut Identique
         for i in indices[1:]:
             amend = amendments[i]
             amend.statut_mecanique = StatutMecanique.IDENTIQUE_MECANIQUE
-            amend.groupe_identique_id = referent_uid
+            amend.skip_llm = True
+            amend.groupe_identique_id = fp
             amend.justification_mecanique = (
                 f"Identique mécanique au référent {referent_uid} "
                 f"sur {amend.article_vise or 'article non spécifié'}."
             )
 
-            amend.groupe_identique_id = fp
+    # ── Phase 4 : Clustering mécanique par zone d'impact (Scale-up) ──
+    # Partitionnement par clé composite (article, point_impact, alinéa)
+    zone_groups: dict[str, list[EnrichedAmendment]] = defaultdict(list)
+    for amend in amendments:
+        zone_key = get_impact_zone_key(amend)
+        zone_groups[zone_key].append(amend)
 
-    # ── Phase 4 : Tri stable par (priorité d'impact, numéro) ──
+    for zone_key, zone_amends in zone_groups.items():
+        cluster_fp = fingerprint(zone_key)
+        if len(zone_amends) == 1:
+            amend = zone_amends[0]
+            # Si l'amendement est seul et n'est pas déjà un identique AN officiel
+            if amend.statut_mecanique == StatutMecanique.NOUVEAU:
+                amend.statut_mecanique = StatutMecanique.ISOLE_MECANIQUE
+                amend.skip_llm = True
+                impact_label = amend.point_impact.value if amend.point_impact else "impact"
+                alinea_label = f"alinéa {amend.alinea_vise}" if amend.alinea_vise else impact_label
+                amend.justification_mecanique = (
+                    f"Seul amendement déposé sur cette zone d'impact "
+                    f"({amend.article_vise or 'article'} - {alinea_label}). "
+                    f"Aucun concurrent en discussion commune."
+                )
+        else:
+            # Plusieurs amendements en concurrence sur le même point d'impact
+            for amend in zone_amends:
+                amend.cluster_id = cluster_fp
+                # S'il n'est pas déjà marqué identique, il reste NOUVEAU et éligible au LLM
+
+    # ── Phase 5 : Tri stable par (priorité d'impact, numéro) ──
     impact_order = {
         PointImpact.SUPPRESSION_ARTICLE: 1,
         PointImpact.REDACTION_GLOBALE_ARTICLE: 2,
