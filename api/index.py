@@ -8,6 +8,7 @@ import html
 from typing import List, Dict, Any, Optional
 
 from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -28,11 +29,17 @@ try:
     from api.schemas import EnrichedAmendment, StatutMecanique
     from api.llm_semantic_engine import evaluate_similitude
     from api.cache_manager import get_cached_classification, save_classification
+    from api.deputes_resolver import resolve_signataires
 except ModuleNotFoundError:
     from deterministic_engine import process_deterministic_sorting, normalize_text
     from schemas import EnrichedAmendment, StatutMecanique
     from llm_semantic_engine import evaluate_similitude
     from cache_manager import get_cached_classification, save_classification
+    try:
+        from deputes_resolver import resolve_signataires
+    except Exception:
+        def resolve_signataires(x):
+            return {"auteurs_formatte": str(x) if x else "", "groupe_principal": "", "est_rapporteur": False}
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -110,6 +117,14 @@ def normaliser_amendement(data, index: int = 0) -> dict:
             else:
                 auteur = safe_str(signataires)
 
+            # Résolution enrichie facultative sécurisée
+            try:
+                res_sig = resolve_signataires(signataires or auteur)
+                if res_sig.get("auteurs_formatte"):
+                    auteur = res_sig["auteurs_formatte"]
+            except Exception as e:
+                logging.debug(f"Résolution signataire ignorée pour amendement {index}: {e}")
+
             raw_impact = am.get("pointeurFragmentTexte", {}).get("division", {}).get("articleDesignation", "")
             impact = safe_str(raw_impact)
             
@@ -143,8 +158,24 @@ def normaliser_amendement(data, index: int = 0) -> dict:
         return {"id": f"amdt-err-{index}", "numero": "Erreur", "article": "", "auteurs": [], "point_impact": {"type": ""}, "dispositif": "", "texte": "", "auteur": ""}
 
 @app.post("/api/normalize")
+@app.post("/api/v2/normaliser")
 async def normalize_endpoint(payload: AnalyzeRequest):
-    return [normaliser_amendement(a, i) for i, a in enumerate(payload.amendements)]
+    try:
+        results = []
+        for i, a in enumerate(payload.amendements):
+            try:
+                results.append(normaliser_amendement(a, i))
+            except Exception as exc:
+                logging.warning(f"⚠️ Erreur normalisation amendement {i}: {exc}")
+                results.append({"id": f"amdt-err-{i}", "numero": "Erreur", "article": "", "auteurs": [], "point_impact": {"type": ""}, "dispositif": "", "texte": "", "auteur": ""})
+        return results
+    except Exception as e:
+        import traceback
+        logging.error(f"❌ Crash normalize_endpoint: {e}\n{traceback.format_exc()}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Erreur de normalisation: {str(e)}"}
+        )
 
 @app.get("/api/health")
 def health():
@@ -392,15 +423,38 @@ async def v2_mecanique(payload: V2AnalyzeRequest):
     """
     Route ultra-rapide (sans LLM) pour renvoyer le tri mécanique immédiatement.
     """
-    enriched = []
-    for i, raw in enumerate(payload.amendements):
+    try:
+        enriched = []
+        for i, raw in enumerate(payload.amendements):
+            try:
+                enriched.append(_build_enriched(raw, i))
+            except Exception as exc:
+                logging.warning(f"⚠️ Amendement {i} ignoré (conversion) : {exc}")
+
+        if not enriched:
+            return []
+
         try:
-            enriched.append(_build_enriched(raw, i))
+            _inject_textes_reference(enriched, payload.textes_reference)
         except Exception as exc:
-            logging.warning(f"⚠️ Amendement {i} ignoré (conversion) : {exc}")
-    _inject_textes_reference(enriched, payload.textes_reference)
-    enriched = process_deterministic_sorting(enriched)
-    return [_to_frontend(a) for a in enriched]
+            logging.warning(f"⚠️ Erreur injection textes_reference : {exc}")
+
+        try:
+            enriched = process_deterministic_sorting(enriched)
+        except Exception as exc:
+            logging.error(f"❌ Erreur process_deterministic_sorting : {exc}")
+            for a in enriched:
+                a.statut_mecanique = StatutMecanique.ISOLE_MECANIQUE
+                a.justification_mecanique = "Repli : tri mécanique non appliqué suite à une anomalie."
+
+        return [_to_frontend(a) for a in enriched]
+    except Exception as e:
+        import traceback
+        logging.error(f"❌ Crash v2_mecanique: {e}\n{traceback.format_exc()}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Erreur interne lors du tri mécanique: {str(e)}", "details": str(e)}
+        )
 
 
 @app.post("/api/v2/analyser")
