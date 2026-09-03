@@ -20,7 +20,7 @@ CURRENT_DIR = Path(__file__).resolve().parent
 DATA_PATH = CURRENT_DIR / "data" / "deputes_active.json"
 
 # ── Dictionnaire officiel des organes politiques (XVIIe Législature) ──
-ORGANES_GROUPES_MAP: dict[str, str] = {
+MAPPING_ORGANES_XVII: dict[str, str] = {
     "PO845401": "RN",       # Rassemblement National
     "PO845407": "EPR",      # Ensemble pour la République
     "PO845413": "LFI-NFP",  # La France Insoumise - Nouveau Front Populaire
@@ -30,8 +30,8 @@ ORGANES_GROUPES_MAP: dict[str, str] = {
     "PO845454": "Dem",      # Les Démocrates
     "PO845470": "HOR",      # Horizons & Indépendants
     "PO845485": "LIOT",     # Libertés, Indépendants, Outre-mer et Territoires
-    "PO845500": "GDR",      # Gauche Démocrate et Républicaine
     "PO845514": "GDR",      # Gauche Démocrate et Républicaine (Tricoteuses)
+    "PO845500": "GDR",      # Gauche Démocrate et Républicaine
     "PO845517": "UDR",      # Union des Droites pour la République
     "PO872880": "UDR",      # Union des Droites pour la République (Tricoteuses)
     "PO847173": "UDR",      # Union des Droites pour la République
@@ -39,6 +39,7 @@ ORGANES_GROUPES_MAP: dict[str, str] = {
     "PO793087": "NI",       # Non inscrits (XVIe)
     "NI": "Non inscrit",
 }
+ORGANES_GROUPES_MAP = MAPPING_ORGANES_XVII
 
 _DEPUTES_DB: Optional[dict[str, dict[str, str]]] = None
 
@@ -73,7 +74,6 @@ def get_depute_info(acteur_ref: str) -> Optional[dict[str, str]]:
 def resolve_single_signataire(raw_signataire: Any) -> tuple[str, str, bool]:
     """
     Résout un signataire individuel.
-
     Returns:
         tuple (nom_affiche, groupe_acronyme, is_rapporteur)
     """
@@ -81,7 +81,10 @@ def resolve_single_signataire(raw_signataire: Any) -> tuple[str, str, bool]:
     is_rapporteur = False
 
     if isinstance(raw_signataire, dict):
-        # Format Tricoteuses : {"acteurRef": "PA...", "qualite": "Rapporteur", ...}
+        # 1. Priorité absolue : groupePolitiqueRef natif si présent
+        org_ref = str(raw_signataire.get("groupePolitiqueRef") or raw_signataire.get("organeRef") or "")
+        groupe_natif = MAPPING_ORGANES_XVII.get(org_ref, "")
+
         acteur_ref = str(raw_signataire.get("acteurRef") or raw_signataire.get("uid") or "")
         qualite = str(raw_signataire.get("qualite") or "").lower()
         if "rapporteur" in qualite or "commission" in qualite:
@@ -90,13 +93,15 @@ def resolve_single_signataire(raw_signataire: Any) -> tuple[str, str, bool]:
         if acteur_ref and acteur_ref in db:
             dep = db[acteur_ref]
             nom = dep.get("nom", acteur_ref)
-            groupe = dep.get("groupe") or ORGANES_GROUPES_MAP.get(dep.get("organeRef", ""), "")
+            groupe = groupe_natif or dep.get("groupe") or MAPPING_ORGANES_XVII.get(dep.get("organeRef", ""), "")
             return nom, groupe, is_rapporteur
         elif acteur_ref:
-            # Fallback gracieux sans lever d'erreur
             nom = raw_signataire.get("nom") or acteur_ref
-            groupe = raw_signataire.get("groupe") or ""
+            groupe = groupe_natif or raw_signataire.get("groupe") or ""
             return nom, groupe, is_rapporteur
+        elif groupe_natif:
+            nom = raw_signataire.get("nom") or raw_signataire.get("libelle") or ""
+            return nom, groupe_natif, is_rapporteur
 
     raw_str = str(raw_signataire or "").strip()
     if not raw_str:
@@ -109,19 +114,35 @@ def resolve_single_signataire(raw_signataire: Any) -> tuple[str, str, bool]:
     if raw_str in db:
         dep = db[raw_str]
         nom = dep.get("nom", raw_str)
-        groupe = dep.get("groupe") or ORGANES_GROUPES_MAP.get(dep.get("organeRef", ""), "")
+        groupe = dep.get("groupe") or MAPPING_ORGANES_XVII.get(dep.get("organeRef", ""), "")
         return nom, groupe, is_rapporteur
 
-    # Recherche par nom ou sous-chaîne dans la base
-    clean_lower = raw_str.lower()
+    clean_lower = raw_str.lower().strip()
+
+    # 1. Correspondance exacte du nom complet
     for pa_id, dep in db.items():
-        dep_nom = dep.get("nom", "").lower()
-        # Correspondance exacte ou partielle significative
-        if dep_nom and (dep_nom in clean_lower or any(part in clean_lower for part in dep_nom.split() if len(part) > 3)):
-            groupe = dep.get("groupe") or ORGANES_GROUPES_MAP.get(dep.get("organeRef", ""), "")
+        dep_nom = dep.get("nom", "").lower().strip()
+        if dep_nom and dep_nom == clean_lower:
+            groupe = dep.get("groupe") or MAPPING_ORGANES_XVII.get(dep.get("organeRef", ""), "")
             return raw_str, groupe, is_rapporteur
 
-    # Fallback : texte brut
+    # 2. Correspondance du nom complet comme mot délimité (\b)
+    for pa_id, dep in db.items():
+        dep_nom = dep.get("nom", "").lower().strip()
+        if dep_nom and re.search(rf"\b{re.escape(dep_nom)}\b", clean_lower):
+            groupe = dep.get("groupe") or MAPPING_ORGANES_XVII.get(dep.get("organeRef", ""), "")
+            return raw_str, groupe, is_rapporteur
+
+    # 3. Correspondance par nom de famille (dernier token >= 4 lettres avec délimiteur \b)
+    for pa_id, dep in db.items():
+        dep_nom = dep.get("nom", "").lower().strip()
+        parts = dep_nom.split()
+        if parts:
+            nom_famille = parts[-1]
+            if len(nom_famille) >= 4 and re.search(rf"\b{re.escape(nom_famille)}\b", clean_lower):
+                groupe = dep.get("groupe") or MAPPING_ORGANES_XVII.get(dep.get("organeRef", ""), "")
+                return raw_str, groupe, is_rapporteur
+
     return raw_str, "", is_rapporteur
 
 
@@ -142,11 +163,16 @@ def resolve_signataires(signataires_raw: Any) -> dict[str, Any]:
     try:
         items_to_resolve: list[Any] = []
         global_rapporteur = False
+        groupe_principal = ""
 
         if isinstance(signataires_raw, dict):
-            # Format complet Tricoteuses : {"auteur": {...}, "cosignataires": [...]}
+            # Priorité absolue au groupePolitiqueRef de l'auteur principal
             auteur_block = signataires_raw.get("auteur", {})
             if isinstance(auteur_block, dict):
+                org_native = auteur_block.get("groupePolitiqueRef") or auteur_block.get("organeRef")
+                if org_native and str(org_native) in MAPPING_ORGANES_XVII:
+                    groupe_principal = MAPPING_ORGANES_XVII[str(org_native)]
+
                 qualite = str(auteur_block.get("qualite") or "").lower()
                 if "rapporteur" in qualite or "commission" in qualite:
                     global_rapporteur = True

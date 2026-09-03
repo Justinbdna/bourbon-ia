@@ -29,7 +29,7 @@ try:
     from api.schemas import EnrichedAmendment, StatutMecanique
     from api.llm_semantic_engine import evaluate_similitude
     from api.cache_manager import get_cached_classification, save_classification
-    from api.deputes_resolver import resolve_signataires
+    from api.deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII
     from api.textes_resolver import extract_texte_ref, get_textes_reference, match_article_reference
 except ModuleNotFoundError:
     from deterministic_engine import process_deterministic_sorting, normalize_text
@@ -37,16 +37,91 @@ except ModuleNotFoundError:
     from llm_semantic_engine import evaluate_similitude
     from cache_manager import get_cached_classification, save_classification
     try:
-        from deputes_resolver import resolve_signataires
+        from deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII
     except Exception:
         def resolve_signataires(x):
             return {"auteurs_formatte": str(x) if x else "", "groupe_principal": "", "est_rapporteur": False}
+        MAPPING_ORGANES_XVII = {}
     try:
         from textes_resolver import extract_texte_ref, get_textes_reference, match_article_reference
     except Exception:
         def extract_texte_ref(x): return ""
         def get_textes_reference(x): return {}
         def match_article_reference(d, a): return None
+
+
+def extract_dispositif_raw(am: dict) -> str:
+    """
+    Extrait le dispositif en vérifiant TOUS les chemins possibles de l'Assemblée nationale :
+      1. Chemin standard imbriqué : corps.contenuAuteur.dispositif
+      2. Chemin à plat : corps.dispositif
+      3. Chemin racine : dispositif
+      4. Repli cartoucheInformatif si chaîne valide
+    """
+    if not isinstance(am, dict):
+        return ""
+
+    corps = am.get("corps") if isinstance(am.get("corps"), dict) else {}
+    contenu_auteur = corps.get("contenuAuteur") if isinstance(corps.get("contenuAuteur"), dict) else {}
+
+    # 1. Imbriqué standard
+    disp = contenu_auteur.get("dispositif")
+    if disp and isinstance(disp, str) and disp.strip():
+        return html.unescape(disp.strip())
+
+    # 2. À plat sous corps
+    disp = corps.get("dispositif")
+    if disp and isinstance(disp, str) and disp.strip():
+        return html.unescape(disp.strip())
+
+    # 3. Racine
+    disp = am.get("dispositif")
+    if disp and isinstance(disp, str) and disp.strip():
+        return html.unescape(disp.strip())
+
+    # 4. Cartouche informatif seulement si c'est du texte
+    cartouche = corps.get("cartoucheInformatif")
+    if cartouche and isinstance(cartouche, str) and cartouche.strip():
+        return html.unescape(cartouche.strip())
+
+    return ""
+
+
+def extract_expose_sommaire(am: dict) -> str:
+    """
+    Extrait l'exposé sommaire en vérifiant TOUS les chemins possibles :
+      1. corps.contenuAuteur.exposeSommaire
+      2. corps.exposeSommaire
+      3. exposeSommaire / expose_sommaire
+    """
+    if not isinstance(am, dict):
+        return ""
+
+    corps = am.get("corps") if isinstance(am.get("corps"), dict) else {}
+    contenu_auteur = corps.get("contenuAuteur") if isinstance(corps.get("contenuAuteur"), dict) else {}
+
+    candidates = [
+        contenu_auteur.get("exposeSommaire"),
+        corps.get("exposeSommaire"),
+        am.get("exposeSommaire"),
+        am.get("expose_sommaire"),
+    ]
+    for c in candidates:
+        if c and isinstance(c, str) and c.strip():
+            return html.unescape(c.strip())
+
+    return ""
+
+
+def format_article_title(art_str: str) -> str:
+    """
+    Formate le titre d'article pour éviter les doublons ('Article Article PREMIER').
+    """
+    if not art_str:
+        return ""
+    s = str(art_str).strip()
+    s = re.sub(r"^(article\s+)+", "Article ", s, flags=re.IGNORECASE)
+    return s
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -95,11 +170,15 @@ def normaliser_amendement(data, index: int = 0) -> dict:
         am = data.get("amendement", data)
         
         # On vérifie si c'est bien une structure de l'Assemblée (identification ou uid)
+        # On vérifie si c'est bien une structure de l'Assemblée (identification ou uid)
         if "identification" in am or "uid" in am or "pointeurFragmentTexte" in am:
             def safe_str(val, default=""):
-                if isinstance(val, dict) and ("@xmlns" in val or "@xmlns:xsi" in val):
-                    return "Non renseigné"
-                if isinstance(val, (dict, list)):
+                if isinstance(val, dict):
+                    if "@xmlns" in val or "@xmlns:xsi" in val or "@xsi:nil" in val:
+                        return default
+                    import json
+                    return json.dumps(val, ensure_ascii=False)
+                if isinstance(val, list):
                     import json
                     return json.dumps(val, ensure_ascii=False)
                 res = str(val) if val is not None and str(val).strip() != "" else default
@@ -109,7 +188,7 @@ def normaliser_amendement(data, index: int = 0) -> dict:
             numero = safe_str(raw_numero, "Inconnu")
             
             raw_article = am.get("pointeurFragmentTexte", {}).get("division", {}).get("titre", "")
-            article = safe_str(raw_article)
+            article = format_article_title(safe_str(raw_article))
             
             auteur = ""
             signataires = am.get("signataires", {})
@@ -135,11 +214,8 @@ def normaliser_amendement(data, index: int = 0) -> dict:
             raw_impact = am.get("pointeurFragmentTexte", {}).get("division", {}).get("articleDesignation", "")
             impact = safe_str(raw_impact)
             
-            corps = am.get("corps", {})
-            raw_dispositif = corps.get("cartoucheInformatif")
-            if not raw_dispositif:
-                raw_dispositif = corps.get("contenuAuteur", {}).get("dispositif", "")
-            dispositif = safe_str(raw_dispositif)
+            dispositif = extract_dispositif_raw(am)
+            expose_sommaire = extract_expose_sommaire(am)
                 
             raw_uid = am.get("uid", numero)
             uid = safe_str(raw_uid, numero)
@@ -152,12 +228,21 @@ def normaliser_amendement(data, index: int = 0) -> dict:
                 "point_impact": {"type": impact},
                 "dispositif": dispositif,
                 "texte": dispositif,
+                "expose_sommaire": expose_sommaire,
+                "exposeSommaire": expose_sommaire,
                 "auteur": auteur
             }
             
         # Données déjà plates (ex: sampleAmendments.json)
         if not data.get("id"):
             data["id"] = f"amdt-{index}"
+        if not data.get("dispositif"):
+            data["dispositif"] = extract_dispositif_raw(data)
+            data["texte"] = data["dispositif"]
+        if not data.get("expose_sommaire") and not data.get("exposeSommaire"):
+            data["expose_sommaire"] = extract_expose_sommaire(data)
+        if data.get("article"):
+            data["article"] = format_article_title(data["article"])
         return data
     except Exception as e:
         import traceback
@@ -235,35 +320,40 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
     am = raw.get("amendement", raw)
 
     # ── Identifiants ──
-    uid = am.get("uid") or am.get("id") or f"amdt-{index}"
-    numero = str(am.get("identification", {}).get("numeroLong", "") or am.get("numero", ""))
+    uid = am.get("uid") or am.get("id") or raw.get("id") or f"amdt-{index}"
+    numero = str(am.get("identification", {}).get("numeroLong", "") or am.get("numero", "") or raw.get("numero", ""))
 
-    # ── Texte juridique ──
-    corps = am.get("corps", {})
-    dispositif_raw = (
-        corps.get("contenuAuteur", {}).get("dispositif", "")
-        or corps.get("cartoucheInformatif", "")
-        or am.get("dispositif", "")
-    )
-    expose = corps.get("contenuAuteur", {}).get("exposeSommaire", "") or am.get("expose_sommaire", "")
+    # ── Texte juridique universel (tous chemins vérifiés) ──
+    dispositif_raw = extract_dispositif_raw(am) or extract_dispositif_raw(raw) or am.get("texte", "") or raw.get("texte", "")
+    expose = extract_expose_sommaire(am) or extract_expose_sommaire(raw)
 
     # ── Division / Article ──
     division = am.get("pointeurFragmentTexte", {}).get("division", {})
-    article = division.get("articleDesignationCourte", "") or division.get("titre", "") or am.get("article", "")
+    raw_article = division.get("articleDesignationCourte", "") or division.get("titre", "") or am.get("article", "") or raw.get("article", "")
+    article = format_article_title(raw_article)
 
-    # ── Auteur ──
-    signataires = am.get("signataires", {})
+    # ── Auteur et Groupe ──
+    signataires = am.get("signataires", {}) or raw.get("signataires", {})
     auteur_block = signataires.get("auteur", {}) if isinstance(signataires, dict) else {}
-    auteur_ref = auteur_block.get("acteurRef", "") if isinstance(auteur_block, dict) else ""
-    groupe_ref = auteur_block.get("groupePolitiqueRef", "") if isinstance(auteur_block, dict) else ""
+    auteur_ref = auteur_block.get("acteurRef", "") if isinstance(auteur_block, dict) else (am.get("auteur_ref") or "")
+    groupe_ref = (
+        auteur_block.get("groupePolitiqueRef", "") if isinstance(auteur_block, dict) else ""
+    ) or am.get("groupePolitiqueRef", "") or raw.get("groupRef", "") or ""
+
+    # Détection de groupe politique officiel en priorité absolue
+    groupe_nom = ""
+    if groupe_ref and str(groupe_ref) in MAPPING_ORGANES_XVII:
+        groupe_nom = MAPPING_ORGANES_XVII[str(groupe_ref)]
 
     # ── Détection de qualité Rapporteur / Commission ──
     qualite_auteur = str(auteur_block.get("qualite") or "").lower()
     is_rapporteur = "rapporteur" in qualite_auteur or "commission" in qualite_auteur
-    if not is_rapporteur and am.get("auteurs"):
-        auteurs_join = " ".join(str(x) for x in am.get("auteurs", [])).lower()
-        if "rapporteur" in auteurs_join or "commission" in auteurs_join:
-            is_rapporteur = True
+    if not is_rapporteur:
+        auteurs_list = am.get("auteurs") or raw.get("auteurs", [])
+        if auteurs_list:
+            auteurs_join = " ".join(str(x) for x in auteurs_list).lower()
+            if "rapporteur" in auteurs_join or "commission" in auteurs_join:
+                is_rapporteur = True
 
     # ── Identiques officiels ──
     est_identique = bool(am.get("discussionIdentique") or am.get("estIdentique") or am.get("est_identique_officiel"))
@@ -276,14 +366,14 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
         expose_sommaire=str(expose) if expose else "",
         article_vise=str(article) if article else "",
         auteur_ref=str(auteur_ref),
-        auteur_nom=am.get("auteur_nom", "") or "",
-        auteur_prenom=am.get("auteur_prenom", "") or "",
-        auteur_trigramme=am.get("auteur_trigramme", "") or "",
-        auteurs_raw=am.get("auteurs", []),
+        auteur_nom=am.get("auteur_nom", "") or raw.get("auteur_nom", "") or "",
+        auteur_prenom=am.get("auteur_prenom", "") or raw.get("auteur_prenom", "") or "",
+        auteur_trigramme=am.get("auteur_trigramme", "") or raw.get("auteur_trigramme", "") or "",
+        auteurs_raw=am.get("auteurs", []) or raw.get("auteurs", []),
         groupe_politique_ref=str(groupe_ref),
-        groupe_politique=am.get("groupe_politique", "") or "",
-        dossier_ref=am.get("texteLegislatifRef", "") or am.get("dossier_ref", "") or "",
-        dossier_titre=am.get("dossier_titre", "") or "",
+        groupe_politique=groupe_nom or am.get("groupe_politique", "") or raw.get("groupe_politique", "") or raw.get("groupe", "") or "",
+        dossier_ref=am.get("texteLegislatifRef", "") or am.get("dossier_ref", "") or raw.get("dossier_ref", "") or "",
+        dossier_titre=am.get("dossier_titre", "") or raw.get("title", "") or "",
         est_identique_officiel=est_identique,
         id_discussion_identique=str(id_discussion) if id_discussion else None,
         est_rapporteur=is_rapporteur,

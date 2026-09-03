@@ -29,9 +29,13 @@ from typing import Optional
 from api.schemas import EnrichedAmendment, PointImpact, StatutMecanique
 
 try:
-    from api.deputes_resolver import resolve_signataires
+    from api.deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII
 except ModuleNotFoundError:
-    from deputes_resolver import resolve_signataires
+    try:
+        from deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII
+    except Exception:
+        def resolve_signataires(x): return {"auteurs_formatte": str(x) if x else "", "groupe_principal": "", "est_rapporteur": False}
+        MAPPING_ORGANES_XVII = {}
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -226,20 +230,30 @@ def process_deterministic_sorting(
         amend.point_impact = impact
 
         # Résolution locale des signataires, groupes et qualité de rapporteur
+        raw_sig = None
+        if isinstance(amend.raw_dict, dict):
+            raw_sig = (
+                amend.raw_dict.get("signataires")
+                or amend.raw_dict.get("amendement", {}).get("signataires")
+            )
         src_signataires = (
-            amend.auteur_ref
+            raw_sig
+            or amend.auteur_ref
             or amend.auteurs_raw
-            or (amend.raw_dict.get("signataires") if isinstance(amend.raw_dict, dict) else None)
             or amend.auteur_nom
         )
         if src_signataires:
             res_dep = resolve_signataires(src_signataires)
             if res_dep.get("est_rapporteur"):
                 amend.est_rapporteur = True
-            if res_dep.get("groupe_principal") and (not amend.groupe_politique or amend.groupe_politique == "Inconnu"):
+            if res_dep.get("groupe_principal"):
                 amend.groupe_politique = res_dep["groupe_principal"]
             if res_dep.get("auteurs_formatte") and not amend.auteurs_raw:
                 amend.auteurs_raw = [res_dep["auteurs_formatte"]]
+
+        # Priorité absolue si groupe_politique_ref est présent dans l'amendement
+        if amend.groupe_politique_ref and amend.groupe_politique_ref in MAPPING_ORGANES_XVII:
+            amend.groupe_politique = MAPPING_ORGANES_XVII[amend.groupe_politique_ref]
 
     # ── Phase 2 : Détection des identiques officiels (champ AN) ──
     for amend in amendments:

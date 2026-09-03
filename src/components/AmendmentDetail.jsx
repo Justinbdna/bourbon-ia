@@ -39,7 +39,7 @@ export default function AmendmentDetail({ amendment, onClose, isLoading }) {
             {a.texte_examine?.lecture ? ` · ${a.texte_examine.lecture}` : ''}
           </p>
           <h3 className="font-display text-xl text-slate-900 dark:text-plume mt-0.5">
-            Article {a.article} — Amendement n° {a.numero}
+            {a.article ? (a.article.trim().toLowerCase().startsWith('article') ? a.article : `Article ${a.article}`) : 'Article —'} — Amendement n° {a.numero}
             {a.rectification ? ` ${a.rectification}` : ''}
           </h3>
         </div>
@@ -151,7 +151,7 @@ export default function AmendmentDetail({ amendment, onClose, isLoading }) {
         {a.texte_loi_reference && (
           <section className="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-md p-4">
             <h4 className="font-display text-sm uppercase tracking-wide text-amber-900 dark:text-amber-200 mb-2 flex items-center gap-1.5">
-              <span>📜</span> Texte de loi initial de référence ({a.article || 'Article'})
+              <span>📜</span> Texte de loi initial de référence ({a.article ? (a.article.trim().toLowerCase().startsWith('article') ? a.article : `Article ${a.article}`) : 'Article'})
             </h4>
             <ScrollableText text={a.texte_loi_reference} />
           </section>

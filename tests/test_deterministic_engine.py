@@ -543,6 +543,134 @@ def test_boilerplate_accents_retire_avant_publication():
     assert cl32.alerte_couleur == "gris"
 
 
+def test_nested_contenu_auteur_dispositif_extraction():
+    """Vérifie que le dispositif extrait depuis corps.contenuAuteur.dispositif n'est pas 'Non renseigné'."""
+    from api.index import extract_dispositif_raw, normaliser_amendement, _build_enriched
+
+    raw_an = {
+        "amendement": {
+            "uid": "AMANR5L17PO845413B0149P0D1N000001",
+            "identification": {"numeroLong": "CL1"},
+            "corps": {
+                "cartoucheInformatif": {
+                    "@xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+                    "@xsi:nil": "true",
+                },
+                "contenuAuteur": {
+                    "dispositif": "<p>Supprimer cet article.</p>",
+                    "exposeSommaire": "<p>Exposé sommaire explicatif.</p>",
+                },
+            },
+            "pointeurFragmentTexte": {
+                "division": {
+                    "titre": "Article PREMIER",
+                    "articleDesignation": "Article premier",
+                }
+            },
+            "signataires": {
+                "auteur": {
+                    "acteurRef": "PA842187",
+                    "groupePolitiqueRef": "PO845413",
+                }
+            },
+        }
+    }
+
+    # 1. extract_dispositif_raw direct
+    disp = extract_dispositif_raw(raw_an["amendement"])
+    assert disp == "<p>Supprimer cet article.</p>"
+    assert disp != "Non renseigné"
+
+    # 2. normaliser_amendement
+    norm = normaliser_amendement(raw_an, 0)
+    assert norm["dispositif"] == "<p>Supprimer cet article.</p>"
+    assert norm["texte"] == "<p>Supprimer cet article.</p>"
+    assert norm["dispositif"] != "Non renseigné"
+    assert norm["article"] == "Article PREMIER"  # Pas de doublon 'Article Article PREMIER'
+
+    # 3. _build_enriched
+    enriched = _build_enriched(raw_an, 0)
+    assert enriched.dispositif_raw == "<p>Supprimer cet article.</p>"
+    assert enriched.dispositif_raw != "Non renseigné"
+
+
+def test_groupe_politique_ref_mapping_lfi_nfp():
+    """Vérifie qu'un amendement avec groupePolitiqueRef = 'PO845413' ressort avec groupe = 'LFI-NFP'."""
+    from api.deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII
+    from api.index import _build_enriched, _to_frontend
+    from api.deterministic_engine import process_deterministic_sorting
+
+    raw_an = {
+        "amendement": {
+            "uid": "AMANR5L17-CL1",
+            "identification": {"numeroLong": "CL1"},
+            "corps": {
+                "contenuAuteur": {
+                    "dispositif": "<p>Supprimer cet article.</p>",
+                }
+            },
+            "pointeurFragmentTexte": {
+                "division": {"titre": "Article 1er"}
+            },
+            "signataires": {
+                "auteur": {
+                    "acteurRef": "PA842187",
+                    "groupePolitiqueRef": "PO845413",
+                }
+            },
+        }
+    }
+
+    # 1. deputes_resolver direct
+    sig_res = resolve_signataires(raw_an["amendement"]["signataires"])
+    assert sig_res["groupe_principal"] == "LFI-NFP"
+    assert MAPPING_ORGANES_XVII.get("PO845413") == "LFI-NFP"
+
+    # 2. _build_enriched
+    enriched = _build_enriched(raw_an, 0)
+    assert enriched.groupe_politique_ref == "PO845413"
+    assert enriched.groupe_politique == "LFI-NFP"
+
+    # 3. process_deterministic_sorting
+    sorted_amends = process_deterministic_sorting([enriched])
+    assert sorted_amends[0].groupe_politique == "LFI-NFP"
+
+    # 4. _to_frontend
+    front_dict = _to_frontend(sorted_amends[0])
+    assert front_dict["groupe"] == "LFI-NFP"
+    assert front_dict["groupe_politique"] == "LFI-NFP"
+    assert front_dict["groupRef"] == "PO845413"
+
+
+def test_identical_supprimer_cet_article():
+    """Vérifie que deux amendements avec le dispositif '<p>Supprimer cet article.</p>' ressortent en Identique."""
+    from api.deterministic_engine import process_deterministic_sorting
+    from api.schemas import EnrichedAmendment, StatutMecanique
+
+    a1 = EnrichedAmendment(
+        amendement_uid="AMDT-SUPP-1",
+        numero_long="CL1",
+        dispositif_raw="<p>Supprimer cet article.</p>",
+        article_vise="Article 1er",
+        auteur_ref="PA842187",
+    )
+    a2 = EnrichedAmendment(
+        amendement_uid="AMDT-SUPP-2",
+        numero_long="CL2",
+        dispositif_raw="<p>Supprimer cet article.</p>",
+        article_vise="Article 1er",
+        auteur_ref="PA840915",
+    )
+
+    res = process_deterministic_sorting([a1, a2])
+    assert res[0].amendement_uid == "AMDT-SUPP-1"
+    assert res[1].amendement_uid == "AMDT-SUPP-2"
+    assert res[1].statut_mecanique == StatutMecanique.IDENTIQUE_MECANIQUE
+    assert res[1].skip_llm is True
+    assert res[1].groupe_identique_id is not None
+    assert "Identique mécanique" in res[1].justification_mecanique
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Exécution directe
 # ──────────────────────────────────────────────────────────────────────────
@@ -575,6 +703,9 @@ if __name__ == "__main__":
         test_auto_injection_texte_in_enriched_amendment,
         test_deputes_tricoteuses_real_data,
         test_boilerplate_accents_retire_avant_publication,
+        test_nested_contenu_auteur_dispositif_extraction,
+        test_groupe_politique_ref_mapping_lfi_nfp,
+        test_identical_supprimer_cet_article,
     ]
 
     passed = 0
