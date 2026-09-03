@@ -1,0 +1,155 @@
+{
+  "PO59051": {
+    "libelle": "Commission des lois constitutionnelles, de la législation et de l'administration générale de la République",
+    "abrege": "Lois",
+    "mots_cles": [
+      "constitution",
+      "législation",
+      "administration",
+      "justice",
+      "liberté",
+      "sécurité",
+      "collectivité",
+      "élection",
+      "nationalité",
+      "pénal",
+      "juridiction",
+      "décentralisation"
+    ]
+  },
+  "PO419604": {
+    "libelle": "Commission des affaires culturelles et de l'éducation",
+    "abrege": "Affaires culturelles et éducation",
+    "mots_cles": [
+      "culture",
+      "éducation",
+      "enseignement",
+      "patrimoine",
+      "audiovisuel",
+      "sport",
+      "jeunesse",
+      "recherche",
+      "université",
+      "école",
+      "média",
+      "artiste"
+    ]
+  },
+  "PO420120": {
+    "libelle": "Commission des affaires sociales",
+    "abrege": "Affaires sociales",
+    "mots_cles": [
+      "santé",
+      "travail",
+      "emploi",
+      "retraite",
+      "sécurité sociale",
+      "famille",
+      "handicap",
+      "solidarité",
+      "hôpital",
+      "maladie",
+      "salarié",
+      "pension"
+    ]
+  },
+  "PO59048": {
+    "libelle": "Commission des finances, de l'économie générale et du contrôle budgétaire",
+    "abrege": "Finances",
+    "mots_cles": [
+      "budget",
+      "fiscalité",
+      "impôt",
+      "taxe",
+      "dépense",
+      "recette",
+      "finance",
+      "comptable",
+      "crédit",
+      "douane",
+      "déficit",
+      "redevance"
+    ]
+  },
+  "PO419610": {
+    "libelle": "Commission des affaires économiques",
+    "abrege": "Affaires économiques",
+    "mots_cles": [
+      "entreprise",
+      "commerce",
+      "industrie",
+      "énergie",
+      "agriculture",
+      "consommation",
+      "logement",
+      "tourisme",
+      "artisanat",
+      "numérique",
+      "concurrence",
+      "alimentaire"
+    ]
+  },
+  "PO419865": {
+    "libelle": "Commission du développement durable et de l'aménagement du territoire",
+    "abrege": "Développement durable",
+    "mots_cles": [
+      "environnement",
+      "climat",
+      "transport",
+      "biodiversité",
+      "pollution",
+      "eau",
+      "déchet",
+      "mobilité",
+      "territoire",
+      "aménagement",
+      "écologie",
+      "urbanisme"
+    ]
+  },
+  "PO59046": {
+    "libelle": "Commission de la défense nationale et des forces armées",
+    "abrege": "Défense",
+    "mots_cles": [
+      "défense",
+      "armée",
+      "militaire",
+      "armement",
+      "vétéran",
+      "opération extérieure",
+      "gendarmerie",
+      "souveraineté"
+    ]
+  },
+  "PO59047": {
+    "libelle": "Commission des affaires étrangères",
+    "abrege": "Affaires étrangères",
+    "mots_cles": [
+      "international",
+      "diplomatie",
+      "traité",
+      "coopération",
+      "étranger",
+      "ambassade",
+      "convention",
+      "accord"
+    ]
+  },
+  "PO415287": {
+    "libelle": "Commission des affaires européennes",
+    "abrege": "Affaires européennes",
+    "mots_cles": [
+      "europe",
+      "européen",
+      "directive",
+      "règlement",
+      "subsidiarité",
+      "union"
+    ]
+  },
+  "PO838901": {
+    "libelle": "Hémicycle de l'Assemblée nationale",
+    "abrege": "Assemblée",
+    "mots_cles": []
+  }
+}

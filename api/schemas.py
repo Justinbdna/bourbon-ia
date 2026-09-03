@@ -79,6 +79,22 @@ class EnrichedAmendment(BaseModel):
     dossier_ref: str = Field("", description="Clé FK vers le texte de loi (texteLegislatifRef)")
     dossier_titre: str = Field("", description="Titre officiel du projet de loi")
 
+    # ── Commission saisie + corrélation thématique (api/commissions_resolver.py) ──
+    # L'uid d'organe est extrait de l'uid de l'amendement (AMANR5L17*PO59051*…),
+    # donc résolu hors-ligne, sans appel réseau.
+    commission_ref: str = Field("", description="Clé FK vers l'organe saisi (ex: PO59051)")
+    commission_libelle: str = Field("", description="Libellé complet de la commission")
+    commission_abrege: str = Field("", description="Libellé abrégé (ex: 'Lois', 'Finances')")
+    commission_mots_cles: list[str] = Field(
+        default_factory=list,
+        description="Thèmes du périmètre de la commission RÉELLEMENT présents dans le texte de l'amendement",
+    )
+    commission_hors_champ: bool = Field(
+        False,
+        description="True si aucun thème de la commission n'apparaît dans l'amendement "
+                    "(signal faible de cavalier législatif, art. 45 — à vérifier par un humain)",
+    )
+
     # ── Champs AN officiels pour détection identiques ──
     est_identique_officiel: bool = Field(False, description="True si l'AN a marqué cet amendement comme discussion identique")
     id_discussion_identique: Optional[str] = Field(None, description="Identifiant du groupe de discussion identique (AN)")

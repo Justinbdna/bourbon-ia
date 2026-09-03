@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import ImportPanel from './components/ImportPanel'
 import AmendmentTable from './components/AmendmentTable'
 import AmendmentDetail from './components/AmendmentDetail'
+import LawParticipants from './components/LawParticipants'
 import ClassifyButton from './components/ClassifyButton'
 import sampleAmendments from './data/sampleAmendments.json'
 import { classifyAmendmentsV2, normalizeAmendments } from './api/classify'
@@ -156,6 +157,19 @@ export default function App() {
   }
 
   const selected = amendments.find((a) => a.id === selectedId) || null
+
+  // Dossier législatif du lot courant : on prend la première référence trouvée.
+  // Un lot d'amendements porte en pratique sur un seul texte ; l'amendement
+  // sélectionné prime s'il en porte une.
+  const dossierRefCourant =
+    selected?.dossier_ref || amendments.find((a) => a.dossier_ref)?.dossier_ref || null
+
+  // Repli : sans référence de dossier, le backend la reconstruit depuis l'uid
+  // d'un amendement réel (un seul appel pour tout le lot).
+  const premierUidAmendement =
+    amendments.find((a) => String(a.uid || a.id || '').startsWith('AM'))?.uid ||
+    amendments.find((a) => String(a.uid || a.id || '').startsWith('AM'))?.id ||
+    null
 
   async function handleImport(list, label) {
     try {
@@ -417,12 +431,25 @@ export default function App() {
             />
           </div>
           <div className="w-full">
-            <AmendmentDetail 
-              amendment={selected} 
-              onClose={() => setSelectedId(null)} 
+            <AmendmentDetail
+              amendment={selected}
+              onClose={() => setSelectedId(null)}
               isLoading={isClassifying && selected && !selected.resultat_ia}
             />
           </div>
+
+          {/* Participants du texte de loi : nom, prénom, groupe politique.
+              Granularité au dossier (200+ personnes) → panneau dédié et non
+              une colonne du tableau d'amendements. */}
+          {(dossierRefCourant || premierUidAmendement) && (
+            <div className="w-full">
+              <LawParticipants
+                dossierRef={dossierRefCourant}
+                amendementUid={premierUidAmendement}
+                titre={amendments.find((a) => a.title)?.title}
+              />
+            </div>
+          )}
         </div>
 
         <AISettingsModal

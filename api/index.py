@@ -31,6 +31,8 @@ try:
     from api.cache_manager import get_cached_classification, save_classification
     from api.deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII
     from api.textes_resolver import extract_texte_ref, get_textes_reference, match_article_reference
+    from api.commissions_resolver import resoudre_commission_et_mots_cles
+    from api.participants_resolver import fetch_participants, resumer_par_groupe, resolve_dossier_ref
 except ModuleNotFoundError:
     from deterministic_engine import process_deterministic_sorting, normalize_text
     from schemas import EnrichedAmendment, StatutMecanique
@@ -48,6 +50,18 @@ except ModuleNotFoundError:
         def extract_texte_ref(x): return ""
         def get_textes_reference(x): return {}
         def match_article_reference(d, a): return None
+    try:
+        from commissions_resolver import resoudre_commission_et_mots_cles
+    except Exception:
+        def resoudre_commission_et_mots_cles(a):
+            return {"commission_ref": "", "commission_libelle": "", "commission_abrege": "",
+                    "commission_mots_cles": [], "commission_hors_champ": False}
+    try:
+        from participants_resolver import fetch_participants, resumer_par_groupe, resolve_dossier_ref
+    except Exception:
+        def fetch_participants(d, limite=100, utiliser_cache=True): return []
+        def resumer_par_groupe(p): return []
+        def resolve_dossier_ref(a): return ""
 
 
 def extract_dispositif_raw(am: dict) -> str:
@@ -276,6 +290,41 @@ async def normalize_endpoint(payload: AnalyzeRequest):
             content={"error": f"Erreur de normalisation: {str(e)}"}
         )
 
+@app.get("/api/participants")
+def participants_endpoint(
+    dossier_ref: Optional[str] = None,
+    amendement_uid: Optional[str] = None,
+    limite: int = 100,
+):
+    """
+    Participants d'un TEXTE DE LOI : nom de famille, prénom, groupe politique,
+    rôle tenu (rapporteur, initiateur, auteur, cosignataire) et implication.
+
+    Granularité volontairement au niveau du DOSSIER et non de l'amendement :
+    un texte courant compte 200+ participants, inaffichables ligne par ligne.
+
+    Accepte `dossier_ref` (DLR…) OU `amendement_uid` (AM…) : beaucoup d'imports
+    ne portent aucune référence de dossier, le second paramètre permet alors de
+    reconstruire le lien en un unique appel.
+
+    Ne renvoie jamais d'erreur : en cas d'indisponibilité réseau, la liste est
+    vide et le panneau front s'affiche sans bloquer le dérouleur.
+    """
+    if not dossier_ref and amendement_uid:
+        dossier_ref = resolve_dossier_ref([{"uid": amendement_uid}])
+
+    if not dossier_ref:
+        return {"dossier_ref": "", "total": 0, "participants": [], "par_groupe": []}
+
+    participants = fetch_participants(dossier_ref, limite=limite)
+    return {
+        "dossier_ref": dossier_ref,
+        "total": len(participants),
+        "participants": participants,
+        "par_groupe": resumer_par_groupe(participants),
+    }
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
@@ -310,6 +359,28 @@ def _inject_textes_reference(enriched_list: list[EnrichedAmendment], textes_ref:
             matched = match_article_reference(textes_ref, a.article_vise)
             if matched:
                 a.texte_loi_reference = matched
+
+
+def _resoudre_commission(am: dict, dispositif: Any, expose: Any) -> dict:
+    """
+    Résout la commission saisie et corrèle son périmètre thématique au texte.
+
+    Encapsulé ici pour que `_build_enriched` reste lisible et pour garantir
+    qu'une défaillance du résolveur ne casse jamais la construction de
+    l'amendement (retour de champs vides plutôt qu'exception).
+    """
+    try:
+        source = dict(am)
+        # On fournit le texte au résolveur sous les clés qu'il sait lire.
+        source.setdefault("dispositif", dispositif or "")
+        source.setdefault("exposeSommaire", expose or "")
+        return resoudre_commission_et_mots_cles(source)
+    except Exception as exc:  # noqa: BLE001
+        logging.warning(f"⚠️ Résolution commission ignorée ({exc}).")
+        return {
+            "commission_ref": "", "commission_libelle": "", "commission_abrege": "",
+            "commission_mots_cles": [], "commission_hors_champ": False,
+        }
 
 
 def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
@@ -377,6 +448,8 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
         est_identique_officiel=est_identique,
         id_discussion_identique=str(id_discussion) if id_discussion else None,
         est_rapporteur=is_rapporteur,
+        # ── Commission + corrélation thématique (résolu hors-ligne) ──
+        **_resoudre_commission(am, dispositif_raw, expose),
         raw_dict=raw,
     )
 
@@ -416,6 +489,13 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         # ── Dossier législatif (pour <LegislativeContext>) ──
         "dossier_ref": amend.dossier_ref,
         "title": amend.dossier_titre,
+
+        # ── Commission + thèmes corrélés (pour <CommissionKeywords>) ──
+        "commission_ref": amend.commission_ref,
+        "commission": amend.commission_abrege or amend.commission_libelle,
+        "commission_libelle": amend.commission_libelle,
+        "commission_mots_cles": amend.commission_mots_cles,
+        "commission_hors_champ": amend.commission_hors_champ,
 
         # ── Identiques officiels (pour <IdentiqueAlert>) ──
         "isIdentical": amend.est_identique_officiel,

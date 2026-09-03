@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import ImpactBadge from './ImpactBadge'
 import GroupeBadge from './GroupeBadge'
+import CommissionKeywords from './amendment/CommissionKeywords'
 import { downloadRtf } from '../utils/exportRtf'
 import SkeletonLoader from './amendment/SkeletonLoader'
 
@@ -139,6 +140,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">N°</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider max-w-[120px]">Auteur(s)</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-40">Point d'impact</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-44">Commission / Thèmes</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-full max-w-md">Extrait du dispositif</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Groupe</th>
               <th className="px-4 py-4 text-right text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Actions</th>
@@ -175,6 +177,14 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-800 dark:text-slate-200">{a.numero}</td>
                   <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 max-w-[120px] truncate" title={auteursText}>{auteursText}</td>
                   <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-40"><ImpactBadge type={a.point_impact?.type || a.point_impact} /></td>
+                  <td className="px-4 py-4 text-sm w-44 align-top">
+                    <CommissionKeywords
+                      commission={a.commission}
+                      commissionLibelle={a.commission_libelle}
+                      motsCles={a.commission_mots_cles}
+                      horsChamp={a.commission_hors_champ}
+                    />
+                  </td>
                   <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full max-w-md truncate" title={a.dispositif}>{a.dispositif}</td>
                   <td className="px-4 py-4 text-sm whitespace-nowrap">
                     <div className="flex items-center gap-1">
