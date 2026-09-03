@@ -159,18 +159,40 @@ BOILERPLATE_PATTERNS = [
     "retire avant publication",
     "amendement irrecevable",
     "declare irrecevable",
+    "irrecevable art",
+    "irrecevable",
 ]
 
 
-def is_boilerplate_or_insignificant(dispositif_clean: str) -> bool:
+def is_boilerplate_or_empty(text: str) -> bool:
     """
-    Détecte si un dispositif est non signifiant, vide ou irrecevable.
+    Détecte si un dispositif est non signifiant, vide, retiré ou irrecevable.
+    Normalise le texte en supprimant totalement les accents et la ponctuation :
+    unicodedata.normalize('NFKD', text).encode('ASCII', 'ignore').decode('utf-8').lower().strip()
     Condition : contient un motif de boilerplate ou fait moins de 15 caractères.
     """
-    if not dispositif_clean or len(dispositif_clean.strip()) < 15:
+    if not text:
         return True
-    text = dispositif_clean.lower()
-    return any(pattern in text for pattern in BOILERPLATE_PATTERNS)
+
+    clean_no_html = _HTML_TAG_RE.sub(" ", str(text))
+    deaccented = (
+        unicodedata.normalize("NFKD", clean_no_html)
+        .encode("ASCII", "ignore")
+        .decode("utf-8")
+        .lower()
+        .strip()
+    )
+    deaccented = _PUNCTUATION_RE.sub(" ", deaccented)
+    deaccented = _WHITESPACE_RE.sub(" ", deaccented).strip()
+
+    if len(deaccented) < 15:
+        return True
+
+    return any(pattern in deaccented for pattern in BOILERPLATE_PATTERNS)
+
+
+# Rétrocompatibilité
+is_boilerplate_or_insignificant = is_boilerplate_or_empty
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -233,16 +255,19 @@ def process_deterministic_sorting(
     for amend in amendments:
         if amend.statut_mecanique == StatutMecanique.IDENTIQUE_OFFICIEL:
             continue
-        if is_boilerplate_or_insignificant(amend.dispositif_clean):
+        if is_boilerplate_or_empty(amend.dispositif_clean) or is_boilerplate_or_empty(amend.dispositif_raw):
             amend.statut_mecanique = StatutMecanique.ISOLE_MECANIQUE
             amend.skip_llm = True
-            amend.justification_mecanique = "Amendement non renseigné ou irrecevable."
+            amend.alerte_couleur = "gris"
+            amend.justification_mecanique = "Amendement non renseigné, retiré ou irrecevable."
 
     # ── Phase 3 : Détection mécanique par empreinte (vrai texte législatif uniquement) ──
     groups: dict[str, list[int]] = defaultdict(list)
 
     for idx, amend in enumerate(amendments):
         if amend.statut_mecanique in (StatutMecanique.IDENTIQUE_OFFICIEL, StatutMecanique.ISOLE_MECANIQUE):
+            continue
+        if is_boilerplate_or_empty(amend.dispositif_clean) or is_boilerplate_or_empty(amend.dispositif_raw):
             continue
 
         composite_key = f"{amend.dispositif_clean}||{amend.article_vise}"
@@ -271,7 +296,7 @@ def process_deterministic_sorting(
     zone_groups: dict[str, list[EnrichedAmendment]] = defaultdict(list)
     for amend in amendments:
         # Les amendements boilerplate/irrecevables sont déjà isolés et ne concurrencent personne
-        if is_boilerplate_or_insignificant(amend.dispositif_clean):
+        if is_boilerplate_or_empty(amend.dispositif_clean) or is_boilerplate_or_empty(amend.dispositif_raw):
             continue
         zone_key = get_impact_zone_key(amend)
         zone_groups[zone_key].append(amend)

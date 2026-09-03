@@ -90,6 +90,7 @@ class EnrichedAmendment(BaseModel):
     cluster_id: Optional[str] = Field(None, description="Identifiant du cluster de concurrence (même alinéa/zone d'impact)")
     skip_llm: bool = Field(False, description="True si classé mécaniquement sans besoin d'analyse LLM")
     justification_mecanique: str = Field("", description="Explication courte du statut mécanique")
+    alerte_couleur: Optional[str] = Field(None, description="Couleur de l'alerte UI (gris, vert, orange, rouge)")
     est_rapporteur: bool = Field(False, description="True si déposé par le rapporteur ou la commission")
     texte_loi_reference: Optional[str] = Field(None, description="Texte initial de l'article de loi de référence")
     

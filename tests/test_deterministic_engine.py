@@ -336,21 +336,21 @@ def test_deputes_resolver_signataire_and_groupe():
     """Validation de la résolution d'un signataire PA... et de son groupe via deputes_resolver."""
     from api.deputes_resolver import resolve_signataires
 
-    # 1. Résolution par identifiant PA
-    res = resolve_signataires("PA841749")
-    assert "Laurent Monnier" in res["auteurs_formatte"]
-    assert res["groupe_principal"] == "EPR"
+    # 1. Résolution par identifiant PA (Tricoteuses XVIIe : Corentin Le Fur)
+    res = resolve_signataires("PA840979")
+    assert "Corentin Le Fur" in res["auteurs_formatte"]
+    assert res["groupe_principal"] == "DR"
     assert res["est_rapporteur"] is False
 
     # 2. Résolution avec dict Tricoteuses et qualité rapporteur
     res_rap = resolve_signataires({
-        "auteur": {"acteurRef": "PA841749", "qualite": "Rapporteur"},
+        "auteur": {"acteurRef": "PA840979", "qualite": "Rapporteur"},
         "cosignataires": [{"acteurRef": "PA841701"}]
     })
-    assert "Laurent Monnier (EPR)" in res_rap["auteurs_formatte"]
+    assert "Corentin Le Fur (DR)" in res_rap["auteurs_formatte"]
     assert "Léa Balage El Mariky (EcoS)" in res_rap["auteurs_formatte"]
     assert res_rap["est_rapporteur"] is True
-    assert res_rap["groupe_principal"] == "EPR"
+    assert res_rap["groupe_principal"] == "DR"
 
     # 3. Fallback gracieux sur ID inconnu
     res_inconnu = resolve_signataires("PA99999999")
@@ -481,6 +481,68 @@ def test_auto_injection_texte_in_enriched_amendment():
     assert "72-4 de la Constitution" in a.texte_loi_reference
 
 
+def test_deputes_tricoteuses_real_data():
+    """Valide la résolution en clair et le groupe politique de PA840979, PA719890 et PA330909."""
+    from api.deputes_resolver import resolve_signataires
+
+    # 1. PA840979 : Corentin Le Fur (DR)
+    res1 = resolve_signataires("PA840979")
+    assert "Corentin Le Fur" in res1["auteurs_formatte"]
+    assert res1["groupe_principal"] == "DR"
+    assert "DR" in res1["auteurs_formatte"]
+
+    # 2. PA719890 : Danielle Brulebois (EPR)
+    res2 = resolve_signataires("PA719890")
+    assert "Danielle Brulebois" in res2["auteurs_formatte"]
+    assert res2["groupe_principal"] == "EPR"
+    assert "EPR" in res2["auteurs_formatte"]
+
+    # 3. PA330909 : Vincent Descoeur (DR)
+    res3 = resolve_signataires("PA330909")
+    assert "Vincent Descoeur" in res3["auteurs_formatte"]
+    assert res3["groupe_principal"] == "DR"
+    assert "DR" in res3["auteurs_formatte"]
+
+
+def test_boilerplate_accents_retire_avant_publication():
+    """
+    Deux amendements avec le dispositif <p>Retiré avant publication.</p>
+    doivent ressortir tous deux Isolé et JAMAIS Identique.
+    """
+    from api.deterministic_engine import process_deterministic_sorting
+    from api.schemas import EnrichedAmendment, StatutMecanique
+
+    a1 = EnrichedAmendment(
+        amendement_uid="AMDT-CL31",
+        numero_long="CL31",
+        dispositif_raw="<p>Retiré avant publication.</p>",
+        article_vise="Article 1er",
+        auteur_ref="PA840979",
+    )
+    a2 = EnrichedAmendment(
+        amendement_uid="AMDT-CL32",
+        numero_long="CL32",
+        dispositif_raw="<p>Retiré avant publication.</p>",
+        article_vise="Article 1er",
+        auteur_ref="PA719890",
+    )
+
+    result = process_deterministic_sorting([a1, a2])
+    res_map = {a.amendement_uid: a for a in result}
+
+    cl31 = res_map["AMDT-CL31"]
+    cl32 = res_map["AMDT-CL32"]
+
+    assert cl31.statut_mecanique == StatutMecanique.ISOLE_MECANIQUE
+    assert cl32.statut_mecanique == StatutMecanique.ISOLE_MECANIQUE
+    assert cl31.statut_mecanique != StatutMecanique.IDENTIQUE_MECANIQUE
+    assert cl32.statut_mecanique != StatutMecanique.IDENTIQUE_MECANIQUE
+    assert cl31.skip_llm is True
+    assert cl32.skip_llm is True
+    assert cl31.alerte_couleur == "gris"
+    assert cl32.alerte_couleur == "gris"
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Exécution directe
 # ──────────────────────────────────────────────────────────────────────────
@@ -511,6 +573,8 @@ if __name__ == "__main__":
         test_textes_resolver_normalization_match,
         test_textes_resolver_fallback,
         test_auto_injection_texte_in_enriched_amendment,
+        test_deputes_tricoteuses_real_data,
+        test_boilerplate_accents_retire_avant_publication,
     ]
 
     passed = 0

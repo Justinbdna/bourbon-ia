@@ -21,8 +21,8 @@ DATA_PATH = CURRENT_DIR / "data" / "deputes_active.json"
 
 # ── Dictionnaire officiel des organes politiques (XVIIe Législature) ──
 ORGANES_GROUPES_MAP: dict[str, str] = {
-    "PO845401": "EPR",      # Ensemble Pour la République
-    "PO845407": "RN",       # Rassemblement National
+    "PO845401": "RN",       # Rassemblement National
+    "PO845407": "EPR",      # Ensemble pour la République
     "PO845413": "LFI-NFP",  # La France Insoumise - Nouveau Front Populaire
     "PO845419": "SOC",      # Socialistes et apparentés
     "PO845425": "DR",       # Droite Républicaine
@@ -31,8 +31,12 @@ ORGANES_GROUPES_MAP: dict[str, str] = {
     "PO845470": "HOR",      # Horizons & Indépendants
     "PO845485": "LIOT",     # Libertés, Indépendants, Outre-mer et Territoires
     "PO845500": "GDR",      # Gauche Démocrate et Républicaine
+    "PO845514": "GDR",      # Gauche Démocrate et Républicaine (Tricoteuses)
     "PO845517": "UDR",      # Union des Droites pour la République
-    "PO793087": "NI",       # Non inscrits
+    "PO872880": "UDR",      # Union des Droites pour la République (Tricoteuses)
+    "PO847173": "UDR",      # Union des Droites pour la République
+    "PO840056": "NI",       # Non inscrits
+    "PO793087": "NI",       # Non inscrits (XVIe)
     "NI": "Non inscrit",
 }
 
