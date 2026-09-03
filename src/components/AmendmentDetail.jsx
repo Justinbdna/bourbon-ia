@@ -148,6 +148,15 @@ export default function AmendmentDetail({ amendment, onClose, isLoading }) {
           )}
         </section>
 
+        {a.texte_loi_reference && (
+          <section className="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-md p-4">
+            <h4 className="font-display text-sm uppercase tracking-wide text-amber-900 dark:text-amber-200 mb-2 flex items-center gap-1.5">
+              <span>📜</span> Texte de loi initial de référence ({a.article || 'Article'})
+            </h4>
+            <ScrollableText text={a.texte_loi_reference} />
+          </section>
+        )}
+
         <section className="bg-gray-50 dark:bg-surface border border-ink-200 dark:border-ink-700 rounded-md p-4">
           <h4 className="font-display text-sm uppercase tracking-wide text-slate-900 dark:text-plume mb-2">
             Dispositif

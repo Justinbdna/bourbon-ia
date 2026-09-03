@@ -417,6 +417,70 @@ def test_texte_loi_initial_prompt_injection():
     assert "Consigne stricte : Tu dois analyser l'impact des amendements" in prompt_avec
 
 
+def test_textes_resolver_nominal():
+    """Vérifie que le chargement de PIONANR5L17B0149 résout bien les articles ARTICLE PREMIER et ARTICLE 2."""
+    from api.textes_resolver import get_textes_reference
+
+    articles = get_textes_reference("PIONANR5L17B0149")
+    assert len(articles) == 2
+    assert "ARTICLE PREMIER" in articles
+    assert "ARTICLE 2" in articles
+    assert "72-4 de la Constitution" in articles["ARTICLE PREMIER"]
+    assert "88-3 de la Constitution est abrogé" in articles["ARTICLE 2"]
+
+
+def test_textes_resolver_normalization_match():
+    """Vérifie que ART. PREMIER, Article 1er et ARTICLE PREMIER matchent tous le même texte d'article."""
+    from api.textes_resolver import get_textes_reference, match_article_reference
+
+    articles = get_textes_reference("PIONANR5L17B0149")
+    txt_premier = articles["ARTICLE PREMIER"]
+
+    m1 = match_article_reference(articles, "ARTICLE PREMIER")
+    m2 = match_article_reference(articles, "Article 1er")
+    m3 = match_article_reference(articles, "ART. PREMIER")
+    m4 = match_article_reference(articles, "1")
+
+    assert m1 == txt_premier
+    assert m2 == txt_premier
+    assert m3 == txt_premier
+    assert m4 == txt_premier
+
+    m_art2 = match_article_reference(articles, "ART. 2")
+    assert m_art2 == articles["ARTICLE 2"]
+
+
+def test_textes_resolver_fallback():
+    """Vérifie qu'un identifiant inexistant retourne {} sans crash."""
+    from api.textes_resolver import get_textes_reference, match_article_reference
+
+    inconnu = get_textes_reference("DOSSIER_INCONNU_99999")
+    assert inconnu == {}
+
+    none_match = match_article_reference(inconnu, "ART. 1")
+    assert none_match is None
+
+
+def test_auto_injection_texte_in_enriched_amendment():
+    """Vérifie qu'un amendement visant l'Article PREMIER reçoit automatiquement son texte_loi_reference."""
+    from api.index import _inject_textes_reference
+    from api.textes_resolver import get_textes_reference
+
+    articles = get_textes_reference("PIONANR5L17B0149")
+    a = EnrichedAmendment(
+        amendement_uid="AMDT-AUTO-REF",
+        numero_long="42",
+        dispositif_raw="<p>Modifier l'article premier</p>",
+        article_vise="ART. PREMIER",
+        auteur_ref="PA841749",
+    )
+
+    assert a.texte_loi_reference is None
+    _inject_textes_reference([a], articles)
+    assert a.texte_loi_reference is not None
+    assert "72-4 de la Constitution" in a.texte_loi_reference
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Exécution directe
 # ──────────────────────────────────────────────────────────────────────────
@@ -443,6 +507,10 @@ if __name__ == "__main__":
         test_deputes_resolver_signataire_and_groupe,
         test_rapporteur_priority_sorting,
         test_texte_loi_initial_prompt_injection,
+        test_textes_resolver_nominal,
+        test_textes_resolver_normalization_match,
+        test_textes_resolver_fallback,
+        test_auto_injection_texte_in_enriched_amendment,
     ]
 
     passed = 0

@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -30,6 +30,7 @@ try:
     from api.llm_semantic_engine import evaluate_similitude
     from api.cache_manager import get_cached_classification, save_classification
     from api.deputes_resolver import resolve_signataires
+    from api.textes_resolver import extract_texte_ref, get_textes_reference, match_article_reference
 except ModuleNotFoundError:
     from deterministic_engine import process_deterministic_sorting, normalize_text
     from schemas import EnrichedAmendment, StatutMecanique
@@ -40,6 +41,12 @@ except ModuleNotFoundError:
     except Exception:
         def resolve_signataires(x):
             return {"auteurs_formatte": str(x) if x else "", "groupe_principal": "", "est_rapporteur": False}
+    try:
+        from textes_resolver import extract_texte_ref, get_textes_reference, match_article_reference
+    except Exception:
+        def extract_texte_ref(x): return ""
+        def get_textes_reference(x): return {}
+        def match_article_reference(d, a): return None
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -161,10 +168,17 @@ def normaliser_amendement(data, index: int = 0) -> dict:
 @app.post("/api/v2/normaliser")
 async def normalize_endpoint(payload: AnalyzeRequest):
     try:
+        # Résolution automatique du dossier législatif de référence
+        texte_ref_id = extract_texte_ref(payload.amendements)
+        textes_dict = get_textes_reference(texte_ref_id) if texte_ref_id else {}
+
         results = []
         for i, a in enumerate(payload.amendements):
             try:
-                results.append(normaliser_amendement(a, i))
+                norm = normaliser_amendement(a, i)
+                if textes_dict and norm.get("article"):
+                    norm["texte_loi_reference"] = match_article_reference(textes_dict, norm["article"])
+                results.append(norm)
             except Exception as exc:
                 logging.warning(f"⚠️ Erreur normalisation amendement {i}: {exc}")
                 results.append({"id": f"amdt-err-{i}", "numero": "Erreur", "article": "", "auteurs": [], "point_impact": {"type": ""}, "dispositif": "", "texte": "", "auteur": ""})
@@ -206,17 +220,11 @@ def _inject_textes_reference(enriched_list: list[EnrichedAmendment], textes_ref:
     """Injecte le texte initial du projet de loi correspondant à l'article visé."""
     if not textes_ref:
         return
-    clean_refs = {str(k).strip().lower(): str(v) for k, v in textes_ref.items() if v}
     for a in enriched_list:
-        if a.article_vise:
-            art_clean = a.article_vise.strip().lower()
-            if art_clean in clean_refs:
-                a.texte_loi_reference = clean_refs[art_clean]
-            else:
-                for k, v in clean_refs.items():
-                    if k in art_clean or art_clean in k:
-                        a.texte_loi_reference = v
-                        break
+        if a.article_vise and not a.texte_loi_reference:
+            matched = match_article_reference(textes_ref, a.article_vise)
+            if matched:
+                a.texte_loi_reference = matched
 
 
 def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
@@ -424,6 +432,13 @@ async def v2_mecanique(payload: V2AnalyzeRequest):
     Route ultra-rapide (sans LLM) pour renvoyer le tri mécanique immédiatement.
     """
     try:
+        # Auto-résolution du dossier législatif si non fourni
+        textes_ref = payload.textes_reference
+        if not textes_ref:
+            texte_ref_id = extract_texte_ref(payload.amendements)
+            if texte_ref_id:
+                textes_ref = get_textes_reference(texte_ref_id)
+
         enriched = []
         for i, raw in enumerate(payload.amendements):
             try:
@@ -434,10 +449,11 @@ async def v2_mecanique(payload: V2AnalyzeRequest):
         if not enriched:
             return []
 
-        try:
-            _inject_textes_reference(enriched, payload.textes_reference)
-        except Exception as exc:
-            logging.warning(f"⚠️ Erreur injection textes_reference : {exc}")
+        if textes_ref:
+            try:
+                _inject_textes_reference(enriched, textes_ref)
+            except Exception as exc:
+                logging.warning(f"⚠️ Erreur injection textes_reference : {exc}")
 
         try:
             enriched = process_deterministic_sorting(enriched)
@@ -478,8 +494,15 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
         if not enriched:
             return []
 
-        # ── Injection des textes de référence de loi ──
-        _inject_textes_reference(enriched, payload.textes_reference)
+        # ── Injection des textes de référence de loi (avec auto-résolution) ──
+        textes_ref = payload.textes_reference
+        if not textes_ref:
+            texte_ref_id = extract_texte_ref(payload.amendements)
+            if texte_ref_id:
+                textes_ref = get_textes_reference(texte_ref_id)
+
+        if textes_ref:
+            _inject_textes_reference(enriched, textes_ref)
 
         # ── Phase 2 : Tri déterministe (Identiques, Doublons, Hiérarchie AN) ──
         enriched = process_deterministic_sorting(enriched)
@@ -628,6 +651,13 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
     Route unitaire : analyse un seul amendement (statut NOUVEAU) via RAG + LLM.
     """
     try:
+        # Auto-résolution du dossier législatif si non fourni
+        textes_ref = payload.textes_reference
+        if not textes_ref:
+            texte_ref_id = extract_texte_ref(payload.amendements)
+            if texte_ref_id:
+                textes_ref = get_textes_reference(texte_ref_id)
+
         enriched: list[EnrichedAmendment] = []
         for i, raw in enumerate(payload.amendements):
             try:
@@ -635,12 +665,17 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
             except Exception:
                 pass
         
-        _inject_textes_reference(enriched, payload.textes_reference)
+        if textes_ref:
+            _inject_textes_reference(enriched, textes_ref)
+
         enriched = process_deterministic_sorting(enriched)
         
         target = next((a for a in enriched if a.amendement_uid == payload.target_uid), None)
         if not target:
             return {"error": "Target amendment not found"}
+
+        if not target.texte_loi_reference and textes_ref and target.article_vise:
+            target.texte_loi_reference = match_article_reference(textes_ref, target.article_vise)
             
         target_rang = next((i for i, a in enumerate(enriched, start=1) if a.amendement_uid == payload.target_uid), 1)
 
