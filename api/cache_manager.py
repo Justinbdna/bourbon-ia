@@ -1,132 +1,132 @@
 """
-api/cache_manager.py — Cache SQLite pour les verdicts LLM
-==========================================================
-Évite les inférences redondantes (anti-OOM / anti-surcharge GPU).
+api/cache_manager.py — Cache en mémoire RAM avec TTL (Option 2) pour Bourbon.IA
+================================================================================
+Remplace l'ancien cache SQLite (/tmp/bourbon_cache.db) pour éliminer définitivement
+les verrous "database is locked" en environnement serverless (Vercel) et accélérer
+les lectures/écritures de verdicts LLM.
 
-Chaque amendement analysé par le moteur sémantique voit son verdict
-stocké localement. Avant toute inférence, le pipeline vérifie le cache
-et court-circuite l'appel au LLM si le résultat est déjà connu.
-
-La base `bourbon_cache.db` est créée automatiquement au premier accès
-dans le répertoire de travail courant (à côté de `api/`).
+Spécifications techniques :
+  - Thread-safe via threading.RLock()
+  - Stockage en mémoire RAM : {cle: (donnees_dict, timestamp_expiration)}
+  - TTL par défaut : 3 600 secondes (1 heure)
+  - Capacité maximale : 2 000 entrées avec éviction FIFO/LRU des plus anciennes
+  - Purge automatique des entrées expirées
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import os
-import sqlite3
+import threading
+import time
+from collections import OrderedDict
 from typing import Any, Optional
 
 logger = logging.getLogger("bourbon.cache")
 
-# Chemin absolu vers /tmp pour la compatibilité Vercel Serverless (Read-Only FS)
-_DB_PATH = "/tmp/bourbon_cache.db"
-
-_CREATE_TABLE_SQL = """
-CREATE TABLE IF NOT EXISTS llm_cache (
-    uid                  TEXT PRIMARY KEY,
-    statut               TEXT NOT NULL,
-    analyse_intention    TEXT,
-    analyse_politique    TEXT,
-    id_discussion_cible  TEXT,
-    niveau_confiance     REAL,
-    timestamp            DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-"""
-
-_initialized = False
+DEFAULT_TTL_SECONDS = 3600
+MAX_CACHE_ENTRIES = 2000
 
 
-def _get_connection() -> sqlite3.Connection:
-    """Ouvre (ou crée) la base et s'assure que la table existe."""
-    global _initialized
-    conn = sqlite3.connect(_DB_PATH, timeout=5.0)
-    conn.row_factory = sqlite3.Row
-    if not _initialized:
-        conn.execute(_CREATE_TABLE_SQL)
-        conn.commit()
-        _initialized = True
-        logger.info(f"📦 Cache SQLite initialisé : {_DB_PATH}")
-    return conn
+class InMemoryCache:
+    """Cache en mémoire thread-safe avec TTL et limitation de capacité."""
+
+    def __init__(self, max_entries: int = MAX_CACHE_ENTRIES, default_ttl: int = DEFAULT_TTL_SECONDS):
+        self.max_entries = max_entries
+        self.default_ttl = default_ttl
+        # OrderedDict pour maintenir l'ordre d'insertion/accès et faciliter l'éviction
+        self._cache: OrderedDict[str, tuple[dict[str, Any], float]] = OrderedDict()
+        self._lock = threading.RLock()
+
+    def _purge_expired(self, now: Optional[float] = None) -> None:
+        """Nettoie les entrées dont la date d'expiration est dépassée."""
+        if now is None:
+            now = time.time()
+        expired_keys = [k for k, (_, expire_at) in self._cache.items() if now >= expire_at]
+        for k in expired_keys:
+            del self._cache[k]
+
+    def get(self, key: str) -> Optional[dict[str, Any]]:
+        """
+        Récupère une entrée du cache si elle existe et n'est pas expirée.
+
+        Returns:
+            dict avec les clés du résultat LLM, ou None (MISS / expirée).
+        """
+        with self._lock:
+            if key not in self._cache:
+                return None
+
+            data, expire_at = self._cache[key]
+            now = time.time()
+            if now >= expire_at:
+                del self._cache[key]
+                logger.debug(f"⏰ Cache EXPIRED pour {key}")
+                return None
+
+            # Déplacer en fin pour comportement LRU
+            self._cache.move_to_end(key)
+            logger.info(f"✅ Cache HIT pour {key}")
+            cached_data = dict(data)
+            cached_data["cached"] = True
+            return cached_data
+
+    def set(self, key: str, value: dict[str, Any], ttl: Optional[int] = None) -> None:
+        """
+        Stocke ou met à jour une entrée avec son timestamp d'expiration.
+        Purge les expirées et applique une éviction si la capacité maximale est atteinte.
+        """
+        ttl_seconds = ttl if ttl is not None else self.default_ttl
+        now = time.time()
+        expire_at = now + ttl_seconds
+
+        with self._lock:
+            # 1. Purge des clés expirées
+            self._purge_expired(now)
+
+            # 2. Si la clé existe déjà, mise à jour
+            if key in self._cache:
+                self._cache[key] = (dict(value), expire_at)
+                self._cache.move_to_end(key)
+                return
+
+            # 3. Éviction si capacité dépassée
+            if len(self._cache) >= self.max_entries:
+                oldest_key, _ = self._cache.popitem(last=False)
+                logger.debug(f"♻️ Éviction cache (capacité max) : {oldest_key}")
+
+            # 4. Insertion
+            self._cache[key] = (dict(value), expire_at)
+            logger.info(f"💾 Cache SAVE pour {key} (TTL: {ttl_seconds}s)")
+
+    def clear(self) -> int:
+        """Vide l'intégralité du cache. Retourne le nombre d'éléments supprimés."""
+        with self._lock:
+            count = len(self._cache)
+            self._cache.clear()
+            logger.info(f"🗑️ Cache mémoire vidé : {count} entrée(s).")
+            return count
+
+    def size(self) -> int:
+        """Nombre d'entrées actives en cache (après purge des expirées)."""
+        with self._lock:
+            self._purge_expired()
+            return len(self._cache)
+
+
+# ── Instance Singleton Globale ──
+_MEMORY_CACHE = InMemoryCache()
 
 
 def get_cached_classification(uid: str) -> Optional[dict[str, Any]]:
-    """
-    Récupère un verdict LLM déjà connu.
-
-    Returns:
-        dict avec les clés du schéma LLMClassificationResponse, ou None (MISS).
-    """
-    try:
-        conn = _get_connection()
-        row = conn.execute(
-            "SELECT statut, analyse_intention, analyse_politique, "
-            "id_discussion_cible, niveau_confiance, timestamp "
-            "FROM llm_cache WHERE uid = ?",
-            (uid,),
-        ).fetchone()
-        conn.close()
-
-        if row is None:
-            return None
-
-        logger.info(f"✅ Cache HIT pour {uid}")
-        return {
-            "statut": row["statut"],
-            "analyse_intention": row["analyse_intention"],
-            "analyse_politique": row["analyse_politique"],
-            "id_discussion_cible": row["id_discussion_cible"],
-            "niveau_confiance": row["niveau_confiance"],
-            "cached_at": row["timestamp"],
-        }
-    except Exception as exc:
-        logger.warning(f"⚠️ Erreur lecture cache pour {uid}: {exc}")
-        return None
+    """Accès au cache en mémoire compatible avec l'API FastAPI Bourbon.IA."""
+    return _MEMORY_CACHE.get(uid)
 
 
-def save_classification(uid: str, data: dict[str, Any]) -> None:
-    """
-    Persiste un verdict LLM dans le cache SQLite.
-
-    Args:
-        uid  : identifiant unique de l'amendement.
-        data : dict contenant au minimum `statut`.
-    """
-    try:
-        conn = _get_connection()
-        conn.execute(
-            "INSERT OR REPLACE INTO llm_cache "
-            "(uid, statut, analyse_intention, analyse_politique, "
-            "id_discussion_cible, niveau_confiance) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                uid,
-                data.get("statut", "NOUVEAU"),
-                data.get("analyse_intention", ""),
-                data.get("analyse_politique", ""),
-                data.get("id_discussion_cible"),
-                data.get("niveau_confiance", 0.0),
-            ),
-        )
-        conn.commit()
-        conn.close()
-        logger.info(f"💾 Cache SAVE pour {uid} → {data.get('statut')}")
-    except Exception as exc:
-        logger.warning(f"⚠️ Erreur écriture cache pour {uid}: {exc}")
+def save_classification(uid: str, data: dict[str, Any], ttl: int = DEFAULT_TTL_SECONDS) -> None:
+    """Sauvegarde dans le cache en mémoire compatible avec l'API FastAPI Bourbon.IA."""
+    _MEMORY_CACHE.set(uid, data, ttl=ttl)
 
 
 def clear_cache() -> int:
-    """Vide entièrement le cache. Retourne le nombre d'entrées supprimées."""
-    try:
-        conn = _get_connection()
-        cursor = conn.execute("DELETE FROM llm_cache")
-        count = cursor.rowcount
-        conn.commit()
-        conn.close()
-        logger.info(f"🗑️ Cache vidé : {count} entrée(s) supprimée(s).")
-        return count
-    except Exception as exc:
-        logger.warning(f"⚠️ Erreur lors du vidage du cache : {exc}")
-        return 0
+    """Vidage complet du cache en mémoire."""
+    return _MEMORY_CACHE.clear()

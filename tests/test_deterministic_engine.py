@@ -236,6 +236,102 @@ def test_sorting_order_respects_hierarchy():
     assert result[1].amendement_uid == "AMDT-R"
 
 
+def test_boilerplate_amendments_not_identical():
+    """3 amendements avec 'Non renseigné' sur le même article ressortent Isolés et NON Identiques."""
+    a1 = EnrichedAmendment(
+        amendement_uid="AMDT-VIDE-1",
+        numero_long="10",
+        dispositif_raw="<p>Non renseigné</p>",
+        article_vise="ART. 4",
+        auteur_ref="PA0001",
+    )
+    a2 = EnrichedAmendment(
+        amendement_uid="AMDT-VIDE-2",
+        numero_long="11",
+        dispositif_raw="<p>Non renseigné</p>",
+        article_vise="ART. 4",
+        auteur_ref="PA0002",
+    )
+    a3 = EnrichedAmendment(
+        amendement_uid="AMDT-VIDE-3",
+        numero_long="12",
+        dispositif_raw="<p>Non renseigné</p>",
+        article_vise="ART. 4",
+        auteur_ref="PA0003",
+    )
+
+    results = process_deterministic_sorting([a1, a2, a3])
+
+    for r in results:
+        assert r.statut_mecanique == StatutMecanique.ISOLE_MECANIQUE
+        assert r.skip_llm is True
+        assert r.groupe_identique_id is None
+        assert "non renseigné" in r.justification_mecanique.lower() or "irrecevable" in r.justification_mecanique.lower()
+
+
+def test_competing_distinct_texts_have_skip_llm_false():
+    """2 amendements aux textes distincts sur l'alinéa 1 d'un même article ont bien skip_llm = False."""
+    a1 = EnrichedAmendment(
+        amendement_uid="AMDT-COMPLEX-1",
+        numero_long="21",
+        dispositif_raw="<p>Supprimer l'alinéa 1.</p>",
+        article_vise="ART. 6",
+        auteur_ref="PA1001",
+    )
+    a2 = EnrichedAmendment(
+        amendement_uid="AMDT-COMPLEX-2",
+        numero_long="22",
+        dispositif_raw="<p>Rédiger ainsi l'alinéa 1 : L'autorité administrative compétente statue dans un délai de trois mois.</p>",
+        article_vise="ART. 6",
+        auteur_ref="PA1002",
+    )
+
+    results = process_deterministic_sorting([a1, a2])
+
+    assert len(results) == 2
+    for r in results:
+        assert r.statut_mecanique == StatutMecanique.NOUVEAU
+        assert r.skip_llm is False
+        assert r.cluster_id is not None
+        assert "Cas complexe" in r.justification_mecanique
+
+
+def test_in_memory_cache_ttl_and_eviction():
+    """Valide lecture/écriture, expiration TTL et éviction du cache en mémoire RAM."""
+    import time
+    from api.cache_manager import InMemoryCache
+
+    cache = InMemoryCache(max_entries=2, default_ttl=1)
+
+    # 1. Écriture et lecture
+    cache.set("AMD-1", {"statut": "Isolé", "analyse": "Test 1"}, ttl=1)
+    hit = cache.get("AMD-1")
+    assert hit is not None
+    assert hit["statut"] == "Isolé"
+    assert hit["cached"] is True
+
+    # 2. Expiration TTL
+    time.sleep(1.05)
+    expired = cache.get("AMD-1")
+    assert expired is None
+
+    # 3. Éviction si capacité dépassée
+    cache.set("AMD-A", {"statut": "Similaire"}, ttl=10)
+    cache.set("AMD-B", {"statut": "Discussion commune"}, ttl=10)
+    assert cache.size() == 2
+
+    cache.set("AMD-C", {"statut": "Isolé"}, ttl=10)
+    assert cache.size() == 2
+    assert cache.get("AMD-A") is None
+    assert cache.get("AMD-B") is not None
+    assert cache.get("AMD-C") is not None
+
+    # 4. Vidage
+    cleared = cache.clear()
+    assert cleared == 2
+    assert cache.size() == 0
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Exécution directe
 # ──────────────────────────────────────────────────────────────────────────
@@ -256,6 +352,9 @@ if __name__ == "__main__":
         test_clustering_partitioning_scale_up,
         test_official_identique_flag,
         test_sorting_order_respects_hierarchy,
+        test_boilerplate_amendments_not_identical,
+        test_competing_distinct_texts_have_skip_llm_false,
+        test_in_memory_cache_ttl_and_eviction,
     ]
 
     passed = 0

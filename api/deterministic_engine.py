@@ -149,6 +149,25 @@ def get_impact_zone_key(amend: EnrichedAmendment) -> str:
     return f"{art}||{impact.value}"
 
 
+BOILERPLATE_PATTERNS = [
+    "non renseigne",
+    "retire avant publication",
+    "amendement irrecevable",
+    "declare irrecevable",
+]
+
+
+def is_boilerplate_or_insignificant(dispositif_clean: str) -> bool:
+    """
+    Détecte si un dispositif est non signifiant, vide ou irrecevable.
+    Condition : contient un motif de boilerplate ou fait moins de 15 caractères.
+    """
+    if not dispositif_clean or len(dispositif_clean.strip()) < 15:
+        return True
+    text = dispositif_clean.lower()
+    return any(pattern in text for pattern in BOILERPLATE_PATTERNS)
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Étape 3 : Moteur principal
 # ──────────────────────────────────────────────────────────────────────────
@@ -163,11 +182,12 @@ def process_deterministic_sorting(
       1. Normalise le dispositif → `dispositif_clean`
       2. Calcule le point d'impact hiérarchique
       3. Détecte les identiques officiels (champ AN)
-      4. Détecte les identiques mécaniques par empreinte exacte
-      5. Clustering mécanique par zone d'impact (article, alinéa/impact) :
+      4. Détecte et isole les textes non signifiants / irrecevables (anti-faux identiques)
+      5. Détecte les identiques mécaniques par empreinte exacte (textes signifiants)
+      6. Clustering mécanique par zone d'impact & aiguillage des cas complexes :
          - Si amendement unique sur sa zone → ISOLE_MECANIQUE (_skipLLM = True)
-         - Si plusieurs amendements en concurrence → cluster_id (éligibles LLM)
-      6. Tri stable par hiérarchie de l'Assemblée nationale
+         - Si plusieurs amendements aux textes distincts en concurrence → NOUVEAU (_skipLLM = False, aiguillé IA)
+      7. Tri stable par hiérarchie de l'Assemblée nationale
 
     Complexité : O(n) — partitionnements par dicts.
     """
@@ -188,11 +208,20 @@ def process_deterministic_sorting(
                 f"(id: {amend.id_discussion_identique or 'non spécifié'})."
             )
 
-    # ── Phase 3 : Détection mécanique par empreinte ──
+    # ── Phase 2bis : Filtrage des faux identiques (textes non signifiants / boilerplate) ──
+    for amend in amendments:
+        if amend.statut_mecanique == StatutMecanique.IDENTIQUE_OFFICIEL:
+            continue
+        if is_boilerplate_or_insignificant(amend.dispositif_clean):
+            amend.statut_mecanique = StatutMecanique.ISOLE_MECANIQUE
+            amend.skip_llm = True
+            amend.justification_mecanique = "Amendement non renseigné ou irrecevable."
+
+    # ── Phase 3 : Détection mécanique par empreinte (vrai texte législatif uniquement) ──
     groups: dict[str, list[int]] = defaultdict(list)
 
     for idx, amend in enumerate(amendments):
-        if amend.statut_mecanique == StatutMecanique.IDENTIQUE_OFFICIEL:
+        if amend.statut_mecanique in (StatutMecanique.IDENTIQUE_OFFICIEL, StatutMecanique.ISOLE_MECANIQUE):
             continue
 
         composite_key = f"{amend.dispositif_clean}||{amend.article_vise}"
@@ -216,10 +245,13 @@ def process_deterministic_sorting(
                 f"sur {amend.article_vise or 'article non spécifié'}."
             )
 
-    # ── Phase 4 : Clustering mécanique par zone d'impact (Scale-up) ──
-    # Partitionnement par clé composite (article, point_impact, alinéa)
+    # ── Phase 4 : Clustering mécanique par zone d'impact & Aiguillage des cas complexes ──
+    # Partitionnement par clé composite (article, point_impact, alinéa) pour les amendements actifs
     zone_groups: dict[str, list[EnrichedAmendment]] = defaultdict(list)
     for amend in amendments:
+        # Les amendements boilerplate/irrecevables sont déjà isolés et ne concurrencent personne
+        if is_boilerplate_or_insignificant(amend.dispositif_clean):
+            continue
         zone_key = get_impact_zone_key(amend)
         zone_groups[zone_key].append(amend)
 
@@ -240,9 +272,23 @@ def process_deterministic_sorting(
                 )
         else:
             # Plusieurs amendements en concurrence sur le même point d'impact
+            distinct_texts = {a.dispositif_clean for a in zone_amends}
             for amend in zone_amends:
                 amend.cluster_id = cluster_fp
-                # S'il n'est pas déjà marqué identique, il reste NOUVEAU et éligible au LLM
+                # S'il n'est pas déjà marqué identique mécanique
+                if amend.statut_mecanique == StatutMecanique.NOUVEAU:
+                    impact_label = amend.point_impact.value if amend.point_impact else "impact"
+                    alinea_label = f"alinéa {amend.alinea_vise}" if amend.alinea_vise else impact_label
+                    if len(distinct_texts) > 1:
+                        # Cas complexe : concurrence de textes différents sur la même zone
+                        amend.skip_llm = False
+                        amend.justification_mecanique = (
+                            f"Cas complexe : {len(zone_amends)} amendements en concurrence sur "
+                            f"{amend.article_vise or 'article'} ({alinea_label}) — aiguillé vers l'analyse IA."
+                        )
+                    else:
+                        # Tous identiques dans ce cluster : le référent reste NOUVEAU
+                        amend.skip_llm = False
 
     # ── Phase 5 : Tri stable par (priorité d'impact, numéro) ──
     impact_order = {
