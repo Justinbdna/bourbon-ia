@@ -332,6 +332,91 @@ def test_in_memory_cache_ttl_and_eviction():
     assert cache.size() == 0
 
 
+def test_deputes_resolver_signataire_and_groupe():
+    """Validation de la résolution d'un signataire PA... et de son groupe via deputes_resolver."""
+    from api.deputes_resolver import resolve_signataires
+
+    # 1. Résolution par identifiant PA
+    res = resolve_signataires("PA841749")
+    assert "Laurent Monnier" in res["auteurs_formatte"]
+    assert res["groupe_principal"] == "EPR"
+    assert res["est_rapporteur"] is False
+
+    # 2. Résolution avec dict Tricoteuses et qualité rapporteur
+    res_rap = resolve_signataires({
+        "auteur": {"acteurRef": "PA841749", "qualite": "Rapporteur"},
+        "cosignataires": [{"acteurRef": "PA841701"}]
+    })
+    assert "Laurent Monnier (EPR)" in res_rap["auteurs_formatte"]
+    assert "Léa Balage El Mariky (EcoS)" in res_rap["auteurs_formatte"]
+    assert res_rap["est_rapporteur"] is True
+    assert res_rap["groupe_principal"] == "EPR"
+
+    # 3. Fallback gracieux sur ID inconnu
+    res_inconnu = resolve_signataires("PA99999999")
+    assert res_inconnu["auteurs_formatte"] == "PA99999999"
+    assert res_inconnu["groupe_principal"] == ""
+    assert res_inconnu["est_rapporteur"] is False
+
+
+def test_rapporteur_priority_sorting():
+    """Vérifie la priorité de classement accordée à un amendement de rapporteur à portée égale."""
+    a_depute = EnrichedAmendment(
+        amendement_uid="AMDT-DEP-1",
+        numero_long="1",
+        dispositif_raw="<p>Supprimer l'article 1er.</p>",
+        article_vise="ART. 1",
+        auteur_ref="PA000001",
+        est_rapporteur=False,
+    )
+    a_rapporteur = EnrichedAmendment(
+        amendement_uid="AMDT-RAP-10",
+        numero_long="10",
+        dispositif_raw="<p>Supprimer l'article 1er.</p>",
+        article_vise="ART. 1",
+        auteur_ref="PA111111",
+        est_rapporteur=True,
+    )
+
+    # On injecte le député en premier dans la liste
+    sorted_amends = process_deterministic_sorting([a_depute, a_rapporteur])
+
+    # L'amendement du rapporteur doit obligatoirement être classé en tête (index 0)
+    assert sorted_amends[0].amendement_uid == "AMDT-RAP-10"
+    assert sorted_amends[0].est_rapporteur is True
+    assert sorted_amends[1].amendement_uid == "AMDT-DEP-1"
+
+
+def test_texte_loi_initial_prompt_injection():
+    """Confirme l'insertion du bloc <TEXTE_LOI_INITIAL> dans le prompt LLM lorsque la référence est fournie."""
+    from api.llm_semantic_engine import generate_classification_prompt
+
+    amendement = {
+        "amendement": {
+            "uid": "AMDT-TEST-LOI",
+            "numeroLong": "42",
+            "dispositif": "À la première phrase, substituer au mot « rouge » le mot « vert ».",
+            "exposeSommaire": "Clarification.",
+            "divisionArticleDesignation": "Article 1er",
+        },
+        "auteur": {"nom": "Monnier", "prenom": "Laurent"},
+        "dossier": {"titre": "Projet de loi de finances"},
+    }
+
+    texte_loi = "Le présent article prévoit que les feux de signalisation sont de couleur rouge."
+
+    # 1. Sans texte de référence
+    prompt_sans = generate_classification_prompt(amendement)
+    assert "<TEXTE_LOI_INITIAL" not in prompt_sans
+
+    # 2. Avec texte de référence
+    prompt_avec = generate_classification_prompt(amendement, texte_loi_reference=texte_loi)
+    assert '<TEXTE_LOI_INITIAL article="Article 1er">' in prompt_avec
+    assert texte_loi in prompt_avec
+    assert "</TEXTE_LOI_INITIAL>" in prompt_avec
+    assert "Consigne stricte : Tu dois analyser l'impact des amendements" in prompt_avec
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Exécution directe
 # ──────────────────────────────────────────────────────────────────────────
@@ -355,6 +440,9 @@ if __name__ == "__main__":
         test_boilerplate_amendments_not_identical,
         test_competing_distinct_texts_have_skip_llm_false,
         test_in_memory_cache_ttl_and_eviction,
+        test_deputes_resolver_signataire_and_groupe,
+        test_rapporteur_priority_sorting,
+        test_texte_loi_initial_prompt_injection,
     ]
 
     passed = 0

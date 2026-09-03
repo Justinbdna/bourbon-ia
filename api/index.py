@@ -164,10 +164,28 @@ class V2AnalyzeRequest(BaseModel):
     api_key: str = "local-key"
     temperature: float = 0.1
     max_tokens: int = 1024
+    textes_reference: dict[str, str] = Field(default_factory=dict, description="Texte de loi initial par article (ex: {'Article 1er': '...'})")
 
 class V2AnalyzeSingleRequest(V2AnalyzeRequest):
     """Payload d'entrée pour l'analyse d'un seul amendement (avec contexte global)."""
     target_uid: str
+
+
+def _inject_textes_reference(enriched_list: list[EnrichedAmendment], textes_ref: dict[str, str]):
+    """Injecte le texte initial du projet de loi correspondant à l'article visé."""
+    if not textes_ref:
+        return
+    clean_refs = {str(k).strip().lower(): str(v) for k, v in textes_ref.items() if v}
+    for a in enriched_list:
+        if a.article_vise:
+            art_clean = a.article_vise.strip().lower()
+            if art_clean in clean_refs:
+                a.texte_loi_reference = clean_refs[art_clean]
+            else:
+                for k, v in clean_refs.items():
+                    if k in art_clean or art_clean in k:
+                        a.texte_loi_reference = v
+                        break
 
 
 def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
@@ -200,6 +218,14 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
     auteur_ref = auteur_block.get("acteurRef", "") if isinstance(auteur_block, dict) else ""
     groupe_ref = auteur_block.get("groupePolitiqueRef", "") if isinstance(auteur_block, dict) else ""
 
+    # ── Détection de qualité Rapporteur / Commission ──
+    qualite_auteur = str(auteur_block.get("qualite") or "").lower()
+    is_rapporteur = "rapporteur" in qualite_auteur or "commission" in qualite_auteur
+    if not is_rapporteur and am.get("auteurs"):
+        auteurs_join = " ".join(str(x) for x in am.get("auteurs", [])).lower()
+        if "rapporteur" in auteurs_join or "commission" in auteurs_join:
+            is_rapporteur = True
+
     # ── Identiques officiels ──
     est_identique = bool(am.get("discussionIdentique") or am.get("estIdentique") or am.get("est_identique_officiel"))
     id_discussion = am.get("idDiscussionIdentique") or am.get("id_discussion_identique")
@@ -221,6 +247,7 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
         dossier_titre=am.get("dossier_titre", "") or "",
         est_identique_officiel=est_identique,
         id_discussion_identique=str(id_discussion) if id_discussion else None,
+        est_rapporteur=is_rapporteur,
         raw_dict=raw,
     )
 
@@ -253,6 +280,9 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         # ── Groupe politique (pour <PoliticalGroupTag>) ──
         "groupRef": amend.groupe_politique_ref,
         "groupe_politique": amend.groupe_politique,
+        "groupe": amend.groupe_politique,
+        "est_rapporteur": amend.est_rapporteur,
+        "texte_loi_reference": amend.texte_loi_reference,
 
         # ── Dossier législatif (pour <LegislativeContext>) ──
         "dossier_ref": amend.dossier_ref,
@@ -368,6 +398,7 @@ async def v2_mecanique(payload: V2AnalyzeRequest):
             enriched.append(_build_enriched(raw, i))
         except Exception as exc:
             logging.warning(f"⚠️ Amendement {i} ignoré (conversion) : {exc}")
+    _inject_textes_reference(enriched, payload.textes_reference)
     enriched = process_deterministic_sorting(enriched)
     return [_to_frontend(a) for a in enriched]
 
@@ -392,6 +423,9 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
 
         if not enriched:
             return []
+
+        # ── Injection des textes de référence de loi ──
+        _inject_textes_reference(enriched, payload.textes_reference)
 
         # ── Phase 2 : Tri déterministe (Identiques, Doublons, Hiérarchie AN) ──
         enriched = process_deterministic_sorting(enriched)
@@ -460,6 +494,7 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                         },
                         "dossier": {"titre": amend.dossier_titre},
                         "contexte_rag": contexte_rag,
+                        "texte_loi_reference": amend.texte_loi_reference,
                     }
                     candidats = [
                         {
@@ -484,6 +519,7 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                                 llm_endpoint=payload.llm_endpoint or payload.base_url,
                                 model=payload.model, api_key=payload.api_key,
                                 timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
+                                texte_loi_reference=amend.texte_loi_reference,
                             )
                             llm_data = resultat.model_dump()
                             save_classification(amend.amendement_uid, llm_data)
@@ -545,6 +581,7 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
             except Exception:
                 pass
         
+        _inject_textes_reference(enriched, payload.textes_reference)
         enriched = process_deterministic_sorting(enriched)
         
         target = next((a for a in enriched if a.amendement_uid == payload.target_uid), None)
@@ -624,6 +661,7 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                     },
                     "dossier": {"titre": target.dossier_titre},
                     "contexte_rag": contexte_rag,
+                    "texte_loi_reference": target.texte_loi_reference,
                 }
                 candidats = [
                     {
@@ -647,6 +685,7 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                         llm_endpoint=payload.llm_endpoint or payload.base_url,
                         model=payload.model, api_key=payload.api_key,
                         timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
+                        texte_loi_reference=target.texte_loi_reference,
                     )
                     llm_data = resultat.model_dump()
                     save_classification(target.amendement_uid, llm_data)

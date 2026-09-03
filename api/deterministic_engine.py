@@ -28,6 +28,11 @@ from typing import Optional
 
 from api.schemas import EnrichedAmendment, PointImpact, StatutMecanique
 
+try:
+    from api.deputes_resolver import resolve_signataires
+except ModuleNotFoundError:
+    from deputes_resolver import resolve_signataires
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # Étape 1 : Normalisation textuelle
@@ -192,11 +197,27 @@ def process_deterministic_sorting(
     Complexité : O(n) — partitionnements par dicts.
     """
 
-    # ── Phase 1 : Normalisation + classification hiérarchique ──
+    # ── Phase 1 : Normalisation + classification hiérarchique + résolution députés ──
     for amend in amendments:
         amend.dispositif_clean = normalize_text(amend.dispositif_raw)
         priority, impact = classify_point_impact(amend.dispositif_clean)
         amend.point_impact = impact
+
+        # Résolution locale des signataires, groupes et qualité de rapporteur
+        src_signataires = (
+            amend.auteur_ref
+            or amend.auteurs_raw
+            or (amend.raw_dict.get("signataires") if isinstance(amend.raw_dict, dict) else None)
+            or amend.auteur_nom
+        )
+        if src_signataires:
+            res_dep = resolve_signataires(src_signataires)
+            if res_dep.get("est_rapporteur"):
+                amend.est_rapporteur = True
+            if res_dep.get("groupe_principal") and (not amend.groupe_politique or amend.groupe_politique == "Inconnu"):
+                amend.groupe_politique = res_dep["groupe_principal"]
+            if res_dep.get("auteurs_formatte") and not amend.auteurs_raw:
+                amend.auteurs_raw = [res_dep["auteurs_formatte"]]
 
     # ── Phase 2 : Détection des identiques officiels (champ AN) ──
     for amend in amendments:
@@ -290,7 +311,7 @@ def process_deterministic_sorting(
                         # Tous identiques dans ce cluster : le référent reste NOUVEAU
                         amend.skip_llm = False
 
-    # ── Phase 5 : Tri stable par (priorité d'impact, numéro) ──
+    # ── Phase 5 : Tri stable par (priorité d'impact, article, priorité rapporteur, numéro) ──
     impact_order = {
         PointImpact.SUPPRESSION_ARTICLE: 1,
         PointImpact.REDACTION_GLOBALE_ARTICLE: 2,
@@ -302,6 +323,7 @@ def process_deterministic_sorting(
     amendments.sort(key=lambda a: (
         impact_order.get(a.point_impact, 99),
         a.article_vise,
+        0 if a.est_rapporteur else 1,
         a.numero_long,
     ))
 

@@ -298,29 +298,25 @@ def _resumer_candidat(candidat: dict[str, Any], rang: int) -> dict[str, Any]:
 def generate_classification_prompt(
     amendement_enrichi: dict[str, Any],
     contexte: Any = None,
+    texte_loi_reference: Optional[str] = None,
 ) -> str:
     """
     Construit le prompt utilisateur, sous contrainte stricte de tokens.
 
     Args:
-        amendement_enrichi : structure produite par le pipeline d'enrichissement
-                             (sections `amendement`, `auteur`, `dossier`).
-        contexte           : discussions candidates. Accepte une liste de dicts,
-                             ou un dict contenant `candidats` / `discussions`.
+        amendement_enrichi  : structure produite par le pipeline d'enrichissement
+                              (sections `amendement`, `auteur`, `dossier`).
+        contexte            : discussions candidates. Accepte une liste de dicts,
+                              ou un dict contenant `candidats` / `discussions`.
+        texte_loi_reference : texte initial de l'article de loi visé (si disponible).
 
     Returns:
         Le prompt utilisateur prêt à être envoyé au modèle.
-
-    Note sur la troncature :
-        `exposeSommaire` est borné à MAX_EXPOSE_CHARS (1500) et `dispositif` à
-        MAX_DISPOSITIF_CHARS (2000), sur une frontière de phrase ou de mot, avec
-        un marqueur « […texte tronqué] » explicite. Le nombre de candidats est
-        lui aussi borné (MAX_CANDIDATS) : c'est le second facteur d'explosion
-        du contexte après l'exposé.
     """
     amd = amendement_enrichi.get("amendement", amendement_enrichi)
     auteur = amendement_enrichi.get("auteur", {}) or {}
     dossier = amendement_enrichi.get("dossier", {}) or {}
+    texte_ref = texte_loi_reference or amendement_enrichi.get("texte_loi_reference")
 
     # ── Normalisation du contexte (tolérante) ──
     if isinstance(contexte, dict):
@@ -364,9 +360,25 @@ def generate_classification_prompt(
         "",
         "Exposé sommaire (motivation de l'auteur) :",
         f"<TEXTE_AMENDEMENT type=\"expose_sommaire\">\n{_tronquer_intelligemment(amd.get('exposeSommaire'), MAX_EXPOSE_CHARS) or 'Non renseigné'}\n</TEXTE_AMENDEMENT>",
+    ]
+
+    # ── Injection du texte de loi de référence (Chantier 2) ──
+    if texte_ref:
+        article_nom = amd.get("divisionArticleDesignation") or "Article"
+        lignes.extend([
+            "",
+            f'<TEXTE_LOI_INITIAL article="{article_nom}">',
+            str(texte_ref).strip(),
+            "</TEXTE_LOI_INITIAL>",
+            "",
+            "Consigne stricte : Tu dois analyser l'impact des amendements en concurrence PAR RAPPORT au texte de loi initial ci-dessus. "
+            "Deux amendements modifiant la même phrase du texte initial ou ayant des effets incompatibles doivent être classés en 'Discussion commune'.",
+        ])
+
+    lignes.extend([
         "",
         "## DISCUSSIONS CANDIDATES",
-    ]
+    ])
 
     if amendement_enrichi.get("contexte_rag"):
         lignes.append(amendement_enrichi["contexte_rag"])
@@ -486,6 +498,7 @@ def evaluate_similitude(
     timeout: float = DEFAULT_TIMEOUT,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     temperature: float = DEFAULT_TEMPERATURE,
+    texte_loi_reference: Optional[str] = None,
 ) -> LLMClassificationResponse:
     """
     Interroge le LLM local et renvoie une classification sémantique validée.
@@ -493,21 +506,10 @@ def evaluate_similitude(
     NE LÈVE JAMAIS D'EXCEPTION : tout échec (serveur éteint, timeout, JSON
     malformé, schéma incohérent) est converti en repli « NOUVEAU » avec
     `niveau_confiance = 0.0`.
-
-    Args:
-        amendement_enrichi : sortie du pipeline d'enrichissement.
-        contexte           : discussions candidates (cf. generate_classification_prompt).
-        llm_endpoint       : base URL compatible OpenAI (LM Studio / Ollama / Ngrok).
-        model              : identifiant du modèle ; « local-model » convient à LM Studio.
-        timeout            : secondes avant abandon (les modèles locaux sont lents).
-        max_tokens         : doit couvrir le raisonnement CoT + le JSON final.
-
-    Returns:
-        LLMClassificationResponse — toujours exploitable.
     """
-    # Court-circuit : sans candidat, la réponse est déterminée d'avance.
-    # Inutile de dépenser une inférence, et le résultat est plus fiable.
-    prompt_utilisateur = generate_classification_prompt(amendement_enrichi, contexte)
+    prompt_utilisateur = generate_classification_prompt(
+        amendement_enrichi, contexte, texte_loi_reference=texte_loi_reference
+    )
 
     try:
         # Import paresseux : cohérent avec api/index.py, évite de faire échouer
