@@ -1,15 +1,35 @@
 import { useState, useMemo } from 'react'
 import ImpactBadge from './ImpactBadge'
 import GroupeBadge from './GroupeBadge'
+import PoliticalGroupTag from './amendment/PoliticalGroupTag'
 import { downloadRtf } from '../utils/exportRtf'
 import SkeletonLoader from './amendment/SkeletonLoader'
 
 const PAGE_SIZE = 50
 
-function truncate(text, max = 90) {
+function stripHtml(text) {
+  if (!text || typeof text !== 'string') return text || ''
+  return text
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#160;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .trim()
+}
+
+function cleanTruncate(text, max = 110) {
   if (!text) return '—'
-  const flat = String(text).replace(/\s+/g, ' ').trim()
-  return flat.length > max ? flat.slice(0, max) + '…' : flat
+  const clean = stripHtml(String(text)).replace(/\s+/g, ' ').trim()
+  if (!clean) return '—'
+  return clean.length > max ? clean.slice(0, max) + '…' : clean
+}
+
+function truncate(text, max = 90) {
+  return cleanTruncate(text, max)
 }
 
 function GripIcon() {
@@ -138,9 +158,10 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Art.</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">N°</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider max-w-[120px]">Auteur(s)</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Groupe</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-40">Point d'impact</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-full max-w-md">Extrait du dispositif</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Groupe</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Statut</th>
               <th className="px-4 py-4 text-right text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
@@ -174,8 +195,11 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-800 dark:text-slate-200">{a.article || "—"}</td>
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-800 dark:text-slate-200">{a.numero}</td>
                   <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 max-w-[120px] truncate" title={auteursText}>{auteursText}</td>
+                  <td className="px-4 py-4 text-sm whitespace-nowrap">
+                    <PoliticalGroupTag group={a.groupe || a.groupe_politique || (typeof groupe === 'string' ? groupe : groupe?.nom)} groupRef={a.groupRef || a.groupe_politique_ref || groupe?.ref} />
+                  </td>
                   <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-40"><ImpactBadge type={a.point_impact?.type || a.point_impact} /></td>
-                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full max-w-md truncate" title={a.dispositif}>{a.dispositif}</td>
+                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full max-w-md truncate" title={stripHtml(a.dispositif)}>{cleanTruncate(a.dispositif)}</td>
                   <td className="px-4 py-4 text-sm whitespace-nowrap">
                     <div className="flex items-center gap-1">
                       <GroupeBadge statut={statutToDisplay} groupe={groupe} isPending={isPending} />

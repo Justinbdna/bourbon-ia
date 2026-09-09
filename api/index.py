@@ -50,6 +50,23 @@ except ModuleNotFoundError:
         def match_article_reference(d, a): return None
 
 
+def clean_html_text(text: str) -> str:
+    """
+    Supprime les balises HTML et décode les entités XML/HTML pour un texte pur et net.
+    Exemple : '<p style="text-align: justify;">Supprimer cet article.</p>' -> 'Supprimer cet article.'
+    """
+    if not text:
+        return ""
+    decoded = html.unescape(str(text))
+    # Préserver les sauts de ligne pour les balises de paragraphe et de saut
+    decoded = re.sub(r"<(?:br|/p|/div)[^>]*>", "\n", decoded, flags=re.IGNORECASE)
+    clean = re.sub(r"<[^>]+>", "", decoded)
+    clean = clean.replace("\xa0", " ").replace("&#160;", " ")
+    clean = re.sub(r"[ \t]+", " ", clean)
+    clean = re.sub(r"\n\s*\n+", "\n\n", clean)
+    return clean.strip()
+
+
 def extract_dispositif_raw(am: dict) -> str:
     """
     Extrait le dispositif en vérifiant TOUS les chemins possibles de l'Assemblée nationale :
@@ -67,22 +84,22 @@ def extract_dispositif_raw(am: dict) -> str:
     # 1. Imbriqué standard
     disp = contenu_auteur.get("dispositif")
     if disp and isinstance(disp, str) and disp.strip():
-        return html.unescape(disp.strip())
+        return clean_html_text(disp)
 
     # 2. À plat sous corps
     disp = corps.get("dispositif")
     if disp and isinstance(disp, str) and disp.strip():
-        return html.unescape(disp.strip())
+        return clean_html_text(disp)
 
     # 3. Racine
     disp = am.get("dispositif")
     if disp and isinstance(disp, str) and disp.strip():
-        return html.unescape(disp.strip())
+        return clean_html_text(disp)
 
     # 4. Cartouche informatif seulement si c'est du texte
     cartouche = corps.get("cartoucheInformatif")
     if cartouche and isinstance(cartouche, str) and cartouche.strip():
-        return html.unescape(cartouche.strip())
+        return clean_html_text(cartouche)
 
     return ""
 
@@ -108,7 +125,7 @@ def extract_expose_sommaire(am: dict) -> str:
     ]
     for c in candidates:
         if c and isinstance(c, str) and c.strip():
-            return html.unescape(c.strip())
+            return clean_html_text(c)
 
     return ""
 
@@ -120,7 +137,9 @@ def format_article_title(art_str: str) -> str:
     if not art_str:
         return ""
     s = str(art_str).strip()
-    s = re.sub(r"^(article\s+)+", "Article ", s, flags=re.IGNORECASE)
+    s = re.sub(r"^(article\s+|art\.\s*)+", "Article ", s, flags=re.IGNORECASE)
+    if re.match(r"^(premier|1er|\d+)\b", s, flags=re.IGNORECASE):
+        s = f"Article {s}"
     return s
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -421,10 +440,11 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         "isIdentical": amend.est_identique_officiel,
         "discussionId": amend.id_discussion_identique,
 
-        # ── Texte juridique ──
-        "dispositif": amend.dispositif_raw,
+        # ── Texte juridique assaini ──
+        "dispositif": clean_html_text(amend.dispositif_raw),
         "dispositif_clean": amend.dispositif_clean,
-        "expose_sommaire": amend.expose_sommaire,
+        "texte": clean_html_text(amend.dispositif_raw),
+        "expose_sommaire": clean_html_text(amend.expose_sommaire),
 
         # ── Classification mécanique ──
         "point_impact": {"type": amend.point_impact or ""},

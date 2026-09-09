@@ -576,21 +576,22 @@ def test_nested_contenu_auteur_dispositif_extraction():
         }
     }
 
-    # 1. extract_dispositif_raw direct
+    # 1. extract_dispositif_raw direct (assaini du HTML)
     disp = extract_dispositif_raw(raw_an["amendement"])
-    assert disp == "<p>Supprimer cet article.</p>"
+    assert disp == "Supprimer cet article."
+    assert "<p>" not in disp
     assert disp != "Non renseigné"
 
     # 2. normaliser_amendement
     norm = normaliser_amendement(raw_an, 0)
-    assert norm["dispositif"] == "<p>Supprimer cet article.</p>"
-    assert norm["texte"] == "<p>Supprimer cet article.</p>"
+    assert norm["dispositif"] == "Supprimer cet article."
+    assert norm["texte"] == "Supprimer cet article."
     assert norm["dispositif"] != "Non renseigné"
     assert norm["article"] == "Article PREMIER"  # Pas de doublon 'Article Article PREMIER'
 
     # 3. _build_enriched
     enriched = _build_enriched(raw_an, 0)
-    assert enriched.dispositif_raw == "<p>Supprimer cet article.</p>"
+    assert enriched.dispositif_raw == "Supprimer cet article."
     assert enriched.dispositif_raw != "Non renseigné"
 
 
@@ -671,6 +672,66 @@ def test_identical_supprimer_cet_article():
     assert "Identique mécanique" in res[1].justification_mecanique
 
 
+def test_article_natural_parliamentary_sorting():
+    """Vérifie que les amendements sur l'Article PREMIER (et ses dérivés) sont toujours triés avant l'Article 2."""
+    from api.deterministic_engine import process_deterministic_sorting, get_article_sort_key
+    from api.schemas import EnrichedAmendment
+
+    # 1. Validation directe de la clé de tri
+    assert get_article_sort_key("AVANT ART. 1ER") == (0, 0)
+    assert get_article_sort_key("ART. PREMIER") == (1, 0)
+    assert get_article_sort_key("Article 1er") == (1, 0)
+    assert get_article_sort_key("APRÈS ART. PREMIER") == (1, 1)
+    assert get_article_sort_key("ART. 1ER BIS") == (1, 1)
+    assert get_article_sort_key("ART. 2") == (2, 0)
+    assert get_article_sort_key("Article 2") == (2, 0)
+    assert get_article_sort_key("Article 10") == (10, 0)
+
+    # 2. Tri séquentiel : amendements insérés en ordre inverse
+    a_art2 = EnrichedAmendment(
+        amendement_uid="AMDT-ART-2",
+        numero_long="10",
+        dispositif_raw="<p>Supprimer l'article 2.</p>",
+        article_vise="Article 2",
+    )
+    a_art1_bis = EnrichedAmendment(
+        amendement_uid="AMDT-ART-1-BIS",
+        numero_long="5",
+        dispositif_raw="<p>Après l'article premier, insérer un article ainsi rédigé.</p>",
+        article_vise="APRÈS ART. PREMIER",
+    )
+    a_art1 = EnrichedAmendment(
+        amendement_uid="AMDT-ART-1",
+        numero_long="1",
+        dispositif_raw="<p>Modifier l'article premier.</p>",
+        article_vise="ARTICLE PREMIER",
+    )
+    a_avant1 = EnrichedAmendment(
+        amendement_uid="AMDT-AVANT-1",
+        numero_long="2",
+        dispositif_raw="<p>Avant l'article premier, insérer un article liminaire.</p>",
+        article_vise="AVANT ART. 1ER",
+    )
+
+    result = process_deterministic_sorting([a_art2, a_art1_bis, a_art1, a_avant1])
+    uids_in_order = [a.amendement_uid for a in result]
+
+    # L'ordre strict doit être : AVANT-1 -> ART-1 -> ART-1-BIS -> ART-2
+    assert uids_in_order == ["AMDT-AVANT-1", "AMDT-ART-1", "AMDT-ART-1-BIS", "AMDT-ART-2"]
+
+
+def test_article_title_no_duplicate():
+    """Vérifie qu'aucun doublon 'Article Article PREMIER' n'est produit."""
+    from api.index import format_article_title
+
+    assert format_article_title("Article Article PREMIER") == "Article PREMIER"
+    assert format_article_title("ARTICLE PREMIER") == "Article PREMIER"
+    assert format_article_title("Article 1er") == "Article 1er"
+    assert format_article_title("PREMIER") == "Article PREMIER"
+    assert format_article_title("2") == "Article 2"
+    assert format_article_title("ART. 2") == "Article 2"
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Exécution directe
 # ──────────────────────────────────────────────────────────────────────────
@@ -706,6 +767,8 @@ if __name__ == "__main__":
         test_nested_contenu_auteur_dispositif_extraction,
         test_groupe_politique_ref_mapping_lfi_nfp,
         test_identical_supprimer_cet_article,
+        test_article_natural_parliamentary_sorting,
+        test_article_title_no_duplicate,
     ]
 
     passed = 0
