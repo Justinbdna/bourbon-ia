@@ -68,6 +68,13 @@ DEFAULT_TEMPERATURE: float = 0.1            # tâche de jugement → quasi déte
 # ══════════════════════════════════════════════════════════════════════════
 # 1. SCHÉMA PYDANTIC — Chain of Thought
 # ══════════════════════════════════════════════════════════════════════════
+# Statuts qui DÉSIGNENT une discussion existante : sans identifiant de cible,
+# le verdict est inexploitable pour construire le dérouleur.
+STATUTS_AVEC_CIBLE: frozenset[str] = frozenset(
+    {"Discussion commune", "Identique", "Similaire"}
+)
+# Statuts qui affirment au contraire l'ISOLEMENT : toute cible est contradictoire.
+STATUTS_SANS_CIBLE: frozenset[str] = frozenset({"Isolé", "NOUVEAU"})
 class LLMClassificationResponse(BaseModel):
     """
     Réponse structurée attendue du LLM.
@@ -120,12 +127,19 @@ class LLMClassificationResponse(BaseModel):
 
         Ces `ValueError` sont interceptées par `evaluate_similitude()`, qui
         applique alors le repli « NOUVEAU » — jamais de crash du pipeline.
+
+        ⚠️  Ce garde-fou était INACTIF : il comparait `statut` à
+        « DISCUSSION_COMMUNE », valeur qui n'existe plus depuis le passage aux
+        libellés « Discussion commune », « Similaire »… Aucune comparaison ne
+        pouvait aboutir, donc une réponse incohérente passait la validation.
+        Les constantes ci-dessous sont dérivées du Literal pour que ce
+        décalage ne puisse pas se reproduire silencieusement.
         """
-        if self.statut == "DISCUSSION_COMMUNE" and not self.id_discussion_cible:
+        if self.statut in STATUTS_AVEC_CIBLE and not self.id_discussion_cible:
             raise ValueError(
-                "statut=DISCUSSION_COMMUNE exige un id_discussion_cible non vide."
+                f"statut={self.statut!r} exige un id_discussion_cible non vide."
             )
-        if self.statut == "NOUVEAU" and self.id_discussion_cible:
+        if self.statut in STATUTS_SANS_CIBLE and self.id_discussion_cible:
             # Non bloquant sur le fond : on nettoie plutôt que de rejeter.
             self.id_discussion_cible = None
         return self
