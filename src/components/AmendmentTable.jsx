@@ -185,10 +185,15 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                           clé est déjà consommée plus bas par <GroupeBadge> avec un
                           sens différent (identiques / discussion commune). */}
                       {(a.groupe_politique || a.groupe_politique_ref) && (
-                        <PoliticalGroupTag
-                          group={a.groupe_politique}
-                          groupRef={a.groupe_politique_ref}
-                        />
+                        // `items-start` : sans cela l'étiquette s'étire sur toute
+                        // la largeur de la colonne (comportement par défaut d'un
+                        // enfant de flex-col) au lieu de s'ajuster à son texte.
+                        <div className="flex items-start">
+                          <PoliticalGroupTag
+                            group={a.groupe_politique}
+                            groupRef={a.groupe_politique_ref}
+                          />
+                        </div>
                       )}
                     </div>
                   </td>

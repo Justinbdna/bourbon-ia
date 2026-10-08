@@ -175,6 +175,52 @@ class AnalyzeResult(BaseModel):
     rang: int = 0
     groupe: Optional[Dict[str, str]] = None
 
+def _enrichir_a_import(resultat: dict, source: dict, signataires=None) -> dict:
+    """
+    Ajoute groupe politique et commission DÈS L'IMPORT.
+
+    Pourquoi ici : l'import passe par `normaliser_amendement()`, et non par
+    `_build_enriched()` qui n'est appelé qu'au moment du classement IA. Sans
+    cet enrichissement, le tableau affiche des auteurs sans groupe et une
+    colonne Commission vide tant que l'utilisateur n'a pas lancé l'IA — alors
+    que ces deux informations sont purement déterministes et disponibles
+    immédiatement, hors-ligne.
+
+    Ne lève jamais : en cas d'échec, l'amendement est renvoyé inchangé.
+    """
+    try:
+        # ── Groupe politique (référentiel local des députés) ──
+        if not resultat.get("groupe_politique"):
+            source_sig = (
+                signataires
+                or source.get("auteurs")
+                or resultat.get("auteurs")
+                or resultat.get("auteur")
+            )
+            if source_sig:
+                resolu = resolve_signataires(source_sig)
+                groupe = resolu.get("groupe_principal", "") or ""
+                if groupe:
+                    resultat["groupe_politique"] = groupe
+
+        # ── Commission + thèmes corrélés (uid d'organe embarqué dans l'uid) ──
+        if not resultat.get("commission"):
+            base = dict(source) if isinstance(source, dict) else {}
+            base.setdefault("uid", resultat.get("id", ""))
+            base.setdefault("dispositif", resultat.get("dispositif", ""))
+            base.setdefault("exposeSommaire", resultat.get("expose_sommaire", ""))
+            com = resoudre_commission_et_mots_cles(base)
+            if com.get("commission_ref"):
+                resultat["commission_ref"] = com["commission_ref"]
+                resultat["commission"] = com.get("commission_abrege") or com.get("commission_libelle", "")
+                resultat["commission_libelle"] = com.get("commission_libelle", "")
+                resultat["commission_mots_cles"] = com.get("commission_mots_cles", [])
+                resultat["commission_hors_champ"] = com.get("commission_hors_champ", False)
+    except Exception as exc:  # noqa: BLE001
+        logging.debug(f"Enrichissement à l'import ignoré : {exc}")
+    return resultat
+
+
 def normaliser_amendement(data, index: int = 0) -> dict:
     try:
         if not isinstance(data, dict):
@@ -235,7 +281,7 @@ def normaliser_amendement(data, index: int = 0) -> dict:
             raw_uid = am.get("uid", numero)
             uid = safe_str(raw_uid, numero)
 
-            return {
+            resultat = {
                 "id": uid or f"amdt-{index}",
                 "numero": numero,
                 "article": article,
@@ -247,7 +293,8 @@ def normaliser_amendement(data, index: int = 0) -> dict:
                 "exposeSommaire": expose_sommaire,
                 "auteur": auteur
             }
-            
+            return _enrichir_a_import(resultat, am, signataires)
+
         # Données déjà plates (ex: sampleAmendments.json)
         if not data.get("id"):
             data["id"] = f"amdt-{index}"
@@ -258,7 +305,7 @@ def normaliser_amendement(data, index: int = 0) -> dict:
             data["expose_sommaire"] = extract_expose_sommaire(data)
         if data.get("article"):
             data["article"] = format_article_title(data["article"])
-        return data
+        return _enrichir_a_import(data, data, data.get("signataires"))
     except Exception as e:
         import traceback
         logging.error(f"Erreur de normalisation sur l'amendement {index}: {e}\n{traceback.format_exc()}")
