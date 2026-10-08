@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 /**
  * CommissionKeywords — Colonne « Commission / Thèmes »
@@ -16,7 +16,7 @@ import React from 'react';
  *                         (séance publique) ou non résolue.
  */
 
-const MAX_VISIBLE = 3;   // au-delà, on replie pour ne pas casser la hauteur de ligne
+const MAX_VISIBLE = 3;   // au-delà, on replie (« Voir plus ») pour ne pas casser la hauteur de ligne
 
 export default function CommissionKeywords({
   commission,
@@ -24,6 +24,7 @@ export default function CommissionKeywords({
   motsCles = [],
   horsChamp = false,
 }) {
+  const [deplie, setDeplie] = useState(false);
   const keywords = Array.isArray(motsCles) ? motsCles : [];
 
   // Aucune commission résolue : on n'affiche rien plutôt qu'un faux "—"
@@ -31,8 +32,8 @@ export default function CommissionKeywords({
     return <span className="text-xs text-slate-400 dark:text-slate-600">—</span>;
   }
 
-  const visibles = keywords.slice(0, MAX_VISIBLE);
-  const reste = keywords.length - visibles.length;
+  const reste = Math.max(0, keywords.length - MAX_VISIBLE);
+  const visibles = deplie ? keywords : keywords.slice(0, MAX_VISIBLE);
 
   return (
     <div className="flex flex-col gap-1">
@@ -58,13 +59,16 @@ export default function CommissionKeywords({
             </span>
           ))}
           {reste > 0 && (
-            <span
-              className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium
-                         bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-              title={keywords.join(', ')}
+            <button
+              type="button"
+              aria-expanded={deplie}
+              // La ligne du tableau est cliquable (sélection) : on isole le clic.
+              onClick={(e) => { e.stopPropagation(); setDeplie((v) => !v); }}
+              className="inline-flex items-center px-1 py-0.5 text-[11px] font-medium text-[#D91227] hover:underline whitespace-nowrap"
+              title={deplie ? undefined : keywords.slice(MAX_VISIBLE).join(', ')}
             >
-              +{reste}
-            </span>
+              {deplie ? 'Voir moins' : `+${reste} Voir plus`}
+            </button>
           )}
         </div>
       )}
