@@ -26,7 +26,17 @@
       "résident",
       "règlement",
       "procédure",
-      "contentieux"
+      "contentieux",
+      "dérogation",
+      "collectivité territoriale",
+      "préfet",
+      "maire",
+      "commune",
+      "département",
+      "région",
+      "ordre public",
+      "police",
+      "sanction"
     ]
   },
   "PO419604": {
@@ -52,7 +62,23 @@
       "langue",
       "presse",
       "cinéma",
-      "numérique"
+      "numérique",
+      "olympique",
+      "paralympique",
+      "jeux",
+      "athlète",
+      "sportif",
+      "fédération",
+      "compétition",
+      "dopage",
+      "club",
+      "stade",
+      "licence",
+      "arbitre",
+      "spectacle",
+      "création",
+      "musée",
+      "bibliothèque"
     ]
   },
   "PO420120": {
@@ -78,7 +104,11 @@
       "médecin",
       "dépendance",
       "chômage",
-      "minimum"
+      "minimum",
+      "santé publique",
+      "handicapé",
+      "accessibilité",
+      "travailleur"
     ]
   },
   "PO59048": {
@@ -102,7 +132,14 @@
       "contribution",
       "amortissement",
       "patrimoine",
-      "tva"
+      "tva",
+      "financement",
+      "fiscal",
+      "dépenses",
+      "recettes",
+      "budgétaire",
+      "dotation",
+      "compensation"
     ]
   },
   "PO419610": {
@@ -127,7 +164,13 @@
       "filière",
       "innovation",
       "commercial",
-      "distribution"
+      "distribution",
+      "emploi",
+      "entreprises",
+      "marchés publics",
+      "commande publique",
+      "hébergement",
+      "transport"
     ]
   },
   "PO419865": {
@@ -152,7 +195,15 @@
       "littoral",
       "infrastructure",
       "ferroviaire",
-      "naturel"
+      "naturel",
+      "montagne",
+      "site",
+      "station",
+      "neige",
+      "forêt",
+      "sol",
+      "énergie renouvelable",
+      "risque"
     ]
   },
   "PO59046": {
