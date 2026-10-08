@@ -29,7 +29,7 @@ try:
     from api.schemas import EnrichedAmendment, StatutMecanique
     from api.llm_semantic_engine import evaluate_similitude
     from api.cache_manager import get_cached_classification, save_classification
-    from api.deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII
+    from api.deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII, get_depute_info
     from api.textes_resolver import extract_texte_ref, get_textes_reference, match_article_reference
     from api.commissions_resolver import resoudre_commission_et_mots_cles
     from api.participants_resolver import fetch_participants, resumer_par_groupe, resolve_dossier_ref
@@ -39,11 +39,12 @@ except ModuleNotFoundError:
     from llm_semantic_engine import evaluate_similitude
     from cache_manager import get_cached_classification, save_classification
     try:
-        from deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII
+        from deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII, get_depute_info
     except Exception:
         def resolve_signataires(x):
             return {"auteurs_formatte": str(x) if x else "", "groupe_principal": "", "est_rapporteur": False}
         MAPPING_ORGANES_XVII = {}
+        def get_depute_info(x): return None
     try:
         from textes_resolver import extract_texte_ref, get_textes_reference, match_article_reference
     except Exception:
@@ -415,6 +416,32 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
     groupe_nom = ""
     if groupe_ref and str(groupe_ref) in MAPPING_ORGANES_XVII:
         groupe_nom = MAPPING_ORGANES_XVII[str(groupe_ref)]
+
+    # Repli : résolution via le référentiel local des députés.
+    # Sans cela, le groupe politique reste vide dès que l'amendement ne porte
+    # pas de `groupePolitiqueRef` explicite — c'est-à-dire la majorité des
+    # imports réels. Le résolveur sait retrouver le groupe À LA FOIS par
+    # matricule (PA841701 -> EcoS) et par nom (« Mme Cathala » -> LFI-NFP),
+    # le tout hors-ligne depuis api/data/deputes_active.json.
+    # ⚠️ Ne JAMAIS écraser un groupe explicitement fourni par la source : la
+    # recherche par nom est approximative (homonymes) et dégraderait une donnée
+    # déjà fiable. Le repli ne sert que lorsque tout le reste est vide.
+    groupe_explicite = (
+        am.get("groupe_politique", "") or raw.get("groupe_politique", "") or raw.get("groupe", "") or ""
+    )
+    if not groupe_nom and not groupe_explicite:
+        try:
+            source_signataires = signataires or auteur_ref or am.get("auteurs") or raw.get("auteurs")
+            if source_signataires:
+                resolu = resolve_signataires(source_signataires)
+                groupe_nom = resolu.get("groupe_principal", "") or ""
+                # Si on a identifié le groupe sans en connaître la clé, on la
+                # complète depuis la fiche du député (utile au <PoliticalGroupTag>).
+                if groupe_nom and not groupe_ref and auteur_ref:
+                    fiche = get_depute_info(str(auteur_ref)) or {}
+                    groupe_ref = fiche.get("organeRef", "") or groupe_ref
+        except Exception as exc:  # noqa: BLE001
+            logging.debug(f"Résolution groupe politique ignorée : {exc}")
 
     # ── Détection de qualité Rapporteur / Commission ──
     qualite_auteur = str(auteur_block.get("qualite") or "").lower()

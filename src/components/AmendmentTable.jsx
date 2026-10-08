@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import ImpactBadge from './ImpactBadge'
 import GroupeBadge from './GroupeBadge'
 import CommissionKeywords from './amendment/CommissionKeywords'
+import PoliticalGroupTag from './amendment/PoliticalGroupTag'
 import { downloadRtf } from '../utils/exportRtf'
 import SkeletonLoader from './amendment/SkeletonLoader'
 
@@ -135,10 +136,10 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-100 dark:bg-[#1A1B22] border-b border-gray-200 dark:border-gray-800">
             <tr>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Rang</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Art.</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">N°</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider max-w-[120px]">Auteur(s)</th>
+              <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-14">Rang</th>
+              <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-16">Art.</th>
+              <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-16">N°</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[180px]">Auteur(s)</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-40">Point d'impact</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-44">Commission / Thèmes</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-full max-w-md">Extrait du dispositif</th>
@@ -172,10 +173,25 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   onClick={() => onSelect && onSelect(a.id)}
                   className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22] border-l-4 border-l-[#D91227]' : 'dark:bg-[#0B0C10] hover:bg-slate-50 dark:hover:bg-gray-900/50'}`}
                 >
-                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-slate-800 dark:text-slate-200">{rang || "—"}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-800 dark:text-slate-200">{a.article || "—"}</td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-800 dark:text-slate-200">{a.numero}</td>
-                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 max-w-[120px] truncate" title={auteursText}>{auteursText}</td>
+                  <td className="px-2 py-4 w-14 whitespace-nowrap text-sm font-medium text-slate-800 dark:text-slate-200">{rang || "—"}</td>
+                  <td className="px-2 py-4 w-16 text-sm text-slate-800 dark:text-slate-200 truncate" title={a.article}>{a.article || "—"}</td>
+                  <td className="px-2 py-4 w-16 text-sm text-slate-800 dark:text-slate-200 truncate" title={a.numero}>{a.numero}</td>
+                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-[180px] align-top">
+                    <div className="flex flex-col gap-1">
+                      <span className="truncate" title={auteursText}>{auteursText}</span>
+                      {/* Groupe politique de l'auteur.
+                          On lit `groupe_politique` (et non `groupe`) : le backend
+                          envoie aussi `groupe` pour le groupe politique, mais cette
+                          clé est déjà consommée plus bas par <GroupeBadge> avec un
+                          sens différent (identiques / discussion commune). */}
+                      {(a.groupe_politique || a.groupe_politique_ref) && (
+                        <PoliticalGroupTag
+                          group={a.groupe_politique}
+                          groupRef={a.groupe_politique_ref}
+                        />
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-40"><ImpactBadge type={a.point_impact?.type || a.point_impact} /></td>
                   <td className="px-4 py-4 text-sm w-44 align-top">
                     <CommissionKeywords
