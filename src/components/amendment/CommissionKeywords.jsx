@@ -38,7 +38,7 @@ export default function CommissionKeywords({
     <div className="flex flex-col gap-1">
       {commission && (
         <span
-          className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate max-w-[150px]"
+          className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate max-w-full"
           title={commissionLibelle || commission}
         >
           {commission}
