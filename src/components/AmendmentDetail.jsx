@@ -6,6 +6,7 @@ import PoliticalGroupTag from './amendment/PoliticalGroupTag'
 import LegislativeContext from './amendment/LegislativeContext'
 import IdentiqueAlert from './amendment/IdentiqueAlert'
 import SkeletonLoader from './amendment/SkeletonLoader'
+import EUCompliancePanel from './amendment/EUCompliancePanel'
 
 export function formatArticleTitle(articleStr) {
   if (!articleStr) return 'Article —';
@@ -116,6 +117,9 @@ export default function AmendmentDetail({ amendment, onClose, isLoading }) {
             <ImpactBadge type={a.point_impact?.type} />
           </div>
         </div>
+
+        {/* ── Conformité européenne (surtransposition) — panneau dépliable ── */}
+        <EUCompliancePanel result={a.eu_compliance} />
 
         {/* ── Résultat IA (avec Chain of Thought) ── */}
         <section className="rounded-md bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-3.5">

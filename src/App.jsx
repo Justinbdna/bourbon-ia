@@ -173,6 +173,12 @@ export default function App() {
   async function handleImport(list, label) {
     try {
       const cleanList = await normalizeAmendments(list)
+      // Données de test des badges de conformité UE — DÉVELOPPEMENT UNIQUEMENT.
+      // `import.meta.env.DEV` vaut false au build : rien n'est servi en production.
+      if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('demoUE')) {
+        const { appliquerFixturesUE } = await import('./data/euComplianceFixtures.js')
+        appliquerFixturesUE(cleanList)
+      }
       setAmendments(cleanList)
       setSourceLabel(label)
       setSelectedId(cleanList[0]?.id ?? null)

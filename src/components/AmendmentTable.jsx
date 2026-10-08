@@ -3,6 +3,7 @@ import ImpactBadge from './ImpactBadge'
 import GroupeBadge from './GroupeBadge'
 import CommissionKeywords from './amendment/CommissionKeywords'
 import PoliticalGroupTag from './amendment/PoliticalGroupTag'
+import EUComplianceBadge from './amendment/EUComplianceBadge'
 import { downloadRtf } from '../utils/exportRtf'
 import SkeletonLoader from './amendment/SkeletonLoader'
 
@@ -166,6 +167,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-48 min-w-48">Point d'impact</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-44">Commission / Thèmes</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-full max-w-md">Extrait du dispositif</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-44 min-w-44">Conformité UE</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Statut</th>
               <th className="px-4 py-4 text-right text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Actions</th>
             </tr>
@@ -197,7 +199,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22] border-l-4 border-l-[#D91227]' : 'dark:bg-[#0B0C10] hover:bg-slate-50 dark:hover:bg-gray-900/50'}`}
                 >
                   <td className={`px-2 py-4 w-12 min-w-12 max-w-12 text-sm text-slate-800 dark:text-slate-200 truncate sticky left-0 z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.article}>{String(a.article || "—").replace(/^Article\s+/i, "")}</td>
-                  <td className={`px-2 py-4 w-12 min-w-12 max-w-12 text-sm text-slate-800 dark:text-slate-200 truncate sticky left-12 z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.numero}>{a.numero}</td>
+                  <td className={`px-1 py-4 w-12 min-w-12 max-w-12 text-xs text-slate-800 dark:text-slate-200 truncate sticky left-12 z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.numero}>{a.numero}</td>
                   <td className={`px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-[240px] min-w-[240px] max-w-[240px] align-top sticky left-24 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`}>
                     <div className="flex flex-col gap-1">
                       <span className="break-words leading-snug" title={auteursText}>{auteursText}</span>
@@ -242,6 +244,9 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                     />
                   </td>
                   <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full max-w-md truncate" title={stripHtml(a.dispositif)}>{cleanTruncate(a.dispositif)}</td>
+                  <td className="px-4 py-4 text-sm w-44 min-w-44 align-top">
+                    <EUComplianceBadge result={a.eu_compliance} />
+                  </td>
                   <td className="px-4 py-4 text-sm whitespace-nowrap">
                     <div className="flex items-center gap-1">
                       <GroupeBadge statut={statutToDisplay} groupe={groupe} isPending={isPending} />
