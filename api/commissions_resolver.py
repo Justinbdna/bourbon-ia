@@ -52,6 +52,12 @@ DATA_PATH = CURRENT_DIR / "data" / "commissions.json"
 # En dessous, on génère trop de faux positifs (« eau » matcherait « beaucoup »).
 _MIN_RADICAL = 5
 
+# En deçà de ce volume de texte (dispositif + exposé, après nettoyage), on
+# s'interdit de conclure au « hors champ » : l'absence de vocabulaire n'y est
+# pas significative. Calibré sur des amendements réels de type
+# « Supprimer cet article. » accompagnés d'un exposé de deux lignes.
+MIN_TEXTE_POUR_JUGER: int = 180
+
 _COMMISSIONS_DB: Optional[dict[str, dict[str, Any]]] = None
 _CACHE_DISTANT: dict[str, dict[str, Any]] = {}
 
@@ -282,9 +288,19 @@ def resoudre_commission_et_mots_cles(
             "commission_libelle": fiche.get("libelle", ""),
             "commission_abrege": fiche.get("abrege", ""),
             "commission_mots_cles": correles,
-            # Hors champ uniquement si la commission A un périmètre connu
-            # et qu'aucun de ses thèmes n'apparaît.
-            "commission_hors_champ": bool(mots_reference) and not correles,
+            # Hors champ : trois conditions cumulatives, volontairement strictes.
+            #
+            # La 3e (longueur minimale) a été ajoutée après constat de faux
+            # positifs : un amendement se résumant à « Supprimer cet article. »
+            # avec un exposé bref n'emploie naturellement aucun terme du
+            # périmètre, sans être pour autant un cavalier. Faute de matière
+            # suffisante, on s'abstient de juger plutôt que d'alerter à tort —
+            # une alerte qui crie au loup serait vite ignorée des relecteurs.
+            "commission_hors_champ": (
+                bool(mots_reference)
+                and not correles
+                and len(_normaliser(" ".join(str(t) for t in textes if t))) >= MIN_TEXTE_POUR_JUGER
+            ),
         }
     except Exception as exc:
         logger.warning(f"⚠️ Erreur résolution commission ({exc}). Mode dégradé.")

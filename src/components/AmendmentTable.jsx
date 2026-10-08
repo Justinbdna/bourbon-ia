@@ -197,7 +197,20 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-40"><ImpactBadge type={a.point_impact?.type || a.point_impact} /></td>
+                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-40">
+                    {/* Ne jamais transmettre l'objet point_impact lui-même :
+                        `a.point_impact?.type || a.point_impact` renvoyait
+                        l'objet {type: ''} dès que le type était vide, ce qui
+                        fait planter React (« Objects are not valid as a React
+                        child ») et laisse une page blanche. */}
+                    <ImpactBadge
+                      type={
+                        typeof a.point_impact === 'string'
+                          ? a.point_impact
+                          : (a.point_impact?.type || '')
+                      }
+                    />
+                  </td>
                   <td className="px-4 py-4 text-sm w-44 align-top">
                     <CommissionKeywords
                       commission={a.commission}

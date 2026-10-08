@@ -14,7 +14,19 @@
       "nationalité",
       "pénal",
       "juridiction",
-      "décentralisation"
+      "décentralisation",
+      "vote",
+      "éligibilité",
+      "suffrage",
+      "scrutin",
+      "référendum",
+      "citoyenneté",
+      "ressortissant",
+      "étranger",
+      "résident",
+      "règlement",
+      "procédure",
+      "contentieux"
     ]
   },
   "PO419604": {
@@ -32,7 +44,15 @@
       "université",
       "école",
       "média",
-      "artiste"
+      "artiste",
+      "formation",
+      "apprentissage",
+      "élève",
+      "étudiant",
+      "langue",
+      "presse",
+      "cinéma",
+      "numérique"
     ]
   },
   "PO420120": {
@@ -50,7 +70,15 @@
       "hôpital",
       "maladie",
       "salarié",
-      "pension"
+      "pension",
+      "assurance",
+      "cotisation",
+      "allocation",
+      "soin",
+      "médecin",
+      "dépendance",
+      "chômage",
+      "minimum"
     ]
   },
   "PO59048": {
@@ -68,7 +96,13 @@
       "crédit",
       "douane",
       "déficit",
-      "redevance"
+      "redevance",
+      "prélèvement",
+      "exonération",
+      "contribution",
+      "amortissement",
+      "patrimoine",
+      "tva"
     ]
   },
   "PO419610": {
@@ -86,7 +120,14 @@
       "artisanat",
       "numérique",
       "concurrence",
-      "alimentaire"
+      "alimentaire",
+      "marché",
+      "prix",
+      "producteur",
+      "filière",
+      "innovation",
+      "commercial",
+      "distribution"
     ]
   },
   "PO419865": {
@@ -104,7 +145,14 @@
       "territoire",
       "aménagement",
       "écologie",
-      "urbanisme"
+      "urbanisme",
+      "émission",
+      "carbone",
+      "recyclage",
+      "littoral",
+      "infrastructure",
+      "ferroviaire",
+      "naturel"
     ]
   },
   "PO59046": {
@@ -118,7 +166,13 @@
       "vétéran",
       "opération extérieure",
       "gendarmerie",
-      "souveraineté"
+      "souveraineté",
+      "gendarme",
+      "renseignement",
+      "cyber",
+      "nucléaire",
+      "réserve",
+      "opex"
     ]
   },
   "PO59047": {
@@ -132,7 +186,12 @@
       "étranger",
       "ambassade",
       "convention",
-      "accord"
+      "accord",
+      "bilatéral",
+      "multilatéral",
+      "consulaire",
+      "visa",
+      "aide publique"
     ]
   },
   "PO415287": {
@@ -144,7 +203,11 @@
       "directive",
       "règlement",
       "subsidiarité",
-      "union"
+      "union",
+      "commission européenne",
+      "parlement européen",
+      "transposition",
+      "marché intérieur"
     ]
   },
   "PO838901": {
