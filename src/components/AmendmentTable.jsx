@@ -8,6 +8,30 @@ import SkeletonLoader from './amendment/SkeletonLoader'
 
 const PAGE_SIZE = 50
 
+// Nettoyage HTML côté client — apport de Justin (334368c), conservé comme
+// défense en profondeur : le backend nettoie déjà via _nettoyer_html(), mais
+// des données peuvent arriver sans transiter par /api/normalize.
+function stripHtml(text) {
+  if (!text || typeof text !== 'string') return text || ''
+  return text
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#160;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .trim()
+}
+
+function cleanTruncate(text, max = 110) {
+  const clean = stripHtml(String(text ?? '')).replace(/\s+/g, ' ').trim()
+  if (!clean) return '—'
+  return clean.length > max ? clean.slice(0, max) + '…' : clean
+}
+
+
 function truncate(text, max = 90) {
   if (!text) return '—'
   const flat = String(text).replace(/\s+/g, ' ').trim()
@@ -143,7 +167,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-40">Point d'impact</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-44">Commission / Thèmes</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-full max-w-md">Extrait du dispositif</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Groupe</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Statut</th>
               <th className="px-4 py-4 text-right text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
@@ -219,7 +243,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       horsChamp={a.commission_hors_champ}
                     />
                   </td>
-                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full max-w-md truncate" title={a.dispositif}>{a.dispositif}</td>
+                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full max-w-md truncate" title={stripHtml(a.dispositif)}>{cleanTruncate(a.dispositif)}</td>
                   <td className="px-4 py-4 text-sm whitespace-nowrap">
                     <div className="flex items-center gap-1">
                       <GroupeBadge statut={statutToDisplay} groupe={groupe} isPending={isPending} />

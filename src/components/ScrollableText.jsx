@@ -3,27 +3,46 @@ import { useMemo, useState } from 'react'
 const LINE_LIMIT = 20
 const COLLAPSED_HEIGHT = 320 // px, ~20 lignes en text-sm/leading-relaxed
 
+export function stripHtml(text) {
+  if (!text || typeof text !== 'string') return text || ''
+  return text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#160;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/\n\s*\n+/g, '\n\n')
+    .trim()
+}
+
 /**
- * Affiche un texte d'amendement. Si le contenu dépasse ~20 lignes,
- * le texte est présenté dans une zone à hauteur fixe et défilante,
- * avec un bouton pour le déplier entièrement si besoin.
+ * Affiche un texte d'amendement assaini sans balises HTML brutes.
  */
 export default function ScrollableText({ text, className = '' }) {
   const [expanded, setExpanded] = useState(false)
 
+  const cleanText = useMemo(() => {
+    return stripHtml(text)
+  }, [text])
+
   const lineCount = useMemo(() => {
-    if (!text) return 0
+    if (!cleanText) return 0
     // Compte les retours à la ligne explicites + une estimation
     // des lignes supplémentaires dues au retour automatique.
-    const explicitLines = text.split('\n')
+    const explicitLines = cleanText.split('\n')
     const estimatedWrap = explicitLines.reduce(
       (sum, line) => sum + Math.max(1, Math.ceil(line.length / 100)),
       0
     )
     return estimatedWrap
-  }, [text])
+  }, [cleanText])
 
-  if (!text) {
+  if (!cleanText) {
     return <p className="text-ink-500 italic text-sm">— Non renseigné —</p>
   }
 
@@ -37,7 +56,7 @@ export default function ScrollableText({ text, className = '' }) {
         }`}
         style={isLong && !expanded ? { maxHeight: COLLAPSED_HEIGHT } : undefined}
       >
-        {text}
+        {cleanText}
       </div>
 
       {isLong && (

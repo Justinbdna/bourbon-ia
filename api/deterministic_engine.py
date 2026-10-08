@@ -199,6 +199,48 @@ def is_boilerplate_or_empty(text: str) -> bool:
 is_boilerplate_or_insignificant = is_boilerplate_or_empty
 
 
+def get_article_sort_key(article_str: str) -> tuple[int, int]:
+    """
+    Retourne un tuple de tri numérique et parlementaire pour un article.
+    Exemples :
+      - 'AVANT ART. 1ER' -> (0, 0)
+      - 'ART. PREMIER' -> (1, 0)
+      - 'APRÈS ART. PREMIER' ou 'ART. 1ER BIS' -> (1, 1)
+      - 'ART. 2' -> (2, 0)
+      - 'APRÈS ART. 2' ou 'ART. 2 BIS' -> (2, 1)
+    """
+    if not article_str:
+        return (9999, 99)
+
+    s = str(article_str).strip()
+    s_norm = unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("utf-8").upper()
+
+    # Détection de numéro d'article
+    num = None
+    if "PREMIER" in s_norm or "1ER" in s_norm:
+        num = 1
+    else:
+        m = re.search(r"\b(\d+)\b", s_norm)
+        if m:
+            num = int(m.group(1))
+
+    # Détection de positionnement relatif (AVANT / APRÈS / BIS / etc.)
+    is_avant = "AVANT" in s_norm
+    is_apres = "APRES" in s_norm or "BIS" in s_norm or "TER" in s_norm or "QUATER" in s_norm
+
+    if num is None:
+        if is_avant:
+            return (0, 0)
+        return (9999, 99)
+
+    if is_avant:
+        return (max(0, num - 1), 0)
+    elif is_apres:
+        return (num, 1)
+    else:
+        return (num, 0)
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Étape 3 : Moteur principal
 # ──────────────────────────────────────────────────────────────────────────
@@ -350,7 +392,7 @@ def process_deterministic_sorting(
                         # Tous identiques dans ce cluster : le référent reste NOUVEAU
                         amend.skip_llm = False
 
-    # ── Phase 5 : Tri stable par (priorité d'impact, article, priorité rapporteur, numéro) ──
+    # ── Phase 5 : Tri stable officiel (article, priorité d'impact, priorité rapporteur, numéro) ──
     impact_order = {
         PointImpact.SUPPRESSION_ARTICLE: 1,
         PointImpact.REDACTION_GLOBALE_ARTICLE: 2,
@@ -359,11 +401,17 @@ def process_deterministic_sorting(
         PointImpact.POINT_RESTREINT: 5,
     }
 
+    def _amendment_num_key(num_val: Any) -> int:
+        s = str(num_val or "")
+        m = re.search(r"\d+", s)
+        return int(m.group()) if m else 999999
+
     amendments.sort(key=lambda a: (
+        get_article_sort_key(a.article_vise),
         impact_order.get(a.point_impact, 99),
-        a.article_vise,
         0 if a.est_rapporteur else 1,
-        a.numero_long,
+        _amendment_num_key(a.numero_long),
+        str(a.numero_long),
     ))
 
     return amendments
