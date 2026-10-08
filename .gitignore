@@ -38,3 +38,6 @@ data/clean/
 
 # Présentation
 !docs/bourbon.ia.pdf
+
+# Environnement Python local (créé par l'IDE)
+venv/
