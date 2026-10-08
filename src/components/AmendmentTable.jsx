@@ -25,11 +25,38 @@ function stripHtml(text) {
     .trim()
 }
 
-// Texte du dispositif affiché en entier (sans troncature) : la cellule passe
-// à la ligne autant que nécessaire.
+// Extrait du dispositif : 250 caractères au plus (coupés sur un mot), avec
+// « Voir plus » pour déplier le texte complet dans la cellule.
+const EXTRAIT_MAX = 250
+
 function cleanText(text) {
-  const clean = stripHtml(String(text ?? '')).replace(/\s+/g, ' ').trim()
-  return clean || '—'
+  return stripHtml(String(text ?? '')).replace(/\s+/g, ' ').trim()
+}
+
+function ExtraitDispositif({ text }) {
+  const [deplie, setDeplie] = useState(false)
+  const clean = cleanText(text)
+  if (!clean) return '—'
+  if (clean.length <= EXTRAIT_MAX) return clean
+
+  let court = clean.slice(0, EXTRAIT_MAX)
+  const dernierEspace = court.lastIndexOf(' ')
+  if (dernierEspace > EXTRAIT_MAX * 0.8) court = court.slice(0, dernierEspace)
+
+  return (
+    <>
+      {deplie ? clean : `${court.trimEnd()}…`}{' '}
+      <button
+        type="button"
+        aria-expanded={deplie}
+        // La ligne est cliquable (sélection) et déplaçable : on isole le clic.
+        onClick={(e) => { e.stopPropagation(); setDeplie((v) => !v) }}
+        className="whitespace-nowrap text-xs font-medium text-[#D91227] hover:underline"
+      >
+        {deplie ? 'Voir moins' : 'Voir plus'}
+      </button>
+    </>
+  )
 }
 
 
@@ -242,7 +269,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       horsChamp={a.commission_hors_champ}
                     />
                   </td>
-                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full min-w-[300px] align-top whitespace-normal break-words leading-snug">{cleanText(a.dispositif)}</td>
+                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full min-w-[300px] align-top whitespace-normal break-words leading-snug"><ExtraitDispositif text={a.dispositif} /></td>
                   <td className="px-4 py-4 text-sm whitespace-nowrap">
                     <div className="flex items-center gap-1">
                       <GroupeBadge statut={statutToDisplay} groupe={groupe} isPending={isPending} />
