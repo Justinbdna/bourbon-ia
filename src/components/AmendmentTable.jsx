@@ -3,7 +3,6 @@ import ImpactBadge from './ImpactBadge'
 import GroupeBadge from './GroupeBadge'
 import CommissionKeywords from './amendment/CommissionKeywords'
 import PoliticalGroupTag from './amendment/PoliticalGroupTag'
-import EUComplianceBadge from './amendment/EUComplianceBadge'
 import { downloadRtf } from '../utils/exportRtf'
 import SkeletonLoader from './amendment/SkeletonLoader'
 
@@ -166,8 +165,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[240px] min-w-[240px] max-w-[240px] sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-24 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">Auteur(s)</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-48 min-w-48">Point d'impact</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[352px] min-w-[352px] max-w-[352px]">Commission / Thèmes</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-56 min-w-56 max-w-56">Extrait du dispositif</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-44 min-w-44">Conformité UE</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[400px] min-w-[400px] max-w-[400px]">Extrait du dispositif</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Statut</th>
               <th className="px-4 py-4 text-right text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Actions</th>
             </tr>
@@ -243,10 +241,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       horsChamp={a.commission_hors_champ}
                     />
                   </td>
-                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-56 min-w-56 max-w-56 truncate" title={stripHtml(a.dispositif)}>{cleanTruncate(a.dispositif)}</td>
-                  <td className="px-4 py-4 text-sm w-44 min-w-44 align-top">
-                    <EUComplianceBadge result={a.eu_compliance} />
-                  </td>
+                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-[400px] min-w-[400px] max-w-[400px] truncate" title={stripHtml(a.dispositif)}>{cleanTruncate(a.dispositif)}</td>
                   <td className="px-4 py-4 text-sm whitespace-nowrap">
                     <div className="flex items-center gap-1">
                       <GroupeBadge statut={statutToDisplay} groupe={groupe} isPending={isPending} />
