@@ -136,10 +136,10 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-100 dark:bg-[#1A1B22] border-b border-gray-200 dark:border-gray-800">
             <tr>
-              <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-14">Rang</th>
-              <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-16">Art.</th>
-              <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-16">N°</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[180px]">Auteur(s)</th>
+              <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-14 sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-0">Rang</th>
+              <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-16 sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-14">Art.</th>
+              <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-16 sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-[120px]">N°</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[180px] sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-[184px] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">Auteur(s)</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-40">Point d'impact</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-44">Commission / Thèmes</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-full max-w-md">Extrait du dispositif</th>
@@ -173,10 +173,10 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   onClick={() => onSelect && onSelect(a.id)}
                   className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22] border-l-4 border-l-[#D91227]' : 'dark:bg-[#0B0C10] hover:bg-slate-50 dark:hover:bg-gray-900/50'}`}
                 >
-                  <td className="px-2 py-4 w-14 whitespace-nowrap text-sm font-medium text-slate-800 dark:text-slate-200">{rang || "—"}</td>
-                  <td className="px-2 py-4 w-16 text-sm text-slate-800 dark:text-slate-200 truncate" title={a.article}>{a.article || "—"}</td>
-                  <td className="px-2 py-4 w-16 text-sm text-slate-800 dark:text-slate-200 truncate" title={a.numero}>{a.numero}</td>
-                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-[180px] align-top">
+                  <td className={`px-2 py-4 w-14 whitespace-nowrap text-sm font-medium text-slate-800 dark:text-slate-200 sticky left-0 z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`}>{rang || "—"}</td>
+                  <td className={`px-2 py-4 w-16 text-sm text-slate-800 dark:text-slate-200 truncate sticky left-14 z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.article}>{a.article || "—"}</td>
+                  <td className={`px-2 py-4 w-16 text-sm text-slate-800 dark:text-slate-200 truncate sticky left-[120px] z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.numero}>{a.numero}</td>
+                  <td className={`px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-[180px] align-top sticky left-[184px] z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`}>
                     <div className="flex flex-col gap-1">
                       <span className="truncate" title={auteursText}>{auteursText}</span>
                       {/* Groupe politique de l'auteur.

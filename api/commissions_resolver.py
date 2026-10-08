@@ -58,6 +58,25 @@ _MIN_RADICAL = 5
 # « Supprimer cet article. » accompagnés d'un exposé de deux lignes.
 MIN_TEXTE_POUR_JUGER: int = 180
 
+# ⚠️ DÉTECTION « HORS CHAMP » DÉSACTIVÉE PAR DÉFAUT
+#
+# Mesure sur 341 amendements réels (texte PRJLANR5L17B1641, commission des
+# affaires culturelles) : 127 amendements marqués hors champ, soit 37 %, et
+# l'examen manuel montre qu'il s'agit massivement de FAUX POSITIFS — un
+# amendement sur l'Agence française de lutte contre le dopage relève bien du
+# sport, mais n'emploie ni « sport » ni aucun terme du dictionnaire.
+#
+# La correspondance par mots-clés ne capture pas la portée sémantique d'un
+# texte juridique. Un signal faux une fois sur trois serait vite ignoré des
+# relecteurs — pire qu'une absence de signal.
+#
+# Les mots-clés CORRÉLÉS restent affichés : quand ils matchent, ils informent
+# utilement. C'est uniquement l'ALERTE qui est suspendue.
+#
+# Réactivation possible après enrichissement du dictionnaire par un
+# administrateur de l'AN, ou remplacement par une approche sémantique (RAG).
+ACTIVER_DETECTION_HORS_CHAMP: bool = False
+
 _COMMISSIONS_DB: Optional[dict[str, dict[str, Any]]] = None
 _CACHE_DISTANT: dict[str, dict[str, Any]] = {}
 
@@ -297,7 +316,8 @@ def resoudre_commission_et_mots_cles(
             # suffisante, on s'abstient de juger plutôt que d'alerter à tort —
             # une alerte qui crie au loup serait vite ignorée des relecteurs.
             "commission_hors_champ": (
-                bool(mots_reference)
+                ACTIVER_DETECTION_HORS_CHAMP
+                and bool(mots_reference)
                 and not correles
                 and len(_normaliser(" ".join(str(t) for t in textes if t))) >= MIN_TEXTE_POUR_JUGER
             ),

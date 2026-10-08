@@ -175,6 +175,25 @@ class AnalyzeResult(BaseModel):
     rang: int = 0
     groupe: Optional[Dict[str, str]] = None
 
+def _nettoyer_html(texte: Any) -> str:
+    """
+    Retire le balisage HTML du texte destiné à l'AFFICHAGE.
+
+    Les amendements de l'Assemblée arrivent avec du HTML de mise en forme
+    (<p style="text-align: justify;">, <br/>, <i>…). Sans ce nettoyage, le
+    tableau affiche littéralement les balises dans la colonne « Extrait du
+    dispositif », ce qui le rend illisible sur données réelles.
+
+    Le dispositif brut reste disponible ailleurs (dispositif_raw) pour qui
+    aurait besoin du balisage d'origine.
+    """
+    if not texte:
+        return ""
+    propre = re.sub(r"<[^>]+>", " ", str(texte))
+    propre = html.unescape(propre)
+    return re.sub(r"\s+", " ", propre).strip()
+
+
 def _enrichir_a_import(resultat: dict, source: dict, signataires=None) -> dict:
     """
     Ajoute groupe politique et commission DÈS L'IMPORT.
@@ -189,6 +208,11 @@ def _enrichir_a_import(resultat: dict, source: dict, signataires=None) -> dict:
     Ne lève jamais : en cas d'échec, l'amendement est renvoyé inchangé.
     """
     try:
+        # ── Nettoyage HTML pour l'affichage (données AN réelles) ──
+        for champ in ("dispositif", "texte", "expose_sommaire", "exposeSommaire"):
+            if resultat.get(champ):
+                resultat[champ] = _nettoyer_html(resultat[champ])
+
         # ── Groupe politique (référentiel local des députés) ──
         if not resultat.get("groupe_politique"):
             source_sig = (

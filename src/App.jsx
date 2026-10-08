@@ -4,7 +4,6 @@ import AmendmentTable from './components/AmendmentTable'
 import AmendmentDetail from './components/AmendmentDetail'
 import LawParticipants from './components/LawParticipants'
 import ClassifyButton from './components/ClassifyButton'
-import sampleAmendments from './data/sampleAmendments.json'
 import { classifyAmendmentsV2, normalizeAmendments } from './api/classify'
 import ThemeToggle from './components/ThemeToggle'
 import AISettingsModal from './components/AISettingsModal'
@@ -184,7 +183,12 @@ export default function App() {
     }
   }
 
-  function handleLoadSample() {
+  async function handleLoadSample() {
+    // Import dynamique : le jeu d'exemple (341 amendements réels, ~900 Ko)
+    // devient un chunk séparé, téléchargé uniquement si l'utilisateur le
+    // demande. Sans cela il alourdissait le bundle initial de tous les
+    // visiteurs, y compris ceux qui importent leur propre fichier.
+    const { default: sampleAmendments } = await import('./data/sampleAmendments.json')
     handleImport(sampleAmendments, "Jeu de données d'exemple")
   }
 
