@@ -3,6 +3,7 @@ import ImpactBadge from './ImpactBadge'
 import GroupeBadge from './GroupeBadge'
 import CommissionKeywords from './amendment/CommissionKeywords'
 import PoliticalGroupTag from './amendment/PoliticalGroupTag'
+import AmendmentSearchBar from './amendment/AmendmentSearchBar'
 import { downloadRtf } from '../utils/exportRtf'
 import SkeletonLoader from './amendment/SkeletonLoader'
 
@@ -59,6 +60,16 @@ function ExtraitDispositif({ text }) {
   )
 }
 
+
+// Recherche insensible à la casse et aux accents (« Élisa » = « elisa »).
+function normaliser(texte) {
+  return String(texte ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+}
+
+function auteursEnListe(a) {
+  if (Array.isArray(a.auteurs)) return a.auteurs.filter(Boolean)
+  return a.auteurs ? [String(a.auteurs)] : []
+}
 
 function truncate(text, max = 90) {
   if (!text) return '—'
@@ -123,6 +134,39 @@ function computeGroupSpans(amendments) {
 
 export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, isClassifying, onExportJson }) {
   const [currentPage, setCurrentPage] = useState(0)
+  const [filtre, setFiltre] = useState({ motCle: '', auteur: '' })
+
+  // Options de la recherche : mots-clés (avec effectif) et auteurs distincts.
+  const optionsRecherche = useMemo(() => {
+    const parMot = new Map()
+    const auteurs = new Set()
+    for (const a of amendments) {
+      for (const mot of new Set(a.commission_mots_cles || [])) parMot.set(mot, (parMot.get(mot) || 0) + 1)
+      for (const nom of auteursEnListe(a)) auteurs.add(nom)
+    }
+    return {
+      motsCles: [...parMot].map(([mot, nb]) => ({ mot, nb })).sort((x, y) => x.mot.localeCompare(y.mot, 'fr')),
+      auteurs: [...auteurs].sort((x, y) => x.localeCompare(y, 'fr')),
+    }
+  }, [amendments])
+
+  // On garde l'index d'origine de chaque amendement : le glisser-déposer
+  // (onReorder) travaille sur la liste complète, pas sur la liste filtrée.
+  const filtres = useMemo(() => {
+    const auteurCherche = normaliser(filtre.auteur)
+    return amendments
+      .map((a, idx) => ({ a, idx }))
+      .filter(({ a }) => {
+        if (filtre.motCle && !(a.commission_mots_cles || []).includes(filtre.motCle)) return false
+        if (auteurCherche && !normaliser(auteursEnListe(a).join(', ')).includes(auteurCherche)) return false
+        return true
+      })
+  }, [amendments, filtre])
+
+  function handleRechercher(nouveauFiltre) {
+    setFiltre(nouveauFiltre)
+    setCurrentPage(0)
+  }
 
   // Compteurs calculés avec un seul reduce (déplacé AVANT le return conditionnel pour éviter l'erreur #310)
   const counts = useMemo(() => {
@@ -147,23 +191,23 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
     )
   }
 
-  const totalPages = Math.ceil(amendments.length / PAGE_SIZE)
+  const totalPages = Math.max(1, Math.ceil(filtres.length / PAGE_SIZE))
   const safePage = Math.min(currentPage, totalPages - 1)
   const startIdx = safePage * PAGE_SIZE
-  const pageAmendments = amendments.slice(startIdx, startIdx + PAGE_SIZE)
+  const pageItems = filtres.slice(startIdx, startIdx + PAGE_SIZE)
 
   const hasClassification = amendments.some((a) => a.resultat_ia)
   const groupSpans = computeGroupSpans(amendments)
 
+  // Les index transmis sont ceux de la liste complète (cf. `filtres`).
   function handleDragStart(e, index) {
-    e.dataTransfer.setData('text/plain', String(startIdx + index))
+    e.dataTransfer.setData('text/plain', String(index))
     e.dataTransfer.effectAllowed = 'move'
   }
 
-  function handleDrop(e, targetLocalIndex) {
+  function handleDrop(e, targetIndex) {
     e.preventDefault()
     const fromIndex = Number(e.dataTransfer.getData('text/plain'))
-    const targetIndex = startIdx + targetLocalIndex
     if (Number.isNaN(fromIndex) || fromIndex === targetIndex) return
     onReorder(fromIndex, targetIndex)
   }
@@ -184,6 +228,14 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
           </p>
         </div>
       )}
+      <AmendmentSearchBar
+        motsCles={optionsRecherche.motsCles}
+        auteurs={optionsRecherche.auteurs}
+        filtre={filtre}
+        onRechercher={handleRechercher}
+        nbResultats={filtres.length}
+        nbTotal={amendments.length}
+      />
       <div className="overflow-x-auto scroll-thin">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-100 dark:bg-[#1A1B22] border-b border-gray-200 dark:border-gray-800">
@@ -199,7 +251,14 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-[#0B0C10] divide-y divide-gray-200 dark:divide-gray-800">
-            {pageAmendments.map((a, index) => {
+            {pageItems.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                  Aucun amendement ne correspond à cette recherche.
+                </td>
+              </tr>
+            )}
+            {pageItems.map(({ a, idx }) => {
               const rang = a.rang || a.resultat_ia?.rang
               const statut = a.statut || a.resultat_ia?.statut
               const groupe = a.groupe || a.resultat_ia?.groupe
@@ -216,11 +275,11 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
 
               return (
                 <tr 
-                  key={a.id ?? `fallback-${startIdx + index}`}
+                  key={a.id ?? `fallback-${idx}`}
                   draggable
-                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragStart={(e) => handleDragStart(e, idx)}
                   onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => handleDrop(e, index)}
+                  onDrop={(e) => handleDrop(e, idx)}
                   onClick={() => onSelect && onSelect(a.id)}
                   className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22] border-l-4 border-l-[#D91227]' : 'dark:bg-[#0B0C10] hover:bg-slate-50 dark:hover:bg-gray-900/50'}`}
                 >
@@ -305,7 +364,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
       {totalPages > 1 && (
         <div className="flex items-center justify-between border-t border-ink-200 dark:border-ink-700 bg-slate-50 dark:bg-[#12131A] px-4 py-3">
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Page {safePage + 1} / {totalPages} — Amendements {startIdx + 1}–{Math.min(startIdx + PAGE_SIZE, amendments.length)} sur {amendments.length}
+            Page {safePage + 1} / {totalPages} — Amendements {startIdx + 1}–{Math.min(startIdx + PAGE_SIZE, filtres.length)} sur {filtres.length}
           </p>
           <div className="flex items-center gap-2">
             <button
