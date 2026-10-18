@@ -300,6 +300,18 @@ export default function App() {
     if (selectedId === id) setSelectedId(null)
   }
 
+  function handleDeleteDoublons(ids) {
+    const nb = ids.length
+    const confirmed = window.confirm(
+      `Retirer ${nb} doublon${nb > 1 ? 's' : ''} (même texte, même auteur, même commission) de la liste de travail ?\n` +
+      "L'amendement d'origine de chaque auteur est conservé."
+    )
+    if (!confirmed) return
+    const aRetirer = new Set(ids)
+    setAmendments((prev) => prev.filter((a) => !aRetirer.has(a.id)))
+    if (aRetirer.has(selectedId)) setSelectedId(null)
+  }
+
   function handleExport() {
     const fileName = window.prompt("Comment souhaitez-vous nommer ce fichier d'export ?", "amendements_export")
     if (fileName === null) return
@@ -436,6 +448,7 @@ export default function App() {
               onSelect={setSelectedId}
               onReorder={handleReorder}
               onDelete={handleDelete}
+              onDeleteDoublons={handleDeleteDoublons}
               isClassifying={isClassifying}
               onExportJson={handleExport}
             />

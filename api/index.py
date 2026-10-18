@@ -430,6 +430,7 @@ class V2AnalyzeRequest(BaseModel):
     llm_endpoint: Optional[str] = None
     base_url: str = "http://localhost:1234/v1" # rétrocompatibilité V1
     api_key: str = "local-key"
+    provider: str = "local"  # "local" | "groq" (clé utilisateur) | "groq_auto" (clé serveur)
     temperature: float = 0.1
     max_tokens: int = 1024
     textes_reference: dict[str, str] = Field(default_factory=dict, description="Texte de loi initial par article (ex: {'Article 1er': '...'})")
@@ -437,6 +438,26 @@ class V2AnalyzeRequest(BaseModel):
 class V2AnalyzeSingleRequest(V2AnalyzeRequest):
     """Payload d'entrée pour l'analyse d'un seul amendement (avec contexte global)."""
     target_uid: str
+
+
+GROQ_ENDPOINT = "https://api.groq.com/openai/v1"
+
+
+def _parametres_llm(payload: V2AnalyzeRequest) -> tuple[str, str]:
+    """
+    Renvoie (endpoint, clé API) pour l'appel LLM.
+
+    Mode « groq_auto » (démo publique) : la clé est lue dans la variable
+    d'environnement GROQ_API_KEY du serveur — jamais dans le code ni envoyée
+    au navigateur. L'endpoint est alors FORCÉ sur Groq : un client ne doit pas
+    pouvoir faire envoyer la clé du serveur vers une autre adresse.
+    """
+    if payload.provider == "groq_auto":
+        cle = os.getenv("GROQ_API_KEY", "")
+        if not cle:
+            logging.warning("Mode groq_auto demandé mais GROQ_API_KEY absente de l'environnement serveur.")
+        return GROQ_ENDPOINT, cle or "cle-absente"
+    return payload.llm_endpoint or payload.base_url, payload.api_key
 
 
 def _inject_textes_reference(enriched_list: list[EnrichedAmendment], textes_ref: dict[str, str]):
@@ -685,9 +706,16 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
             intention = f"Détecté mécaniquement : {amend.justification_mecanique}"
             politique = "Amendement sans concurrence sur sa zone d'impact (isolé d'office sans LLM)."
             confiance = 1.0
+        elif amend.statut_mecanique == StatutMecanique.DOUBLON_MECANIQUE:
+            # Même texte, même auteur : copie à retirer (« Supprimer les doublons »).
+            statut_display = "Doublon"
+            couleur = amend.alerte_couleur or "orange"
+            intention = f"Détecté mécaniquement : {amend.justification_mecanique}"
+            politique = "Classification déterministe (100 % fiable, sans IA)."
+            confiance = 1.0
         else:
             statut_display = "Identique" # Strict mapping anti-jargon
-            couleur = "rouge" if "DOUBLON" in str(amend.statut_mecanique) else "orange"
+            couleur = amend.alerte_couleur or "rouge"
             intention = f"Détecté mécaniquement : {amend.justification_mecanique}"
             politique = "Classification déterministe (100 % fiable, sans IA)."
             confiance = 1.0
@@ -899,19 +927,20 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                     
                     async with semaphore:
                         try:
-                            valid_endpoint = validate_endpoint_url(payload.llm_endpoint or payload.base_url)
+                            endpoint_llm, cle_llm = _parametres_llm(payload)  # groq_auto : clé serveur
+                            valid_endpoint = validate_endpoint_url(endpoint_llm)
                             resultat = await asyncio.to_thread(
                                 evaluate_similitude,
                                 amend_dict, candidats,
                                 llm_endpoint=valid_endpoint,
-                                model=payload.model, api_key=payload.api_key,
+                                model=payload.model, api_key=cle_llm,
                                 timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
                                 texte_loi_reference=amend.texte_loi_reference,
                             )
                             llm_data = resultat.model_dump()
                             save_classification(amend.amendement_uid, llm_data)
                         except Exception as exc:
-                            clean_exc = sanitize_log_message(str(exc), payload.api_key)
+                            clean_exc = sanitize_log_message(str(exc), cle_llm)
                             logging.error(f"❌ LLM FAIL {amend.amendement_uid} : {clean_exc}")
                             llm_data = {
                                 "statut": "Erreur IA",
@@ -1079,19 +1108,20 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                 ]
                 
                 try:
-                    valid_endpoint = validate_endpoint_url(payload.llm_endpoint or payload.base_url)
+                    endpoint_llm, cle_llm = _parametres_llm(payload)  # groq_auto : clé serveur
+                    valid_endpoint = validate_endpoint_url(endpoint_llm)
                     resultat = await asyncio.to_thread(
                         evaluate_similitude,
                         amend_dict, candidats,
                         llm_endpoint=valid_endpoint,
-                        model=payload.model, api_key=payload.api_key,
+                        model=payload.model, api_key=cle_llm,
                         timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
                         texte_loi_reference=target.texte_loi_reference,
                     )
                     llm_data = resultat.model_dump()
                     save_classification(target.amendement_uid, llm_data)
                 except Exception as exc:
-                    clean_exc = sanitize_log_message(str(exc), payload.api_key)
+                    clean_exc = sanitize_log_message(str(exc), cle_llm)
                     logging.error(f"❌ LLM FAIL {target.amendement_uid} : {clean_exc}")
                     exc_str = clean_exc
                     exc_name = type(exc).__name__

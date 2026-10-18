@@ -117,6 +117,48 @@ def test_doublon_same_author_detected():
     assert result[1].statut_mecanique == StatutMecanique.DOUBLON_MECANIQUE
     assert result[1].alerte_couleur == "orange"
     assert "Doublon" in result[1].justification_mecanique
+    assert result[1].skip_llm is True
+    assert "AMDT-003" in result[1].justification_mecanique
+
+
+def test_doublon_detected_by_author_label_without_ref():
+    """Sans auteur_ref (cas de l'import JSON), le libellé brut de l'auteur suffit."""
+    commun = dict(dispositif_raw="<p>Supprimer les alinéas 12 et 13.</p>", article_vise="ART. 2")
+    a1 = EnrichedAmendment(amendement_uid="AMDT-010", numero_long="10", auteurs_raw=["Élisa Martin (LFI-NFP)"], **commun)
+    a2 = EnrichedAmendment(amendement_uid="AMDT-011", numero_long="11", auteurs_raw=["Jean Dupont (EPR)"], **commun)
+    a3 = EnrichedAmendment(amendement_uid="AMDT-012", numero_long="12", auteurs_raw=["elisa martin (lfi-nfp)"], **commun)
+
+    result = process_deterministic_sorting([a1, a2, a3])
+    par_uid = {a.amendement_uid: a for a in result}
+
+    assert par_uid["AMDT-010"].statut_mecanique == StatutMecanique.NOUVEAU
+    assert par_uid["AMDT-011"].statut_mecanique == StatutMecanique.IDENTIQUE_MECANIQUE
+    assert par_uid["AMDT-012"].statut_mecanique == StatutMecanique.DOUBLON_MECANIQUE
+
+
+def test_unknown_author_never_doublon():
+    """Auteur inconnu : jamais de doublon (on reste sur identique)."""
+    commun = dict(dispositif_raw="<p>Supprimer les alinéas 12 et 13.</p>", article_vise="ART. 2")
+    a1 = EnrichedAmendment(amendement_uid="AMDT-020", numero_long="20", **commun)
+    a2 = EnrichedAmendment(amendement_uid="AMDT-021", numero_long="21", **commun)
+
+    result = process_deterministic_sorting([a1, a2])
+    par_uid = {a.amendement_uid: a for a in result}
+
+    assert par_uid["AMDT-021"].statut_mecanique == StatutMecanique.IDENTIQUE_MECANIQUE
+
+
+def test_same_author_other_commission_is_not_doublon():
+    """Même texte, même auteur, mais commission différente (avis puis fond) → pas un doublon."""
+    commun = dict(dispositif_raw="<p>Supprimer les alinéas 12 et 13.</p>", article_vise="ART. 2",
+                  auteurs_raw=["Olga Givernet (EPR)"])
+    a1 = EnrichedAmendment(amendement_uid="AMANR5L17PO419865B1641P0D1N000060", numero_long="CD60", **commun)
+    a2 = EnrichedAmendment(amendement_uid="AMANR5L17PO419604B1641P0D1N000155", numero_long="AC155", **commun)
+
+    result = process_deterministic_sorting([a1, a2])
+    par_uid = {a.amendement_uid: a for a in result}
+
+    assert par_uid["AMANR5L17PO419604B1641P0D1N000155"].statut_mecanique != StatutMecanique.DOUBLON_MECANIQUE
 
 
 def test_different_text_on_same_alinea_forms_cluster_and_stays_nouveau():

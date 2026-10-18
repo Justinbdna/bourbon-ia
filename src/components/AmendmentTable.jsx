@@ -54,7 +54,12 @@ function auteursEnListe(a) {
   return a.auteurs ? [String(a.auteurs)] : []
 }
 
-export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, isClassifying, onExportJson }) {
+// Doublon = même texte, même auteur, même commission (moteur déterministe).
+function estDoublon(a) {
+  return a.statut_mecanique === 'DOUBLON_MECANIQUE' || a.resultat_ia?.statut === 'Doublon'
+}
+
+export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, onExportJson }) {
   const [currentPage, setCurrentPage] = useState(0)
   const [filtre, setFiltre] = useState({ motCle: '', auteur: '' })
   const [masquerEcartes, setMasquerEcartes] = useState(false)
@@ -118,9 +123,10 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
       const s = a.resultat_ia.statut
       if (s === 'Incompatible' || s === 'Discussion commune') acc.dc++
       else if (s === 'Identique' || s === 'Identiques') acc.id++
+      else if (s === 'Doublon') acc.doublon++
       else if (s === 'Nouveau' || s === 'Isolé') acc.isole++
       return acc
-    }, { total: 0, dc: 0, id: 0, isole: 0 })
+    }, { total: 0, dc: 0, id: 0, doublon: 0, isole: 0 })
   }, [amendments])
 
   if (amendments.length === 0) {
@@ -137,6 +143,8 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
   const safePage = Math.min(currentPage, totalPages - 1)
   const startIdx = safePage * PAGE_SIZE
   const pageItems = filtres.slice(startIdx, startIdx + PAGE_SIZE)
+
+  const idsDoublons = amendments.filter(estDoublon).map((a) => a.id)
 
   // Les index transmis sont ceux de la liste complète (cf. `filtres`).
   function handleDragStart(e, index) {
@@ -163,25 +171,37 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
       <div className="bg-slate-100/80 dark:bg-slate-900/50 border-b border-ink-200 dark:border-ink-700 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
         {counts.total > 0 ? (
           <p className="text-sm font-medium text-slate-900 dark:text-plume">
-            {counts.total} amendements classés ({counts.dc} en discussion commune, {counts.id} identiques, {counts.isole} isolés).
+            {counts.total} amendements classés ({counts.dc} en discussion commune, {counts.id} identiques, {counts.doublon} doublon{counts.doublon > 1 ? 's' : ''}, {counts.isole} isolés).
           </p>
         ) : (
           <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
             {amendments.length} amendements chargés
           </p>
         )}
-        <button
-          type="button"
-          onClick={() => { setMasquerEcartes(v => !v); setCurrentPage(0); }}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${
-            masquerEcartes
-              ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-700 shadow-sm'
-              : 'bg-white text-slate-700 border-slate-300 dark:bg-[#12131A] dark:text-slate-300 dark:border-slate-600 hover:bg-slate-50'
-          }`}
-          title="Masquer les amendements écartés (irrecevables, retirés ou doublons) pour afficher uniquement la séance"
-        >
-          <span>{masquerEcartes ? '⚖️ Séance seule (écartés masqués)' : '👁️ Masquer les amendements écartés'}</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {idsDoublons.length > 0 && onDeleteDoublons && (
+            <button
+              type="button"
+              onClick={() => onDeleteDoublons(idsDoublons)}
+              title="Retire les copies redéposées par le même auteur devant la même commission ; l'amendement d'origine est conservé."
+              className="shrink-0 rounded-md border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800 hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/50 transition-colors whitespace-nowrap"
+            >
+              Supprimer les doublons ({idsDoublons.length})
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => { setMasquerEcartes(v => !v); setCurrentPage(0); }}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${
+              masquerEcartes
+                ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-700 shadow-sm'
+                : 'bg-white text-slate-700 border-slate-300 dark:bg-[#12131A] dark:text-slate-300 dark:border-slate-600 hover:bg-slate-50'
+            }`}
+            title="Masquer les amendements écartés (irrecevables, retirés ou doublons) pour afficher uniquement la séance"
+          >
+            <span>{masquerEcartes ? '⚖️ Séance seule (écartés masqués)' : '👁️ Masquer les amendements écartés'}</span>
+          </button>
+        </div>
       </div>
       <AmendmentSearchBar
         motsCles={optionsRecherche.motsCles}

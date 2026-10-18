@@ -201,6 +201,35 @@ def is_boilerplate_or_empty(text: str) -> bool:
 is_boilerplate_or_insignificant = is_boilerplate_or_empty
 
 
+_ORGANE_UID_RE = re.compile(r"PO\d+")
+
+
+def _cle_auteur(amend: EnrichedAmendment) -> str:
+    """
+    Identifie « même auteur, même examen » pour la détection des doublons.
+
+    Auteur : référence acteur AN si connue, sinon libellé brut
+    (« Élisa Martin (LFI-NFP) »), sinon nom et prénom. Chaîne vide si l'auteur
+    est inconnu : on ne conclut alors jamais au doublon (0 % faux positifs).
+
+    Examen : l'organe saisi (commission). Un même texte redéposé par le même
+    député dans une AUTRE commission (avis puis fond) est un dépôt normal,
+    pas un doublon à supprimer.
+    """
+    if amend.auteur_ref:
+        auteur = f"ref:{amend.auteur_ref}"
+    else:
+        brut = amend.auteurs_raw[0] if amend.auteurs_raw else f"{amend.auteur_prenom} {amend.auteur_nom}"
+        sans_accents = unicodedata.normalize("NFKD", brut).encode("ASCII", "ignore").decode("utf-8")
+        nom = normalize_text(sans_accents)
+        if not nom:
+            return ""
+        auteur = f"nom:{nom}"
+    m = _ORGANE_UID_RE.search(amend.amendement_uid or "")
+    organe = amend.commission_ref or (m.group(0) if m else "")
+    return f"{organe}|{auteur}"
+
+
 def qualify_irrecevabilite(amend: EnrichedAmendment) -> str:
     """
     Qualifie précisément l'irrecevabilité d'un amendement selon les règles de l'AN :
@@ -576,29 +605,36 @@ def process_deterministic_sorting(
         referent_idx = indices[0]
         referent = amendments[referent_idx]
         referent_uid = referent.amendement_uid
-        ref_auteur_key = (referent.auteur_ref or referent.auteur_nom or "").strip().lower()
+
+        # Premier amendement déposé par chaque auteur (dans une même commission)
+        # dans ce groupe : un texte identique redéposé par le MÊME auteur devant
+        # la MÊME commission est un doublon (étape 4).
+        premier_par_auteur: dict[str, str] = {}
+        cle_referent = _cle_auteur(amendments[referent_idx])
+        if cle_referent:
+            premier_par_auteur[cle_referent] = referent_uid
 
         for i in indices[1:]:
             amend = amendments[i]
             amend.skip_llm = True
             amend.groupe_identique_id = fp
-            amd_auteur_key = (amend.auteur_ref or amend.auteur_nom or "").strip().lower()
-
-            is_same_author = bool(ref_auteur_key and amd_auteur_key and ref_auteur_key == amd_auteur_key)
-            if not is_same_author and referent.auteurs_raw and amend.auteurs_raw:
-                is_same_author = bool(set(referent.auteurs_raw) & set(amend.auteurs_raw))
-
-            if is_same_author:
+            cle = _cle_auteur(amend)
+            if cle and cle in premier_par_auteur:
                 amend.statut_mecanique = StatutMecanique.DOUBLON_MECANIQUE
                 amend.alerte_couleur = "orange"
-                amend.justification_mecanique = "Doublon matériel du même auteur (à retirer)"
-            else:
-                amend.statut_mecanique = StatutMecanique.IDENTIQUE_MECANIQUE
-                amend.alerte_couleur = "rouge"
                 amend.justification_mecanique = (
-                    f"Identique mécanique au référent {referent_uid} "
+                    f"Doublon de {premier_par_auteur[cle]} : même texte, même auteur (à retirer), "
                     f"sur {amend.article_vise or 'article non spécifié'}."
                 )
+                continue
+            if cle:
+                premier_par_auteur[cle] = amend.amendement_uid
+            amend.statut_mecanique = StatutMecanique.IDENTIQUE_MECANIQUE
+            amend.alerte_couleur = "rouge"
+            amend.justification_mecanique = (
+                f"Identique mécanique au référent {referent_uid} "
+                f"sur {amend.article_vise or 'article non spécifié'}."
+            )
 
     # ── Phase 4 : Clustering mécanique par zone d'impact & Aiguillage des cas complexes ──
     # Partitionnement par clé composite (article, point_impact, alinéa) pour les amendements actifs

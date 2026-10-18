@@ -95,7 +95,8 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
     const fetchModels = async () => {
       if (provider === 'groq_auto') {
         if (isMounted) {
-          setModelsList([{ id: 'llama3-8b-8192' }])
+          // Modèle réellement utilisé en mode démo (cf. src/api/classify.js)
+          setModelsList([{ id: 'llama-3.3-70b-versatile' }])
           setIsFetchingModels(false)
         }
         return
