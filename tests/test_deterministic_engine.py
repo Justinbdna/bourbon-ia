@@ -454,9 +454,12 @@ def test_textes_resolver_normalization_match():
     assert m_art2 == articles["ARTICLE 2"]
 
 
-def test_textes_resolver_fallback():
+def test_textes_resolver_fallback(monkeypatch):
     """Vérifie qu'un identifiant inexistant retourne {} sans crash."""
     from api.textes_resolver import get_textes_reference, match_article_reference
+
+    # Test hors-ligne : pas d'appel à l'API Tricoteuses (cf. tests/test_textes_resolver.py)
+    monkeypatch.setenv("BOURBON_TEXTES_DISTANTS", "0")
 
     inconnu = get_textes_reference("DOSSIER_INCONNU_99999")
     assert inconnu == {}
