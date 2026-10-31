@@ -89,6 +89,8 @@ def test_identical_amendments_detected():
 
     assert result[0].statut_mecanique == StatutMecanique.NOUVEAU
     assert result[1].statut_mecanique == StatutMecanique.IDENTIQUE_MECANIQUE
+    assert result[1].alerte_couleur == "rouge"
+    assert "Identique mécanique" in result[1].justification_mecanique
     assert result[1].groupe_identique_id is not None
 
 
@@ -112,7 +114,9 @@ def test_doublon_same_author_detected():
     result = process_deterministic_sorting([a1, a2])
 
     assert result[0].statut_mecanique == StatutMecanique.NOUVEAU
-    assert result[1].statut_mecanique == StatutMecanique.IDENTIQUE_MECANIQUE
+    assert result[1].statut_mecanique == StatutMecanique.DOUBLON_MECANIQUE
+    assert result[1].alerte_couleur == "orange"
+    assert "Doublon" in result[1].justification_mecanique
 
 
 def test_different_text_on_same_alinea_forms_cluster_and_stays_nouveau():

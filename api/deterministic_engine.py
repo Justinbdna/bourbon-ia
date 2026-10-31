@@ -199,6 +199,50 @@ def is_boilerplate_or_empty(text: str) -> bool:
 is_boilerplate_or_insignificant = is_boilerplate_or_empty
 
 
+def qualify_irrecevabilite(amend: EnrichedAmendment) -> str:
+    """
+    Qualifie précisément l'irrecevabilité d'un amendement selon les règles de l'AN :
+      - Article 40 de la Constitution : irrecevabilité financière (aggravation d'une charge publique)
+      - Article 45 de la Constitution / Article 98 du Règlement : cavalier législatif ou règle de l'entonnoir
+      - Autres irrecevabilités / retraits
+    """
+    raw = amend.raw_dict if isinstance(amend.raw_dict, dict) else {}
+    corps = raw.get("corps") if isinstance(raw.get("corps"), dict) else {}
+    cartouche = str(corps.get("cartoucheInformatif") or raw.get("cartoucheInformatif") or "")
+    cycle = raw.get("cycleDeVie") if isinstance(raw.get("cycleDeVie"), dict) else {}
+    etat_chrono = cycle.get("etatChronologique") if isinstance(cycle.get("etatChronologique"), dict) else {}
+    mention = str(etat_chrono.get("mention") or cycle.get("mention") or "")
+    code_chrono = str(etat_chrono.get("code") or cycle.get("code") or "")
+    sort = str(raw.get("sort") or "")
+
+    corpus_irr = f"{amend.dispositif_raw} {amend.dispositif_clean} {cartouche} {mention} {code_chrono} {sort}".lower()
+
+    if (
+        "art. 40" in corpus_irr
+        or "article 40" in corpus_irr
+        or "art 40" in corpus_irr
+        or "irr40" in corpus_irr
+        or "charge financière" in corpus_irr
+        or "charge publique" in corpus_irr
+    ):
+        return "Irrecevable (Art. 40 - Recevabilité financière)"
+
+    if (
+        "art. 45" in corpus_irr
+        or "article 45" in corpus_irr
+        or "art 45" in corpus_irr
+        or "irr45" in corpus_irr
+        or "art. 98" in corpus_irr
+        or "article 98" in corpus_irr
+        or "art 98" in corpus_irr
+        or "cavalier" in corpus_irr
+        or "entonnoir" in corpus_irr
+    ):
+        return "Irrecevable (Art. 45/98 - Cavalier législatif / Entonnoir)"
+
+    return "Amendement non renseigné, retiré ou irrecevable."
+
+
 def get_article_sort_key(article_str: str) -> tuple[int, int]:
     """
     Retourne un tuple de tri numérique et parlementaire pour un article.
@@ -315,7 +359,7 @@ def process_deterministic_sorting(
             amend.statut_mecanique = StatutMecanique.ISOLE_MECANIQUE
             amend.skip_llm = True
             amend.alerte_couleur = "gris"
-            amend.justification_mecanique = "Amendement non renseigné, retiré ou irrecevable."
+            amend.justification_mecanique = qualify_irrecevabilite(amend)
 
     # ── Phase 3 : Détection mécanique par empreinte (vrai texte législatif uniquement) ──
     groups: dict[str, list[int]] = defaultdict(list)
@@ -335,17 +379,31 @@ def process_deterministic_sorting(
             continue  # Unique textuellement
 
         referent_idx = indices[0]
-        referent_uid = amendments[referent_idx].amendement_uid
+        referent = amendments[referent_idx]
+        referent_uid = referent.amendement_uid
+        ref_auteur_key = (referent.auteur_ref or referent.auteur_nom or "").strip().lower()
 
         for i in indices[1:]:
             amend = amendments[i]
-            amend.statut_mecanique = StatutMecanique.IDENTIQUE_MECANIQUE
             amend.skip_llm = True
             amend.groupe_identique_id = fp
-            amend.justification_mecanique = (
-                f"Identique mécanique au référent {referent_uid} "
-                f"sur {amend.article_vise or 'article non spécifié'}."
-            )
+            amd_auteur_key = (amend.auteur_ref or amend.auteur_nom or "").strip().lower()
+
+            is_same_author = bool(ref_auteur_key and amd_auteur_key and ref_auteur_key == amd_auteur_key)
+            if not is_same_author and referent.auteurs_raw and amend.auteurs_raw:
+                is_same_author = bool(set(referent.auteurs_raw) & set(amend.auteurs_raw))
+
+            if is_same_author:
+                amend.statut_mecanique = StatutMecanique.DOUBLON_MECANIQUE
+                amend.alerte_couleur = "orange"
+                amend.justification_mecanique = "Doublon matériel du même auteur (à retirer)"
+            else:
+                amend.statut_mecanique = StatutMecanique.IDENTIQUE_MECANIQUE
+                amend.alerte_couleur = "rouge"
+                amend.justification_mecanique = (
+                    f"Identique mécanique au référent {referent_uid} "
+                    f"sur {amend.article_vise or 'article non spécifié'}."
+                )
 
     # ── Phase 4 : Clustering mécanique par zone d'impact & Aiguillage des cas complexes ──
     # Partitionnement par clé composite (article, point_impact, alinéa) pour les amendements actifs
