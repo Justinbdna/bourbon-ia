@@ -11,13 +11,13 @@ import os
 import re
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 import requests
 from pydantic import BaseModel, Field, ValidationError
 
-from src.services.legal_ingestion.vector_indexer import LegalVectorIndexer
+from api.services.legal_ingestion.vector_indexer import LegalVectorIndexer
 
 logger = logging.getLogger("bourbon.surtransposition")
 
@@ -63,7 +63,7 @@ class SurtranspositionAnalysisResult(BaseModel):
         description="Article de loi national ou amendement visé"
     )
     timestamp: str = Field(
-        default_factory=lambda: datetime.utcnow().isoformat() + "Z",
+        default_factory=lambda: datetime.now(timezone.utc).isoformat(),
         description="Horodatage ISO de l'analyse"
     )
     analysis_mode: str = Field(
