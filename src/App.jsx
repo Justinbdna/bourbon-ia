@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import ImportPanel from './components/ImportPanel'
 import AmendmentTable from './components/AmendmentTable'
 import AmendmentDetail from './components/AmendmentDetail'
@@ -15,7 +15,6 @@ const STORAGE_KEY = 'bourbon_session_amendments'
 export default function App() {
   const [hasEntered, setHasEntered] = useState(false)
   const [amendments, setAmendments] = useState([])
-  const [sourceLabel, setSourceLabel] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
   const [isClassifying, setIsClassifying] = useState(false)
   const [classifyError, setClassifyError] = useState(null)
@@ -24,7 +23,6 @@ export default function App() {
   const [isReasoningMode, setIsReasoningMode] = useState(false)
   const [progressInfo, setProgressInfo] = useState(null)
   const [showCloudWarning, setShowCloudWarning] = useState(false)
-  const [currentAnalyzing, setCurrentAnalyzing] = useState(null) // { uid, numero, index, total }
 
   // Consentement RGPD (sessionStorage = volatile)
   const [consentAsked, setConsentAsked] = useState(() => sessionStorage.getItem('bourbon_consent') !== null)
@@ -49,7 +47,9 @@ export default function App() {
           if (parsed && typeof parsed === 'object') {
             setAiSettings(parsed)
           }
-        } catch (e) {}
+        } catch {
+          // ignore parsing error
+        }
         localStorage.removeItem('bourbon_ai_settings')
       }
 

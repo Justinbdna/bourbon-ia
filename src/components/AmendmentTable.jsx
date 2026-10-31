@@ -5,7 +5,6 @@ import CommissionKeywords from './amendment/CommissionKeywords'
 import PoliticalGroupTag from './amendment/PoliticalGroupTag'
 import AmendmentSearchBar from './amendment/AmendmentSearchBar'
 import { downloadRtf } from '../utils/exportRtf'
-import SkeletonLoader from './amendment/SkeletonLoader'
 
 const PAGE_SIZE = 50
 
@@ -69,67 +68,6 @@ function normaliser(texte) {
 function auteursEnListe(a) {
   if (Array.isArray(a.auteurs)) return a.auteurs.filter(Boolean)
   return a.auteurs ? [String(a.auteurs)] : []
-}
-
-function truncate(text, max = 90) {
-  if (!text) return '—'
-  const flat = String(text).replace(/\s+/g, ' ').trim()
-  return flat.length > max ? flat.slice(0, max) + '…' : flat
-}
-
-function GripIcon() {
-  return (
-    <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" className="text-ink-300">
-      <circle cx="2" cy="2" r="1.3" />
-      <circle cx="7" cy="2" r="1.3" />
-      <circle cx="2" cy="8" r="1.3" />
-      <circle cx="7" cy="8" r="1.3" />
-      <circle cx="2" cy="14" r="1.3" />
-      <circle cx="7" cy="14" r="1.3" />
-    </svg>
-  )
-}
-
-const GROUP_META = {
-  identiques: {
-    label: 'Id.',
-    accent: 'text-teal-700',
-    stroke: '#0d9488',
-    tint: 'bg-teal-50/60',
-  },
-  discussion_commune: {
-    label: 'Dc.',
-    accent: 'text-purple-700',
-    stroke: '#7e22ce',
-    tint: 'bg-purple-50/60',
-  },
-}
-
-function computeGroupSpans(amendments) {
-  const spans = new Map()
-  let i = 0
-  while (i < amendments.length) {
-    const a = amendments[i]
-    const g = a.resultat_ia?.groupe
-    const meta = g?.groupe_id ? GROUP_META[g.type] : null
-
-    if (!meta) {
-      spans.set(a.id ?? `anon-${i}`, { span: 1, isStart: true, meta: null })
-      i += 1
-      continue
-    }
-
-    let j = i + 1
-    while (j < amendments.length && amendments[j].resultat_ia?.groupe?.groupe_id === g.groupe_id) {
-      j += 1
-    }
-    const size = j - i
-    for (let k = i; k < j; k++) {
-      spans.set(amendments[k].id ?? `anon-${k}`, { span: size, isStart: k === i, meta })
-    }
-    i = j
-  }
-  return spans
 }
 
 export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, isClassifying, onExportJson }) {
@@ -196,9 +134,6 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
   const startIdx = safePage * PAGE_SIZE
   const pageItems = filtres.slice(startIdx, startIdx + PAGE_SIZE)
 
-  const hasClassification = amendments.some((a) => a.resultat_ia)
-  const groupSpans = computeGroupSpans(amendments)
-
   // Les index transmis sont ceux de la liste complète (cf. `filtres`).
   function handleDragStart(e, index) {
     e.dataTransfer.setData('text/plain', String(index))
@@ -259,7 +194,6 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               </tr>
             )}
             {pageItems.map(({ a, idx }) => {
-              const rang = a.rang || a.resultat_ia?.rang
               const statut = a.statut || a.resultat_ia?.statut
               const groupe = a.groupe || a.resultat_ia?.groupe
               const isSelected = a.id === selectedId
@@ -351,7 +285,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                     </div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button onClick={(e) => { e.stopPropagation(); onDelete && onDelete(a.id); }} className="text-gray-400 hover:text-red-600 transition-colors">Retirer</button>
+                    <button onClick={(e) => { e.stopPropagation(); if (onDelete) onDelete(a.id); }} className="text-gray-400 hover:text-red-600 transition-colors">Retirer</button>
                   </td>
                 </tr>
               )

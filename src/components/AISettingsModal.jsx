@@ -118,7 +118,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
           try {
             const resV0 = await fetch(`${baseUrl}/api/v0/models`, { method: 'GET', headers })
             if (resV0.ok) data = await resV0.json()
-          } catch (e) {
+          } catch {
             // ignore v0 failure
           }
           if (!data || !Array.isArray(data.data)) {
@@ -138,7 +138,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
         } else if (isMounted) {
           setModelsList([])
         }
-      } catch (err) {
+      } catch {
         if (isMounted) setModelsList([])
       }
       if (isMounted) setIsFetchingModels(false)
@@ -204,7 +204,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
           onClose()
         }, 1500)
         return
-      } catch (err) {
+      } catch {
         setPingStatus({ type: 'error', message: '⚠️ Échec du chargement : Mémoire VRAM insuffisante ou modèle indisponible sur le serveur hôte.' })
         setTimeout(() => setPingStatus(null), 4000)
         return
