@@ -28,13 +28,17 @@ Bourbon.IA est cette solution.
 
 ## 💡 La Solution & Architecture (MVP V1)
 
-### Edge Computing — Pré-tri Front-End
-L'interface React gère l'import de multiples fichiers JSON (format officiel de l'Assemblée nationale) et effectue un **tri mécanique instantané** (doublons stricts, détection par regex du dispositif) directement dans le navigateur. Ce pré-tri déterministe économise les ressources IA en ne transmettant au LLM que les amendements réellement ambigus.
+### Pré-tri déterministe (sans IA)
+L'interface React gère l'import de multiples fichiers JSON (format officiel de l'Assemblée nationale). Le serveur FastAPI effectue d'abord un **tri mécanique instantané, sans IA** : identiques, doublons (même texte, même auteur, même commission), irrecevabilités (Art. 40 / Art. 45) et amendements isolés sur leur zone d'impact. Ce pré-tri déterministe économise les ressources IA en ne transmettant au LLM que les amendements réellement ambigus.
 
 ### Sécurité & Architecture — Monolithe Assumé
 Pour les besoins du Hackathon, le prototype est un monolithe volontaire. Ce choix d'architecture favorise la vélocité d'itération et la démonstration rapide.
 
-> **🔒 Garantie de sécurité :** Les clés API (utilisées uniquement pour la démo publique) sont strictement stockées côté client (`localStorage` du navigateur) et **ne sont jamais transmises ni sauvegardées sur nos serveurs**. Aucune donnée législative ne transite vers un tiers.
+> **🔒 Où vont les données ?**
+> - **IA locale (mode souverain)** : les amendements sont traités par le serveur Bourbon.IA et le LLM installé sur le poste ou le réseau interne. **Rien ne sort.** C'est le mode par défaut quand l'application tourne en local.
+> - **Groq (Démo)** — démo publique en ligne uniquement : les amendements passent par le serveur Vercel puis sont envoyés à **Groq (États-Unis, hors UE)**. L'application l'annonce par une alerte avant chaque classement. À n'utiliser qu'avec des amendements **déjà publics**.
+> - **Clés API** : une clé personnelle est stockée **chiffrée** dans le navigateur ; elle est transmise au serveur à chaque requête pour appeler Groq, mais n'y est jamais enregistrée et reste masquée dans les journaux. La clé de la démo publique est une variable d'environnement du serveur, jamais envoyée au navigateur.
+> - **Texte de loi de référence** : seul l'identifiant public du texte est demandé à l'API Tricoteuses (désactivable avec `BOURBON_TEXTES_DISTANTS=0`).
 
 Pour une mise en production, l'architecture évoluera vers des **Micro-services conteneurisés** (Docker/K8s) avec chiffrement de bout en bout.
 

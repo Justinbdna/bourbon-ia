@@ -41,3 +41,6 @@ data/clean/
 
 # Environnement Python local (créé par l'IDE)
 venv/
+
+# Liaison locale au projet Vercel (créée par `vercel link`)
+.vercel
