@@ -12,9 +12,9 @@ import pytest
 # Ensure workspace root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.services.legal_ingestion.eurlex_client import EURLexClient
-from src.services.legal_ingestion.legifrance_client import LegifranceClient
-from src.services.legal_ingestion.vector_indexer import LegalVectorIndexer
+from api.services.legal_ingestion.eurlex_client import EURLexClient
+from api.services.legal_ingestion.legifrance_client import LegifranceClient
+from api.services.legal_ingestion.vector_indexer import LegalVectorIndexer
 
 
 # ──────────────────────────────────────────────────────────────────────────

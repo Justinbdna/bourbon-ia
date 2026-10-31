@@ -12,8 +12,8 @@ from pydantic import ValidationError
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.services.legal_ingestion.vector_indexer import LegalVectorIndexer
-from src.services.analysis.surtransposition_checker import (
+from api.services.legal_ingestion.vector_indexer import LegalVectorIndexer
+from api.services.analysis.surtransposition_checker import (
     SurtranspositionChecker,
     SurtranspositionAnalysisResult,
     SurtranspositionStatus,
