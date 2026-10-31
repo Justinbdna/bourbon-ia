@@ -32,6 +32,9 @@ Usage (auto-test hors-ligne, sans LLM requis) :
 
 from __future__ import annotations
 
+import os
+import ipaddress
+import urllib.parse
 import json
 import logging
 import re
@@ -40,6 +43,55 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 logger = logging.getLogger("bourbon.llm_semantic")
+
+
+def sanitize_log_message(msg: str, key: Optional[str] = None) -> str:
+    """Masque les clés API (Groq, OpenAI, etc.) dans les exceptions et logs."""
+    if not msg:
+        return ""
+    clean = re.sub(r"gsk_[a-zA-Z0-9_-]{20,}", "[REDACTED_API_KEY]", str(msg))
+    clean = re.sub(r"Bearer\s+[a-zA-Z0-9_\-\.]{15,}", "Bearer [REDACTED]", clean)
+    if key and len(key) > 5 and key in clean:
+        clean = clean.replace(key, "[REDACTED_API_KEY]")
+    return clean
+
+
+def validate_endpoint_url(endpoint: Optional[str]) -> str:
+    """
+    Validation anti-SSRF de l'URL du serveur LLM.
+    En environnement Cloud / Vercel (VERCEL='1'), bloque impérativement :
+      - Tout schéma non HTTP/HTTPS
+      - Les hôtes locaux (localhost, 127.0.0.1, 0.0.0.0, [::1])
+      - Les adresses de métadonnées cloud (169.254.169.254, metadata.google.internal)
+      - Les plages d'adresses IP privées RFC 1918 (10.x, 172.16.x, 192.168.x)
+    """
+    if not endpoint or not str(endpoint).strip():
+        return DEFAULT_ENDPOINT
+
+    url = str(endpoint).strip()
+    parsed = urllib.parse.urlsplit(url)
+
+    if parsed.scheme.lower() not in ("http", "https"):
+        raise ValueError(f"Protocole non sécurisé ou invalide : '{parsed.scheme}'. Seuls HTTP et HTTPS sont autorisés.")
+
+    hostname = (parsed.hostname or "").lower()
+    if not hostname:
+        raise ValueError("URL d'endpoint invalide : nom d'hôte manquant.")
+
+    is_cloud = os.environ.get("VERCEL") == "1"
+    if is_cloud:
+        if hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1", "metadata.google.internal"):
+            raise ValueError("Accès aux hôtes locaux interdit en environnement Cloud (SSRF protection).")
+
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or str(ip) == "169.254.169.254":
+                raise ValueError("Accès aux réseaux privés et métadonnées interdit en environnement Cloud (SSRF protection).")
+        except ValueError as ip_err:
+            if "Accès" in str(ip_err):
+                raise
+
+    return url
 
 # ──────────────────────────────────────────────────────────────────────────
 # Garde-fous de contexte (fenêtre des modèles locaux : Llama 3 8B / Mistral 7B)
@@ -530,7 +582,7 @@ def evaluate_similitude(
         # le build serverless si la dépendance manque au moment du bundling.
         from openai import OpenAI
 
-        effective_endpoint = llm_endpoint if llm_endpoint else DEFAULT_ENDPOINT
+        effective_endpoint = validate_endpoint_url(llm_endpoint)
         client = OpenAI(base_url=effective_endpoint, api_key=api_key, timeout=timeout)
         reponse = client.chat.completions.create(
             model=model,
@@ -546,7 +598,7 @@ def evaluate_similitude(
     except ImportError:
         return _repli_nouveau("bibliothèque openai indisponible")
     except Exception as exc:
-        exc_str = str(exc)
+        exc_str = sanitize_log_message(str(exc), api_key)
         exc_name = type(exc).__name__
         if "AuthenticationError" in exc_name or "401" in exc_str or "Invalid API Key" in exc_str or "invalid_api_key" in exc_str:
             return _repli_nouveau("⚠️ Clé API invalide ou expirée. Veuillez vérifier et mettre à jour votre clé dans les Réglages IA.")

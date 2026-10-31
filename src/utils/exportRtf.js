@@ -12,7 +12,7 @@ const GROUP_LABELS = {
 // spéciaux RTF (\ { }) et encode tout caractère non-ASCII (accents,
 // caractères de dessin de boîte) en séquence \uNNNN? — la méthode la plus
 // robuste pour générer du RTF depuis du JS, sans se soucier de l'encodage.
-function rtfEscape(str) {
+export function rtfEscape(str) {
   let out = ''
   for (const ch of String(str)) {
     const code = ch.codePointAt(0)

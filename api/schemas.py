@@ -15,7 +15,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -52,13 +52,13 @@ class EnrichedAmendment(BaseModel):
     """
 
     # ── Identifiants ──
-    amendement_uid: str = Field(..., description="Clé primaire unique de l'amendement (ex: AMANR5L17...)")
-    numero_long: str = Field("", description="Numéro d'affichage officiel (ex: '52')")
+    amendement_uid: str = Field(..., max_length=150, description="Clé primaire unique de l'amendement (ex: AMANR5L17...)")
+    numero_long: str = Field("", max_length=100, description="Numéro d'affichage officiel (ex: '52')")
 
     # ── Texte juridique ──
-    dispositif_raw: str = Field("", description="Dispositif brut HTML tel que fourni par l'AN")
-    dispositif_clean: str = Field("", description="Dispositif nettoyé (sans HTML, normalisé)")
-    expose_sommaire: str = Field("", description="Exposé sommaire nettoyé")
+    dispositif_raw: str = Field("", max_length=500_000, description="Dispositif brut HTML tel que fourni par l'AN")
+    dispositif_clean: str = Field("", max_length=500_000, description="Dispositif nettoyé (sans HTML, normalisé)")
+    expose_sommaire: str = Field("", max_length=500_000, description="Exposé sommaire nettoyé")
 
     # ── Division / Article visé ──
     article_vise: str = Field("", description="Désignation courte de l'article (ex: 'ART. PREMIER')")
@@ -112,5 +112,29 @@ class EnrichedAmendment(BaseModel):
     
     raw_dict: dict = Field(default_factory=dict, description="Données d'origine pour préserver les métadonnées")
 
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Modèles pour l'analyse de surtransposition UE (api/services/analysis)
+# ──────────────────────────────────────────────────────────────────────────
+
+class SurtranspositionItemInput(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    amendement_uid: Optional[str] = Field(None, max_length=150)
+    dispositif: str = Field("", max_length=500_000)
+    expose_sommaire: Optional[str] = Field("", max_length=500_000)
+    article_vise: Optional[str] = Field(None, max_length=200)
+    celex_id: Optional[str] = Field(None, max_length=100)
+
+
+class SurtranspositionRequest(BaseModel):
+    """Payload pour la route /api/v2/surtransposition."""
+    model_config = ConfigDict(use_enum_values=True)
+    amendements: Optional[list[dict]] = Field(None, max_length=2000)
+    amendement: Optional[dict] = None
+    dispositif: Optional[str] = Field(None, max_length=500_000)
+    expose_sommaire: Optional[str] = Field(None, max_length=500_000)
+    article_vise: Optional[str] = Field(None, max_length=200)
+    amendement_uid: Optional[str] = Field(None, max_length=150)
+    celex_id: Optional[str] = Field(None, max_length=100)
