@@ -5,32 +5,16 @@ import CommissionKeywords from './amendment/CommissionKeywords'
 import PoliticalGroupTag from './amendment/PoliticalGroupTag'
 import AmendmentSearchBar from './amendment/AmendmentSearchBar'
 import { downloadRtf } from '../utils/exportRtf'
+import { stripHtmlForDisplay } from '../utils/sanitize'
 
 const PAGE_SIZE = 50
-
-// Nettoyage HTML côté client — apport de Justin (334368c), conservé comme
-// défense en profondeur : le backend nettoie déjà via _nettoyer_html(), mais
-// des données peuvent arriver sans transiter par /api/normalize.
-function stripHtml(text) {
-  if (!text || typeof text !== 'string') return text || ''
-  return text
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#160;/g, ' ')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .trim()
-}
 
 // Extrait du dispositif : 250 caractères au plus (coupés sur un mot), avec
 // « Voir plus » pour déplier le texte complet dans la cellule.
 const EXTRAIT_MAX = 250
 
 function cleanText(text) {
-  return stripHtml(String(text ?? '')).replace(/\s+/g, ' ').trim()
+  return stripHtmlForDisplay(String(text ?? '')).replace(/\s+/g, ' ').trim()
 }
 
 function ExtraitDispositif({ text }) {
@@ -73,6 +57,7 @@ function auteursEnListe(a) {
 export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, isClassifying, onExportJson }) {
   const [currentPage, setCurrentPage] = useState(0)
   const [filtre, setFiltre] = useState({ motCle: '', auteur: '' })
+  const [masquerEcartes, setMasquerEcartes] = useState(false)
 
   // Options de la recherche : mots-clés (avec effectif) et auteurs distincts.
   const optionsRecherche = useMemo(() => {
@@ -95,11 +80,30 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
     return amendments
       .map((a, idx) => ({ a, idx }))
       .filter(({ a }) => {
+        if (masquerEcartes) {
+          const statutLower = String(a.statut || a.resultat_ia?.statut || a.statut_mecanique || '').toLowerCase()
+          const sortLower = String(a.sort || a.raw_dict?.sort || '').toLowerCase()
+          const justifLower = String(a.justification_mecanique || '').toLowerCase()
+          const isEcarte = (
+            statutLower.includes('irrecevable') ||
+            statutLower.includes('retiré') ||
+            statutLower.includes('retire') ||
+            statutLower.includes('doublon') ||
+            justifLower.includes('irrecevable') ||
+            justifLower.includes('doublon') ||
+            justifLower.includes('retiré') ||
+            justifLower.includes('retire') ||
+            sortLower.includes('retiré') ||
+            sortLower.includes('retire') ||
+            a.statut_mecanique === 'DOUBLON_MECANIQUE'
+          )
+          if (isEcarte) return false
+        }
         if (filtre.motCle && !(a.commission_mots_cles || []).includes(filtre.motCle)) return false
         if (auteurCherche && !normaliser(auteursEnListe(a).join(', ')).includes(auteurCherche)) return false
         return true
       })
-  }, [amendments, filtre])
+  }, [amendments, filtre, masquerEcartes])
 
   function handleRechercher(nouveauFiltre) {
     setFiltre(nouveauFiltre)
@@ -156,13 +160,29 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
 
   return (
     <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 overflow-hidden">
-      {counts.total > 0 && (
-        <div className="bg-slate-100/80 dark:bg-slate-900/50 border-b border-ink-200 dark:border-ink-700 px-4 py-3">
+      <div className="bg-slate-100/80 dark:bg-slate-900/50 border-b border-ink-200 dark:border-ink-700 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
+        {counts.total > 0 ? (
           <p className="text-sm font-medium text-slate-900 dark:text-plume">
             {counts.total} amendements classés ({counts.dc} en discussion commune, {counts.id} identiques, {counts.isole} isolés).
           </p>
-        </div>
-      )}
+        ) : (
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            {amendments.length} amendements chargés
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={() => { setMasquerEcartes(v => !v); setCurrentPage(0); }}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${
+            masquerEcartes
+              ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-700 shadow-sm'
+              : 'bg-white text-slate-700 border-slate-300 dark:bg-[#12131A] dark:text-slate-300 dark:border-slate-600 hover:bg-slate-50'
+          }`}
+          title="Masquer les amendements écartés (irrecevables, retirés ou doublons) pour afficher uniquement la séance"
+        >
+          <span>{masquerEcartes ? '⚖️ Séance seule (écartés masqués)' : '👁️ Masquer les amendements écartés'}</span>
+        </button>
+      </div>
       <AmendmentSearchBar
         motsCles={optionsRecherche.motsCles}
         auteurs={optionsRecherche.auteurs}
@@ -177,10 +197,11 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
             <tr>
               <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20 min-w-20 max-w-20 sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-0">Art.</th>
               <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20 min-w-20 max-w-20 sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-20">N°</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[240px] min-w-[240px] max-w-[240px] sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-40 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">Auteur(s)</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-48 min-w-48">Point d'impact</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[352px] min-w-[352px] max-w-[352px]">Commission / Thèmes</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-full min-w-[300px]">Extrait du dispositif</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[220px] min-w-[220px] max-w-[220px] sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-40 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">Auteur(s)</th>
+              <th className="px-3 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-36 min-w-36">Groupe</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-44 min-w-44">Point d'impact</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[320px] min-w-[320px] max-w-[320px]">Commission / Thèmes</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-full min-w-[280px]">Extrait du dispositif</th>
               <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider whitespace-nowrap">Statut</th>
               <th className="px-4 py-4 text-right text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider whitespace-nowrap">Actions</th>
             </tr>
@@ -188,7 +209,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
           <tbody className="bg-white dark:bg-[#0B0C10] divide-y divide-gray-200 dark:divide-gray-800">
             {pageItems.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                <td colSpan={9} className="px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
                   Aucun amendement ne correspond à cette recherche.
                 </td>
               </tr>
@@ -219,33 +240,22 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                 >
                   <td className={`px-2 py-4 w-20 min-w-20 max-w-20 text-sm text-slate-800 dark:text-slate-200 truncate sticky left-0 z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.article}>{String(a.article || "—").replace(/^Article\s+/i, "")}</td>
                   <td className={`px-1 py-4 w-20 min-w-20 max-w-20 text-xs text-slate-800 dark:text-slate-200 truncate sticky left-20 z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.numero}>{a.numero}</td>
-                  <td className={`px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-[240px] min-w-[240px] max-w-[240px] align-top sticky left-40 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`}>
-                    <div className="flex flex-col gap-1">
-                      <span className="break-words leading-snug" title={auteursText}>{auteursText}</span>
-                      {/* Groupe politique de l'auteur.
-                          On lit `groupe_politique` (et non `groupe`) : le backend
-                          envoie aussi `groupe` pour le groupe politique, mais cette
-                          clé est déjà consommée plus bas par <GroupeBadge> avec un
-                          sens différent (identiques / discussion commune). */}
-                      {(a.groupe_politique || a.groupe_politique_ref) && (
-                        // `items-start` : sans cela l'étiquette s'étire sur toute
-                        // la largeur de la colonne (comportement par défaut d'un
-                        // enfant de flex-col) au lieu de s'ajuster à son texte.
-                        <div className="flex items-start">
-                          <PoliticalGroupTag
-                            group={a.groupe_politique}
-                            groupRef={a.groupe_politique_ref}
-                          />
-                        </div>
-                      )}
-                    </div>
+                  <td className={`px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-[220px] min-w-[220px] max-w-[220px] align-top sticky left-40 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`}>
+                    <span className="break-words leading-snug" title={auteursText}>{auteursText}</span>
                   </td>
-                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-48 min-w-48 align-top">
-                    {/* Ne jamais transmettre l'objet point_impact lui-même :
-                        `a.point_impact?.type || a.point_impact` renvoyait
-                        l'objet {type: ''} dès que le type était vide, ce qui
-                        fait planter React (« Objects are not valid as a React
-                        child ») et laisse une page blanche. */}
+                  <td className="px-3 py-4 text-sm text-slate-800 dark:text-slate-200 w-36 min-w-36 align-top">
+                    {(a.groupe_politique || a.groupe_politique_ref || a.groupRef) ? (
+                      <div className="flex items-start">
+                        <PoliticalGroupTag
+                          group={a.groupe_politique}
+                          groupRef={a.groupe_politique_ref || a.groupRef}
+                        />
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-44 min-w-44 align-top">
                     <ImpactBadge
                       type={
                         typeof a.point_impact === 'string'
@@ -254,7 +264,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       }
                     />
                   </td>
-                  <td className="px-4 py-4 text-sm w-[352px] min-w-[352px] max-w-[352px] align-top">
+                  <td className="px-4 py-4 text-sm w-[320px] min-w-[320px] max-w-[320px] align-top">
                     <CommissionKeywords
                       commission={a.commission}
                       commissionLibelle={a.commission_libelle}
@@ -262,8 +272,8 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       horsChamp={a.commission_hors_champ}
                     />
                   </td>
-                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full min-w-[300px] align-top whitespace-normal break-words leading-snug"><ExtraitDispositif text={a.dispositif} /></td>
-                  <td className="px-4 py-4 text-sm whitespace-nowrap">
+                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full min-w-[280px] align-top whitespace-normal break-words leading-snug"><ExtraitDispositif text={a.dispositif} /></td>
+                  <td className="px-4 py-4 text-sm whitespace-nowrap align-top">
                     <div className="flex items-center gap-1">
                       <GroupeBadge statut={statutToDisplay} groupe={groupe} isPending={isPending} />
                       {/* 💡 Tooltip Chain of Thought (inline) */}

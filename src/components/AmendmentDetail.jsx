@@ -10,15 +10,19 @@ import SkeletonLoader from './amendment/SkeletonLoader'
 import EUCompliancePanel from './amendment/EUCompliancePanel'
 import { analyzeSurtransposition } from '../api/classify'
 
-export function formatArticleTitle(articleStr) {
-  if (!articleStr) return 'Article —';
-  let clean = String(articleStr).trim();
-  clean = clean.replace(/^(article\s+|art\.\s*)+/gi, 'Article ');
-  if (!/^(article|art\.)/i.test(clean)) {
-    clean = `Article ${clean}`;
+export function formatCleanArticleHeading(article) {
+  if (!article) return 'Article —'
+  const str = String(article).trim()
+  // Dédupliquer les répétitions éventuelles ("Article Article PREMIER" -> "Article PREMIER")
+  let clean = str.replace(/^(article\s+|art\.\s*)+/gi, 'Article ')
+  // Vérifie si la chaîne commence déjà par article, art., après l'article ou avant l'article
+  if (/^(article|art\.|apr[eè]s\s+l['’]article|avant\s+l['’]article|apr[eè]s\s+l['’]art\.|avant\s+l['’]art\.)/i.test(clean)) {
+    return clean
   }
-  return clean;
+  return `Article ${clean}`
 }
+
+export const formatArticleTitle = formatCleanArticleHeading
 
 export default function AmendmentDetail({ amendment, onClose, isLoading }) {
   const [euCompliance, setEuCompliance] = useState(amendment?.eu_compliance || null)
@@ -75,9 +79,16 @@ export default function AmendmentDetail({ amendment, onClose, isLoading }) {
             {a.texte_examine?.titre}
             {a.texte_examine?.lecture ? ` · ${a.texte_examine.lecture}` : ''}
           </p>
-          <h3 className="font-display text-xl text-slate-900 dark:text-plume mt-0.5">
-            {formatArticleTitle(a.article)} — Amendement n° {a.numero}
-            {a.rectification ? ` ${a.rectification}` : ''}
+          <h3 className="font-display text-xl text-slate-900 dark:text-plume mt-0.5 flex items-center gap-2 flex-wrap">
+            <span>
+              {formatCleanArticleHeading(a.article)} — Amendement n° {a.numero}
+              {a.rectification ? ` ${a.rectification}` : ''}
+            </span>
+            {a.est_gage && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 px-2.5 py-0.5 text-xs font-semibold">
+                💰 Gagé (Art. 40)
+              </span>
+            )}
           </h3>
         </div>
         <button
@@ -191,7 +202,7 @@ export default function AmendmentDetail({ amendment, onClose, isLoading }) {
         {a.texte_loi_reference && (
           <section className="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-md p-4">
             <h4 className="font-display text-sm uppercase tracking-wide text-amber-900 dark:text-amber-200 mb-2 flex items-center gap-1.5">
-              <span>📜</span> Texte de loi initial de référence ({formatArticleTitle(a.article)})
+              <span>📜</span> Texte de loi initial de référence ({formatCleanArticleHeading(a.article)})
             </h4>
             <ScrollableText text={a.texte_loi_reference} />
           </section>

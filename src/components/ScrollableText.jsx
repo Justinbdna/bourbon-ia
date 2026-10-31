@@ -1,23 +1,11 @@
 import { useMemo, useState } from 'react'
+import { stripHtmlForDisplay } from '../utils/sanitize'
 
 const LINE_LIMIT = 20
 const COLLAPSED_HEIGHT = 320 // px, ~20 lignes en text-sm/leading-relaxed
 
 export function stripHtml(text) {
-  if (!text || typeof text !== 'string') return text || ''
-  return text
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div)>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#160;/g, ' ')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/\n\s*\n+/g, '\n\n')
-    .trim()
+  return stripHtmlForDisplay(text)
 }
 
 /**
@@ -27,7 +15,7 @@ export default function ScrollableText({ text, className = '' }) {
   const [expanded, setExpanded] = useState(false)
 
   const cleanText = useMemo(() => {
-    return stripHtml(text)
+    return stripHtmlForDisplay(text)
   }, [text])
 
   const lineCount = useMemo(() => {
