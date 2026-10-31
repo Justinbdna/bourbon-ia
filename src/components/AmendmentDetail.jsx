@@ -8,6 +8,7 @@ import LegislativeContext from './amendment/LegislativeContext'
 import IdentiqueAlert from './amendment/IdentiqueAlert'
 import SkeletonLoader from './amendment/SkeletonLoader'
 import EUCompliancePanel from './amendment/EUCompliancePanel'
+import ResumeIA from './amendment/ResumeIA'
 import { analyzeSurtransposition } from '../api/classify'
 
 export function formatCleanArticleHeading(article) {
@@ -24,7 +25,7 @@ export function formatCleanArticleHeading(article) {
 
 export const formatArticleTitle = formatCleanArticleHeading
 
-export default function AmendmentDetail({ amendment, onClose, isLoading }) {
+export default function AmendmentDetail({ amendment, onClose, isLoading, aiSettings }) {
   const [euCompliance, setEuCompliance] = useState(amendment?.eu_compliance || null)
 
   useEffect(() => {
@@ -154,6 +155,9 @@ export default function AmendmentDetail({ amendment, onClose, isLoading }) {
             <ImpactBadge type={a.point_impact?.type} />
           </div>
         </div>
+
+        {/* ── Résumé IA à la demande (1 à 2 phrases neutres) ── */}
+        <ResumeIA key={a.id ?? a.uid} amendment={a} aiSettings={aiSettings} />
 
         {/* ── Conformité européenne (surtransposition) — panneau dépliable ── */}
         <EUCompliancePanel result={euCompliance || a.eu_compliance} />

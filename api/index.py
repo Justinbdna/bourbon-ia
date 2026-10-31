@@ -32,7 +32,7 @@ try:
         detect_gage_financier,
     )
     from api.schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
-    from api.llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message
+    from api.llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
     from api.cache_manager import get_cached_classification, save_classification
     from api.deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII, get_depute_info
     from api.textes_resolver import extract_texte_ref, get_textes_reference, match_article_reference
@@ -46,7 +46,7 @@ except ModuleNotFoundError:
         detect_gage_financier,
     )
     from schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
-    from llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message
+    from llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
     from cache_manager import get_cached_classification, save_classification
     try:
         from deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII, get_depute_info
@@ -440,10 +440,24 @@ class V2AnalyzeSingleRequest(V2AnalyzeRequest):
     target_uid: str
 
 
+class ResumeRequest(BaseModel):
+    """Payload de /api/v2/resumer : un amendement + les réglages IA (mêmes champs que V2)."""
+    amendement_uid: Optional[str] = Field(None, max_length=150)
+    article: Optional[str] = Field(None, max_length=200)
+    dispositif: str = Field("", max_length=500_000)
+    expose_sommaire: Optional[str] = Field("", max_length=500_000)
+    texte_loi_reference: Optional[str] = Field(None, max_length=500_000)
+    model: str = Field("local-model", max_length=200)
+    llm_endpoint: Optional[str] = Field(None, max_length=500)
+    base_url: str = Field("http://localhost:1234/v1", max_length=500)
+    api_key: str = Field("local-key", max_length=500)
+    provider: str = Field("local", max_length=20)
+
+
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1"
 
 
-def _parametres_llm(payload: V2AnalyzeRequest) -> tuple[str, str]:
+def _parametres_llm(payload: "V2AnalyzeRequest | ResumeRequest") -> tuple[str, str]:
     """
     Renvoie (endpoint, clé API) pour l'appel LLM.
 
@@ -1169,6 +1183,37 @@ def get_surtransposition_checker():
             from services.analysis.surtransposition_checker import SurtranspositionChecker
         _SURTRANSPOSITION_CHECKER = SurtranspositionChecker()
     return _SURTRANSPOSITION_CHECKER
+
+
+@app.post("/api/v2/resumer")
+async def v2_resumer(payload: ResumeRequest):
+    """
+    Résumé neutre d'un amendement (1 à 2 phrases), à la demande depuis la
+    fiche de détail. Même choix d'IA que le classement (locale, clé
+    utilisateur ou « Groq (Démo) » avec la clé du serveur).
+    """
+    if payload.provider == "groq_auto" and not os.getenv("GROQ_API_KEY"):
+        raise HTTPException(
+            status_code=503,
+            detail="La clé Groq de la démo n'est pas encore configurée sur le serveur (GROQ_API_KEY).",
+        )
+    endpoint_llm, cle_llm = _parametres_llm(payload)
+    try:
+        resume = await asyncio.to_thread(
+            resumer_amendement,
+            _nettoyer_html(payload.dispositif),
+            _nettoyer_html(payload.expose_sommaire or ""),
+            payload.article,
+            payload.texte_loi_reference,
+            endpoint_llm,
+            model=payload.model,
+            api_key=cle_llm,
+        )
+    except RuntimeError as exc:
+        message = sanitize_log_message(str(exc), cle_llm)
+        logging.warning(f"⚠️ Résumé impossible ({payload.amendement_uid}) : {message}")
+        raise HTTPException(status_code=502, detail=message)
+    return {"amendement_uid": payload.amendement_uid, "resume": resume}
 
 
 @app.post("/api/v2/surtransposition")

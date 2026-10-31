@@ -3,6 +3,7 @@ import {
   normalizeAmendments,
   classifyAmendmentsV2,
   analyzeSurtransposition,
+  resumerAmendement,
   ClassifyError,
 } from '../api/classify'
 
@@ -140,5 +141,33 @@ describe('classify.js — Pipeline Orchestrateur Frontend V2', () => {
 
     const res = await analyzeSurtransposition({ id: 'AM-10' })
     expect(res).toBeNull()
+  })
+
+  it('resumerAmendement envoie l\'amendement et les réglages IA, renvoie le résumé', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ amendement_uid: 'AM-1', resume: 'Supprime l\'article 3.' }),
+    })
+
+    const resume = await resumerAmendement(
+      { id: 'AM-1', article: 'Article 3', dispositif: 'Supprimer cet article.' },
+      { provider: 'groq_auto' }
+    )
+
+    expect(resume).toBe('Supprime l\'article 3.')
+    const [url, init] = globalThis.fetch.mock.calls[0]
+    expect(url).toContain('/api/v2/resumer')
+    const corps = JSON.parse(init.body)
+    expect(corps).toMatchObject({ amendement_uid: 'AM-1', provider: 'groq_auto', llm_endpoint: 'https://api.groq.com/openai/v1' })
+  })
+
+  it('resumerAmendement lève ClassifyError avec le message du serveur', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: async () => ({ detail: 'Clé API invalide ou expirée. Vérifiez les Réglages IA.' }),
+    })
+
+    await expect(resumerAmendement({ id: 'AM-2' }, {})).rejects.toThrow('Clé API invalide')
   })
 })

@@ -648,6 +648,87 @@ def evaluate_similitude(
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# 6 bis. RÉSUMÉ D'UN AMENDEMENT (à la demande, depuis la fiche de détail)
+# ══════════════════════════════════════════════════════════════════════════
+MAX_RESUME_CHARS: int = 600
+MAX_TEXTE_LOI_CHARS: int = 1500
+
+RESUME_SYSTEM_PROMPT: str = """Tu es administrateur à l'Assemblée nationale française. Tu résumes des amendements pour tes collègues, de façon strictement NEUTRE : tu décris ce que l'amendement change, jamais s'il est bon ou mauvais, et tu ne reprends pas l'argumentaire politique de l'auteur.
+
+Règles :
+- 2 phrases au maximum, en français, sans liste ni titre ni guillemets autour de la réponse.
+- Phrase 1 : l'effet concret sur le texte (ce qui est supprimé, ajouté ou modifié, et où).
+- Phrase 2 (facultative) : l'objectif déclaré par l'auteur, introduit par « L'auteur vise à ».
+- N'invente rien : si le dispositif est vide ou illisible, réponds exactement « Dispositif non renseigné. »"""
+
+
+def resumer_amendement(
+    dispositif: Optional[str],
+    expose_sommaire: Optional[str] = None,
+    article: Optional[str] = None,
+    texte_loi_reference: Optional[str] = None,
+    llm_endpoint: Optional[str] = None,
+    *,
+    model: str = DEFAULT_MODEL,
+    api_key: str = "local-key",
+    timeout: float = 60.0,
+) -> str:
+    """
+    Résume un amendement en 1 à 2 phrases neutres.
+
+    Lève RuntimeError avec un message lisible (clé masquée) en cas d'échec :
+    contrairement au classement, il n'y a pas de repli déterministe utile.
+    """
+    dispositif_propre = _tronquer_intelligemment(dispositif, MAX_DISPOSITIF_CHARS)
+    if not dispositif_propre:
+        return "Dispositif non renseigné."
+
+    parties = [f"Article visé : {article or 'non précisé'}", f"Dispositif :\n{dispositif_propre}"]
+    if texte_loi_reference:
+        parties.append(
+            "Texte de loi visé (pour situer la modification) :\n"
+            + _tronquer_intelligemment(texte_loi_reference, MAX_TEXTE_LOI_CHARS)
+        )
+    if expose_sommaire:
+        parties.append("Exposé sommaire de l'auteur :\n" + _tronquer_intelligemment(expose_sommaire, MAX_EXPOSE_CHARS))
+
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(base_url=validate_endpoint_url(llm_endpoint), api_key=api_key, timeout=timeout)
+        reponse = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": RESUME_SYSTEM_PROMPT},
+                {"role": "user", "content": "\n\n".join(parties)},
+            ],
+            temperature=0.1,
+            max_tokens=200,
+        )
+        resume = (reponse.choices[0].message.content or "").strip().strip('"«» ')
+    except ImportError as exc:
+        raise RuntimeError("Bibliothèque openai indisponible sur le serveur.") from exc
+    except ValueError as exc:
+        # Adresse refusée par validate_endpoint_url (ex. « IA locale » demandée
+        # depuis la démo en ligne) : message explicite pour l'utilisateur.
+        raise RuntimeError(sanitize_log_message(str(exc), api_key)) from None
+    except Exception as exc:
+        exc_str = sanitize_log_message(str(exc), api_key)
+        if "AuthenticationError" in type(exc).__name__ or "401" in exc_str or "invalid_api_key" in exc_str:
+            raise RuntimeError("Clé API invalide ou expirée. Vérifiez les Réglages IA.") from None
+        if "Connection" in type(exc).__name__:
+            raise RuntimeError(
+                "Serveur d'IA injoignable : vérifiez que LM Studio / Ollama est démarré, "
+                "ou choisissez « Groq (Démo) » dans les Réglages IA."
+            ) from None
+        raise RuntimeError(f"IA indisponible ({type(exc).__name__}).") from None
+
+    if not resume:
+        raise RuntimeError("Réponse vide de l'IA.")
+    return resume[:MAX_RESUME_CHARS]
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # 7. AUTO-TEST HORS-LIGNE (aucun LLM requis)
 # ══════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":

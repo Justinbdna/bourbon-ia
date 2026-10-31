@@ -12,6 +12,19 @@ import { encrypt, decrypt } from './utils/crypto'
 
 const STORAGE_KEY = 'bourbon_session_amendments'
 
+// Fournisseur d'IA au premier lancement (avant tout choix dans ⚙️ Réglages IA) :
+//  • poste local (localhost) → IA locale, mode souverain ;
+//  • démo publique en ligne → « Groq (Démo) » : le serveur Vercel n'a pas de LLM
+//    local et l'anti-SSRF y bloque localhost, l'IA locale y échouerait toujours.
+// VITE_AI_PROVIDER_DEFAUT force le choix (ex. « local » sur un intranet de l'AN).
+const HOTES_LOCAUX = ['localhost', '127.0.0.1', '[::1]', '::1']
+
+function fournisseurIAParDefaut() {
+  const force = import.meta.env.VITE_AI_PROVIDER_DEFAUT
+  if (['local', 'groq', 'groq_auto'].includes(force)) return force
+  return HOTES_LOCAUX.includes(window.location.hostname) ? 'local' : 'groq_auto'
+}
+
 export default function App() {
   const [hasEntered, setHasEntered] = useState(false)
   const [amendments, setAmendments] = useState([])
@@ -33,8 +46,7 @@ export default function App() {
   const abortControllerRef = useRef(null)
   const timerRef = useRef(null)
 
-  // Provider LOCAL par défaut (souveraineté)
-  const [aiSettings, setAiSettings] = useState({ provider: 'local', apiKey: '', localUrl: 'http://localhost:1234/v1' })
+  const [aiSettings, setAiSettings] = useState({ provider: fournisseurIAParDefaut(), apiKey: '', localUrl: 'http://localhost:1234/v1' })
 
   // ─── Restauration des paramètres IA chiffrés ───
   useEffect(() => {
@@ -458,6 +470,7 @@ export default function App() {
               amendment={selected}
               onClose={() => setSelectedId(null)}
               isLoading={isClassifying && selected && !selected.resultat_ia}
+              aiSettings={aiSettings}
             />
           </div>
 

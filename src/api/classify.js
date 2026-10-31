@@ -49,6 +49,48 @@ export async function analyzeSurtransposition(amendement, options = {}) {
   }
 }
 
+// Réglages IA communs au classement et au résumé (cf. ⚙️ Réglages IA).
+function reglagesLLM(aiSettings = {}) {
+  const provider = aiSettings.provider || 'local'
+  const localUrl = (aiSettings.localUrl || 'http://localhost:1234/v1').trim().replace(/\/+$/, '')
+  return {
+    model: provider === 'local' ? (aiSettings.localModel || 'local-model') : (aiSettings.groqModel || 'llama-3.3-70b-versatile'),
+    provider,
+    llm_endpoint: provider === 'local' ? localUrl : 'https://api.groq.com/openai/v1',
+    api_key: aiSettings.apiKey || 'local-key',
+  }
+}
+
+/**
+ * Résumé neutre (1 à 2 phrases) d'un amendement, généré par l'IA à la demande.
+ * Lève ClassifyError avec un message lisible en cas d'échec.
+ */
+export async function resumerAmendement(amendement, aiSettings = {}, options = {}) {
+  const response = await fetch(`${API_BASE_URL}/api/v2/resumer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+    signal: options.signal,
+    body: JSON.stringify({
+      amendement_uid: amendement.id || amendement.uid || null,
+      article: amendement.article || null,
+      dispositif: amendement.dispositif || '',
+      expose_sommaire: amendement.expose_sommaire || '',
+      texte_loi_reference: amendement.texte_loi_reference || null,
+      ...reglagesLLM(aiSettings),
+    }),
+  })
+  if (!response.ok) {
+    let detail = `Erreur ${response.status}`
+    try {
+      detail = (await response.json()).detail || detail
+    } catch {
+      // réponse non JSON : on garde le code HTTP
+    }
+    throw new ClassifyError(detail, response.status)
+  }
+  return (await response.json()).resume
+}
+
 /**
  * Pipeline V2 — Orchestrateur frontend pour le backend FastAPI V2
  * (Tri déterministe → Cache SQLite → LLM Sémantique → Data Mapper)
@@ -63,15 +105,9 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
     onMechanical = () => {},
   } = options
 
-  const provider = aiSettings.provider || 'local'
-  const localUrl = (aiSettings.localUrl || 'http://localhost:1234/v1').trim().replace(/\/+$/, '')
-
   const payload = {
     amendements,
-    model: provider === 'local' ? (aiSettings.localModel || 'local-model') : (aiSettings.groqModel || 'llama-3.3-70b-versatile'),
-    provider,
-    llm_endpoint: provider === 'local' ? localUrl : 'https://api.groq.com/openai/v1',
-    api_key: aiSettings.apiKey || 'local-key',
+    ...reglagesLLM(aiSettings),
     temperature: 0.1,
     max_tokens: 1024,
   }
