@@ -25,7 +25,12 @@ except ModuleNotFoundError:
 
 # ── Imports V2 (Pipeline enrichi) ──
 try:
-    from api.deterministic_engine import process_deterministic_sorting, normalize_text
+    from api.deterministic_engine import (
+        process_deterministic_sorting,
+        normalize_text,
+        strip_html_for_display,
+        detect_gage_financier,
+    )
     from api.schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
     from api.llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message
     from api.cache_manager import get_cached_classification, save_classification
@@ -34,7 +39,12 @@ try:
     from api.commissions_resolver import resoudre_commission_et_mots_cles
     from api.participants_resolver import fetch_participants, resumer_par_groupe, resolve_dossier_ref
 except ModuleNotFoundError:
-    from deterministic_engine import process_deterministic_sorting, normalize_text
+    from deterministic_engine import (
+        process_deterministic_sorting,
+        normalize_text,
+        strip_html_for_display,
+        detect_gage_financier,
+    )
     from schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
     from llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message
     from cache_manager import get_cached_classification, save_classification
@@ -198,40 +208,26 @@ class AnalyzeResult(BaseModel):
 def _nettoyer_html(texte: Any) -> str:
     """
     Retire le balisage HTML du texte destiné à l'AFFICHAGE.
-
-    Les amendements de l'Assemblée arrivent avec du HTML de mise en forme
-    (<p style="text-align: justify;">, <br/>, <i>…). Sans ce nettoyage, le
-    tableau affiche littéralement les balises dans la colonne « Extrait du
-    dispositif », ce qui le rend illisible sur données réelles.
-
-    Le dispositif brut reste disponible ailleurs (dispositif_raw) pour qui
-    aurait besoin du balisage d'origine.
+    Utilise strip_html_for_display pour supprimer les balises et décoder les entités HTML/XML.
     """
-    if not texte:
-        return ""
-    propre = re.sub(r"<[^>]+>", " ", str(texte))
-    propre = html.unescape(propre)
-    return re.sub(r"\s+", " ", propre).strip()
+    return strip_html_for_display(texte)
 
 
 def _enrichir_a_import(resultat: dict, source: dict, signataires=None) -> dict:
     """
-    Ajoute groupe politique et commission DÈS L'IMPORT.
-
-    Pourquoi ici : l'import passe par `normaliser_amendement()`, et non par
-    `_build_enriched()` qui n'est appelé qu'au moment du classement IA. Sans
-    cet enrichissement, le tableau affiche des auteurs sans groupe et une
-    colonne Commission vide tant que l'utilisateur n'a pas lancé l'IA — alors
-    que ces deux informations sont purement déterministes et disponibles
-    immédiatement, hors-ligne.
-
-    Ne lève jamais : en cas d'échec, l'amendement est renvoyé inchangé.
+    Ajoute groupe politique, commission, détection gage et assainissement DÈS L'IMPORT.
     """
     try:
         # ── Nettoyage HTML pour l'affichage (données AN réelles) ──
         for champ in ("dispositif", "texte", "expose_sommaire", "exposeSommaire"):
             if resultat.get(champ):
-                resultat[champ] = _nettoyer_html(resultat[champ])
+                resultat[champ] = strip_html_for_display(resultat[champ])
+
+        # ── Détection de gage financier au titre de l'Art. 40 ──
+        resultat["est_gage"] = detect_gage_financier(
+            resultat.get("dispositif", "") or source.get("dispositif", ""),
+            source,
+        )
 
         # ── Groupe politique (référentiel local des députés) ──
         if not resultat.get("groupe_politique"):
@@ -549,6 +545,22 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
     est_identique = bool(am.get("discussionIdentique") or am.get("estIdentique") or am.get("est_identique_officiel"))
     id_discussion = am.get("idDiscussionIdentique") or am.get("id_discussion_identique")
 
+    # ── Rattachement de sous-amendement et détection gage ──
+    p_ref = (
+        am.get("amendementParentRef")
+        or raw.get("amendementParentRef")
+        or am.get("amendement_parent_ref")
+        or raw.get("amendement_parent_ref")
+    )
+    amendement_parent_ref = None
+    if isinstance(p_ref, dict):
+        if p_ref.get("@xsi:nil") != "true" and p_ref.get("@nil") != "true":
+            amendement_parent_ref = p_ref.get("#text") or p_ref.get("uid") or None
+    elif isinstance(p_ref, str) and p_ref.strip() and p_ref.lower() not in ("none", "null", "false"):
+        amendement_parent_ref = p_ref.strip()
+
+    est_gage = detect_gage_financier(dispositif_raw, raw)
+
     return EnrichedAmendment(
         amendement_uid=str(uid),
         numero_long=numero,
@@ -567,6 +579,8 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
         est_identique_officiel=est_identique,
         id_discussion_identique=str(id_discussion) if id_discussion else None,
         est_rapporteur=is_rapporteur,
+        amendement_parent_ref=amendement_parent_ref,
+        est_gage=est_gage,
         # ── Commission + corrélation thématique (résolu hors-ligne) ──
         **_resoudre_commission(am, dispositif_raw, expose),
         raw_dict=raw,
@@ -620,11 +634,16 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         "isIdentical": amend.est_identique_officiel,
         "discussionId": amend.id_discussion_identique,
 
+        # ── Gage financier (Art. 40) et sous-amendements ──
+        "est_gage": amend.est_gage,
+        "amendement_parent_ref": amend.amendement_parent_ref,
+        "amendementParentRef": amend.amendement_parent_ref,
+
         # ── Texte juridique assaini ──
-        "dispositif": clean_html_text(amend.dispositif_raw),
+        "dispositif": strip_html_for_display(amend.dispositif_raw or amend.dispositif_clean),
         "dispositif_clean": amend.dispositif_clean,
-        "texte": clean_html_text(amend.dispositif_raw),
-        "expose_sommaire": clean_html_text(amend.expose_sommaire),
+        "texte": strip_html_for_display(amend.dispositif_raw or amend.dispositif_clean),
+        "expose_sommaire": strip_html_for_display(amend.expose_sommaire),
 
         # ── Classification mécanique ──
         "point_impact": {"type": amend.point_impact or ""},

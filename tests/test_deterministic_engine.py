@@ -682,14 +682,14 @@ def test_article_natural_parliamentary_sorting():
     from api.schemas import EnrichedAmendment
 
     # 1. Validation directe de la clé de tri
-    assert get_article_sort_key("AVANT ART. 1ER") == (0, 0)
-    assert get_article_sort_key("ART. PREMIER") == (1, 0)
-    assert get_article_sort_key("Article 1er") == (1, 0)
-    assert get_article_sort_key("APRÈS ART. PREMIER") == (1, 1)
-    assert get_article_sort_key("ART. 1ER BIS") == (1, 1)
-    assert get_article_sort_key("ART. 2") == (2, 0)
-    assert get_article_sort_key("Article 2") == (2, 0)
-    assert get_article_sort_key("Article 10") == (10, 0)
+    assert get_article_sort_key("AVANT ART. 1ER") == (1, -1, 0)
+    assert get_article_sort_key("ART. PREMIER") == (1, 0, 0)
+    assert get_article_sort_key("Article 1er") == (1, 0, 0)
+    assert get_article_sort_key("APRÈS ART. PREMIER") == (1, 1, 0)
+    assert get_article_sort_key("ART. 1ER BIS") == (1, 1, 1)
+    assert get_article_sort_key("ART. 2") == (2, 0, 0)
+    assert get_article_sort_key("Article 2") == (2, 0, 0)
+    assert get_article_sort_key("Article 10") == (10, 0, 0)
 
     # 2. Tri séquentiel : amendements insérés en ordre inverse
     a_art2 = EnrichedAmendment(
@@ -739,6 +739,111 @@ def test_article_title_no_duplicate():
 # ──────────────────────────────────────────────────────────────────────────
 # Exécution directe
 # ──────────────────────────────────────────────────────────────────────────
+
+def test_article_premier_sorted_before_article_2():
+    """
+    Vérifie qu'un lot contenant CL4 (Article 2), CL9 (Après l'Article 2) et CL3 (Article PREMIER)
+    place strictement Article PREMIER en rang 1, Article 2 ensuite, et Après l'Article 2 en dernier.
+    """
+    from api.deterministic_engine import process_deterministic_sorting
+    from api.schemas import EnrichedAmendment
+
+    cl4 = EnrichedAmendment(
+        amendement_uid="AMANR5L17PO59051B0149P0D1N000004",
+        numero_long="CL4",
+        article_vise="Article 2",
+        dispositif_raw="<p style=\"text-align: justify;\">Supprimer cet article.</p>",
+    )
+    cl9 = EnrichedAmendment(
+        amendement_uid="AMANR5L17PO59051B0149P0D1N000009",
+        numero_long="CL9",
+        article_vise="Après l'Article 2",
+        dispositif_raw="<p>Après l'article 2, insérer un article additionnel.</p>",
+    )
+    cl3 = EnrichedAmendment(
+        amendement_uid="AMANR5L17PO59051B0149P0D1N000003",
+        numero_long="CL3",
+        article_vise="Article PREMIER",
+        dispositif_raw="<p>À l'alinéa 1, substituer au mot...</p>",
+    )
+
+    # Passage du lot dans le désordre
+    sorted_amends = process_deterministic_sorting([cl4, cl9, cl3])
+    uids = [a.numero_long for a in sorted_amends]
+
+    assert uids == ["CL3", "CL4", "CL9"]
+    assert sorted_amends[0].numero_long == "CL3"
+    assert sorted_amends[1].numero_long == "CL4"
+    assert sorted_amends[2].numero_long == "CL9"
+
+
+def test_gage_financier_detection():
+    """Vérifie la détection d'un amendement gagé au titre de l'article 40."""
+    from api.deterministic_engine import detect_gage_financier, process_deterministic_sorting
+    from api.schemas import EnrichedAmendment
+
+    dispositif_gage = (
+        "<p>I. – Le taux de la taxe est fixé à 10 %.</p>"
+        "<p>II. – La perte de recettes pour l'État est compensée à due concurrence "
+        "par la création d'une taxe additionnelle aux articles 575 et 575 A du code général des impôts.</p>"
+    )
+    assert detect_gage_financier(dispositif_gage) is True
+
+    am = EnrichedAmendment(
+        amendement_uid="AMDT-GAGE-40",
+        numero_long="GAGE1",
+        article_vise="Article 1er",
+        dispositif_raw=dispositif_gage,
+    )
+    sorted_am = process_deterministic_sorting([am])
+    assert sorted_am[0].est_gage is True
+
+    # Amendement sans gage
+    am_sans_gage = EnrichedAmendment(
+        amendement_uid="AMDT-SANS-GAGE",
+        numero_long="NOGAGE1",
+        article_vise="Article 1er",
+        dispositif_raw="<p>Supprimer les mots : et territoires.</p>",
+    )
+    assert detect_gage_financier(am_sans_gage.dispositif_raw) is False
+    sorted_am2 = process_deterministic_sorting([am_sans_gage])
+    assert sorted_am2[0].est_gage is False
+
+
+def test_sous_amendement_rattachement():
+    """Vérifie qu'un sous-amendement est trié immédiatement après son amendement parent."""
+    from api.deterministic_engine import process_deterministic_sorting
+    from api.schemas import EnrichedAmendment
+
+    parent = EnrichedAmendment(
+        amendement_uid="AMDT-PARENT-1",
+        numero_long="100",
+        article_vise="Article 1er",
+        dispositif_raw="<p>Rédiger ainsi l'alinéa 2...</p>",
+    )
+    autre = EnrichedAmendment(
+        amendement_uid="AMDT-AUTRE-2",
+        numero_long="101",
+        article_vise="Article 1er",
+        dispositif_raw="<p>Compléter l'alinéa 3...</p>",
+    )
+    sous_amdt = EnrichedAmendment(
+        amendement_uid="AMDT-SOUS-1",
+        numero_long="100-SOUS",
+        article_vise="Article 1er",
+        dispositif_raw="<p>Au sous-alinéa...</p>",
+        amendement_parent_ref="AMDT-PARENT-1",
+    )
+
+    # Ordre initial : parent, autre, sous-amdt
+    result = process_deterministic_sorting([autre, parent, sous_amdt])
+    uids = [a.amendement_uid for a in result]
+
+    # Le sous-amendement doit immédiatement suivre son parent
+    idx_parent = uids.index("AMDT-PARENT-1")
+    idx_sous = uids.index("AMDT-SOUS-1")
+    assert idx_sous == idx_parent + 1
+
 
 if __name__ == "__main__":
     tests = [

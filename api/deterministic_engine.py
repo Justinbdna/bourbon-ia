@@ -20,11 +20,13 @@ Pipeline :
 
 from __future__ import annotations
 
+import collections
 import hashlib
+import html
 import re
 import unicodedata
 from collections import defaultdict
-from typing import Optional
+from typing import Any, Optional, Union
 
 from api.schemas import EnrichedAmendment, PointImpact, StatutMecanique
 
@@ -243,46 +245,220 @@ def qualify_irrecevabilite(amend: EnrichedAmendment) -> str:
     return "Amendement non renseigné, retiré ou irrecevable."
 
 
-def get_article_sort_key(article_str: str) -> tuple[int, int]:
-    """
-    Retourne un tuple de tri numérique et parlementaire pour un article.
-    Exemples :
-      - 'AVANT ART. 1ER' -> (0, 0)
-      - 'ART. PREMIER' -> (1, 0)
-      - 'APRÈS ART. PREMIER' ou 'ART. 1ER BIS' -> (1, 1)
-      - 'ART. 2' -> (2, 0)
-      - 'APRÈS ART. 2' ou 'ART. 2 BIS' -> (2, 1)
-    """
-    if not article_str:
-        return (9999, 99)
+# ──────────────────────────────────────────────────────────────────────────
+# Utilitaires de nettoyage HTML et de détection légistique
+# ──────────────────────────────────────────────────────────────────────────
 
-    s = str(article_str).strip()
+def strip_html_for_display(text: Any) -> str:
+    """
+    Nettoie rigoureusement le HTML et décode toutes les entités pour l'affichage parlementaire.
+    Supprime les balises <p>, <br>, etc., et décode &nbsp;, &#160;, &#x2011;, &laquo;, &raquo;, etc.
+    """
+    if not text:
+        return ""
+    s = str(text)
+    # Remplacer les balises de saut de ligne et fermetures de paragraphe par un espace propre
+    s = re.sub(r"<br\s*/?>", " ", s, flags=re.IGNORECASE)
+    s = re.sub(r"</(?:p|div)>", " ", s, flags=re.IGNORECASE)
+    # Supprimer toutes les balises HTML restantes
+    s = re.sub(r"<[^>]+>", " ", s)
+    # Décoder les entités HTML standard
+    s = html.unescape(s)
+    # Remplacements ciblés des entités résiduelles
+    s = s.replace("\xa0", " ").replace("&#160;", " ").replace("&nbsp;", " ")
+    s = s.replace("&#x2011;", "‑")
+    s = s.replace("&laquo;", "«").replace("&raquo;", "»")
+    s = s.replace("&quot;", '"').replace("&apos;", "'")
+    s = re.sub(r"[ \t]+", " ", s)
+    s = re.sub(r"\n\s*\n+", "\n\n", s)
+    return s.strip()
+
+
+def detect_gage_financier(dispositif: Any, raw_dict: Optional[dict] = None) -> bool:
+    """
+    Détecte la présence d'une formule de gage financier au titre de l'Article 40
+    de la Constitution ("perte de recettes", "compensée à due concurrence",
+    "création d'une taxe additionnelle", "articles 575 et 575 A").
+    """
+    if raw_dict:
+        am = raw_dict.get("amendement", raw_dict)
+        if str(am.get("cycleDeVie", {}).get("soumisArticle40", "")).lower() == "true":
+            return True
+
+    if not dispositif:
+        return False
+
+    s_norm = unicodedata.normalize("NFKD", str(dispositif)).encode("ASCII", "ignore").decode("utf-8").lower()
+    gage_patterns = [
+        "perte de recettes",
+        "compensee a due concurrence",
+        "creation d'une taxe additionnelle",
+        "creation d une taxe additionnelle",
+        "articles 575 et 575 a",
+        "article 575",
+        "taxe additionnelle",
+        "gage financier",
+    ]
+    return any(p in s_norm for p in gage_patterns)
+
+
+def get_article_sort_key(target: Union[EnrichedAmendment, str, dict]) -> tuple[int, int, int]:
+    """
+    Retourne un tuple de tri numérique et parlementaire pour un article :
+      (num_article, pos_article, sous_rang)
+
+    Règles :
+      - Préambule / Titre : num_article = 0
+      - 'PREMIER', '1ER', 'unique', 'UNIQUE' -> num_article = 1
+      - Extrait le numéro entier principal (2, 3, 4...)
+      - Position relative :
+          'AVANT' l'article X -> pos_article = -1, sous_rang = 0
+          'A' (sur l'article X lui-même) -> pos_article = 0, sous_rang = 0
+          'APRES' l'article X ou article additionnel -> pos_article = 1
+            avec sous-rang : bis=1, ter=2, quater=3, quinquies=4, sexies=5...
+    """
+    if target is None:
+        return (9999, 0, 0)
+
+    raw_dict = {}
+    if isinstance(target, EnrichedAmendment):
+        article_str = target.article_vise or ""
+        raw_dict = target.raw_dict or {}
+    elif isinstance(target, dict):
+        article_str = target.get("article_vise") or target.get("article") or ""
+        raw_dict = target
+    else:
+        article_str = str(target)
+
+    s = article_str.strip()
+    if not s:
+        return (9999, 0, 0)
+
     s_norm = unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("utf-8").upper()
 
-    # Détection de numéro d'article
-    num = None
-    if "PREMIER" in s_norm or "1ER" in s_norm:
-        num = 1
+    # 1. Préambule / Titre
+    if any(k in s_norm for k in ("PREAMBULE", "TITRE", "LIMINAIRE")):
+        return (0, 0, 0)
+
+    # 2. Détection du numéro principal de l'article
+    num_article = None
+    if any(k in s_norm for k in ("PREMIER", "1ER", "UNIQUE")):
+        num_article = 1
     else:
         m = re.search(r"\b(\d+)\b", s_norm)
         if m:
-            num = int(m.group(1))
+            num_article = int(m.group(1))
 
-    # Détection de positionnement relatif (AVANT / APRÈS / BIS / etc.)
-    is_avant = "AVANT" in s_norm
-    is_apres = "APRES" in s_norm or "BIS" in s_norm or "TER" in s_norm or "QUATER" in s_norm
+    # 3. Positionnement relatif (AVANT / A / APRÈS / BIS / etc.)
+    division = raw_dict.get("amendement", raw_dict).get("pointeurFragmentTexte", {}).get("division", {}) if isinstance(raw_dict, dict) else {}
+    pos_raw = str(division.get("avant_A_Apres") or "").strip().upper() if isinstance(division, dict) else ""
+    art_add = str(division.get("articleAdditionnel") or "").strip().lower() if isinstance(division, dict) else ""
 
-    if num is None:
+    is_avant = "AVANT" in s_norm or pos_raw == "AVANT"
+    is_apres = "APRES" in s_norm or pos_raw in ("APRES", "APRÈS") or art_add == "true"
+
+    suffix_ranks = {
+        "BIS": 1,
+        "TER": 2,
+        "QUATER": 3,
+        "QUINQUIES": 4,
+        "SEXIES": 5,
+        "SEPTIES": 6,
+        "OCTIES": 7,
+        "NONIES": 8,
+        "DECIES": 9,
+    }
+
+    sous_rang = 0
+    for suffix, rank in suffix_ranks.items():
+        if re.search(rf"\b{suffix}\b", s_norm):
+            sous_rang = rank
+            is_apres = True
+            break
+
+    if num_article is None:
         if is_avant:
-            return (0, 0)
-        return (9999, 99)
+            return (0, 0, 0)
+        return (9999, 0, 0)
 
     if is_avant:
-        return (max(0, num - 1), 0)
+        pos_article = -1
+        sous_rang = 0
     elif is_apres:
-        return (num, 1)
+        pos_article = 1
     else:
-        return (num, 0)
+        pos_article = 0
+
+    return (num_article, pos_article, sous_rang)
+
+
+def _get_alinea_int_for_sort(amend: EnrichedAmendment) -> int:
+    """Extrait le numéro d'alinéa entier d'un amendement pour l'ordonnancement séquentiel."""
+    al_str = extract_alinea_number(amend.dispositif_clean or amend.dispositif_raw, amend.alinea_vise)
+    if al_str:
+        m = re.search(r"\d+", al_str)
+        if m:
+            return int(m.group())
+
+    if amend.raw_dict:
+        raw = amend.raw_dict
+        am = raw.get("amendement", raw)
+        al = am.get("pointeurFragmentTexte", {}).get("amendementStandard", {}).get("alinea", {})
+        if isinstance(al, dict):
+            num = al.get("numero")
+            if num is not None:
+                m = re.search(r"\d+", str(num))
+                if m:
+                    return int(m.group())
+
+    return 9999
+
+
+def get_article_internal_sort_key(amend: EnrichedAmendment) -> tuple:
+    """
+    Ordre de priorité réglementaire strict de l'Assemblée nationale au sein d'un article :
+      1. SUPPRESSION_ARTICLE
+      2. REDACTION_GLOBALE_ARTICLE
+      3. Numéro d'alinéa croissant (avec suppression alinéa < rédaction alinéa < point restreint)
+      4. Amendements de commission / rapporteur prioritaires
+      5. Ordre de dépôt
+    """
+    if amend.point_impact == PointImpact.SUPPRESSION_ARTICLE:
+        prio_type = 1
+        alinea_num = 0
+        sub_type = 0
+    elif amend.point_impact == PointImpact.REDACTION_GLOBALE_ARTICLE:
+        prio_type = 2
+        alinea_num = 0
+        sub_type = 0
+    else:
+        prio_type = 3
+        alinea_num = _get_alinea_int_for_sort(amend)
+        if amend.point_impact == PointImpact.SUPPRESSION_ALINEA:
+            sub_type = 1
+        elif amend.point_impact == PointImpact.REDACTION_ALINEA:
+            sub_type = 2
+        elif amend.point_impact == PointImpact.POINT_RESTREINT:
+            sub_type = 3
+        else:
+            sub_type = 4
+
+    prio_rapporteur = 0 if amend.est_rapporteur else 1
+
+    depot_num = 999999
+    if amend.raw_dict:
+        am = amend.raw_dict.get("amendement", amend.raw_dict)
+        raw_depot = am.get("identification", {}).get("numeroOrdreDepot")
+        if raw_depot is not None:
+            m = re.search(r"\d+", str(raw_depot))
+            if m:
+                depot_num = int(m.group())
+    if depot_num == 999999 and amend.numero_long:
+        m = re.search(r"\d+", str(amend.numero_long))
+        if m:
+            depot_num = int(m.group())
+
+    return (prio_type, alinea_num, sub_type, prio_rapporteur, depot_num, str(amend.numero_long or amend.amendement_uid))
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -309,11 +485,30 @@ def process_deterministic_sorting(
     Complexité : O(n) — partitionnements par dicts.
     """
 
-    # ── Phase 1 : Normalisation + classification hiérarchique + résolution députés ──
+    # ── Phase 1 : Normalisation + classification hiérarchique + résolution députés + gage ──
     for amend in amendments:
         amend.dispositif_clean = normalize_text(amend.dispositif_raw)
         priority, impact = classify_point_impact(amend.dispositif_clean)
         amend.point_impact = impact
+
+        # Détection du gage financier Art. 40
+        amend.est_gage = detect_gage_financier(amend.dispositif_raw or amend.dispositif_clean, amend.raw_dict)
+
+        # Extraction du rattachement de sous-amendement si présent dans raw_dict
+        if not amend.amendement_parent_ref and amend.raw_dict:
+            raw = amend.raw_dict
+            am_data = raw.get("amendement", raw)
+            p_ref = (
+                am_data.get("amendementParentRef")
+                or raw.get("amendementParentRef")
+                or am_data.get("amendement_parent_ref")
+                or raw.get("amendement_parent_ref")
+            )
+            if isinstance(p_ref, dict):
+                if p_ref.get("@xsi:nil") != "true" and p_ref.get("@nil") != "true":
+                    amend.amendement_parent_ref = p_ref.get("#text") or p_ref.get("uid") or None
+            elif isinstance(p_ref, str) and p_ref.strip() and p_ref.lower() not in ("none", "null", "false"):
+                amend.amendement_parent_ref = p_ref.strip()
 
         # Résolution locale des signataires, groupes et qualité de rapporteur
         raw_sig = None
@@ -450,26 +645,49 @@ def process_deterministic_sorting(
                         # Tous identiques dans ce cluster : le référent reste NOUVEAU
                         amend.skip_llm = False
 
-    # ── Phase 5 : Tri stable officiel (article, priorité d'impact, priorité rapporteur, numéro) ──
-    impact_order = {
-        PointImpact.SUPPRESSION_ARTICLE: 1,
-        PointImpact.REDACTION_GLOBALE_ARTICLE: 2,
-        PointImpact.SUPPRESSION_ALINEA: 3,
-        PointImpact.REDACTION_ALINEA: 4,
-        PointImpact.POINT_RESTREINT: 5,
-    }
-
-    def _amendment_num_key(num_val: Any) -> int:
-        s = str(num_val or "")
-        m = re.search(r"\d+", s)
-        return int(m.group()) if m else 999999
-
+    # ── Phase 5 : Tri stable officiel (article parlementaire, priorité interne AN, sous-amendements) ──
     amendments.sort(key=lambda a: (
-        get_article_sort_key(a.article_vise),
-        impact_order.get(a.point_impact, 99),
-        0 if a.est_rapporteur else 1,
-        _amendment_num_key(a.numero_long),
-        str(a.numero_long),
+        get_article_sort_key(a),
+        get_article_internal_sort_key(a),
     ))
+
+    # Rattachement des sous-amendements : triés immédiatement après leur amendement parent
+    parent_map = {}
+    for a in amendments:
+        parent_map[a.amendement_uid] = a
+        if a.numero_long:
+            parent_map[a.numero_long] = a
+
+    children_by_parent = defaultdict(list)
+    has_parent_in_list = set()
+    for a in amendments:
+        p_ref = a.amendement_parent_ref
+        if p_ref and p_ref in parent_map and parent_map[p_ref].amendement_uid != a.amendement_uid:
+            parent_uid = parent_map[p_ref].amendement_uid
+            children_by_parent[parent_uid].append(a)
+            has_parent_in_list.add(a.amendement_uid)
+
+    if has_parent_in_list:
+        ordered_list = []
+        visited = set()
+
+        def _add_with_subamendments(item: EnrichedAmendment):
+            if item.amendement_uid in visited:
+                return
+            visited.add(item.amendement_uid)
+            ordered_list.append(item)
+            for child in children_by_parent.get(item.amendement_uid, []):
+                _add_with_subamendments(child)
+
+        for a in amendments:
+            if a.amendement_uid not in has_parent_in_list:
+                _add_with_subamendments(a)
+
+        # Filet de sécurité pour ne perdre aucun sous-amendement en cas de cycle
+        for a in amendments:
+            if a.amendement_uid not in visited:
+                ordered_list.append(a)
+
+        amendments = ordered_list
 
     return amendments

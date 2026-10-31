@@ -109,6 +109,8 @@ class EnrichedAmendment(BaseModel):
     alerte_couleur: Optional[str] = Field(None, description="Couleur de l'alerte UI (gris, vert, orange, rouge)")
     est_rapporteur: bool = Field(False, description="True si déposé par le rapporteur ou la commission")
     texte_loi_reference: Optional[str] = Field(None, description="Texte initial de l'article de loi de référence")
+    amendement_parent_ref: Optional[str] = Field(None, description="Référence de l'amendement parent s'il s'agit d'un sous-amendement")
+    est_gage: bool = Field(False, description="True si l'amendement comporte une formule de gage financier au titre de l'Art. 40")
     
     raw_dict: dict = Field(default_factory=dict, description="Données d'origine pour préserver les métadonnées")
 
