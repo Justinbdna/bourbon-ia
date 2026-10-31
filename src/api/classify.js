@@ -21,6 +21,35 @@ export async function normalizeAmendments(amendements) {
 }
 
 /**
+ * Analyse de surtransposition et de conformité européenne (Chantier 1).
+ * Interroge l'endpoint FastAPI /api/v2/surtransposition avec fallback gracieux.
+ */
+export async function analyzeSurtransposition(amendement, options = {}) {
+  const { signal } = options
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v2/surtransposition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+      signal,
+      body: JSON.stringify({
+        amendement_uid: amendement.id || amendement.uid,
+        dispositif: amendement.dispositif_raw || amendement.dispositif || '',
+        expose_sommaire: amendement.expose_sommaire || amendement.exposeSommaire || '',
+        article_vise: amendement.article_vise || amendement.article || '',
+        celex_id: amendement.celex_id || null,
+      }),
+    })
+    if (!response.ok) {
+      return null
+    }
+    return await response.json()
+  } catch {
+    // Mode hors-ligne ou indisponible : repli gracieux
+    return null
+  }
+}
+
+/**
  * Pipeline V2 — Orchestrateur frontend pour le backend FastAPI V2
  * (Tri déterministe → Cache SQLite → LLM Sémantique → Data Mapper)
  *

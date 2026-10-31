@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import ScrollableText from './ScrollableText'
 import ImpactBadge from './ImpactBadge'
 import GroupeBadge from './GroupeBadge'
@@ -7,6 +8,7 @@ import LegislativeContext from './amendment/LegislativeContext'
 import IdentiqueAlert from './amendment/IdentiqueAlert'
 import SkeletonLoader from './amendment/SkeletonLoader'
 import EUCompliancePanel from './amendment/EUCompliancePanel'
+import { analyzeSurtransposition } from '../api/classify'
 
 export function formatArticleTitle(articleStr) {
   if (!articleStr) return 'Article —';
@@ -19,6 +21,30 @@ export function formatArticleTitle(articleStr) {
 }
 
 export default function AmendmentDetail({ amendment, onClose, isLoading }) {
+  const [euCompliance, setEuCompliance] = useState(amendment?.eu_compliance || null)
+
+  useEffect(() => {
+    let isCurrent = true
+    if (amendment?.eu_compliance) {
+      setEuCompliance(amendment.eu_compliance)
+      return
+    }
+    if (amendment) {
+      analyzeSurtransposition(amendment)
+        .then((result) => {
+          if (isCurrent && result) {
+            setEuCompliance(result)
+          }
+        })
+        .catch(() => {})
+    } else {
+      setEuCompliance(null)
+    }
+    return () => {
+      isCurrent = false
+    }
+  }, [amendment])
+
   // ── Safe Rendering : Skeleton si en cours de chargement ──
   if (isLoading) {
     return (
@@ -119,7 +145,7 @@ export default function AmendmentDetail({ amendment, onClose, isLoading }) {
         </div>
 
         {/* ── Conformité européenne (surtransposition) — panneau dépliable ── */}
-        <EUCompliancePanel result={a.eu_compliance} />
+        <EUCompliancePanel result={euCompliance || a.eu_compliance} />
 
         {/* ── Résultat IA (avec Chain of Thought) ── */}
         <section className="rounded-md bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-3.5">

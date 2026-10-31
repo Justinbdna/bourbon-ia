@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,8 +26,8 @@ except ModuleNotFoundError:
 # ── Imports V2 (Pipeline enrichi) ──
 try:
     from api.deterministic_engine import process_deterministic_sorting, normalize_text
-    from api.schemas import EnrichedAmendment, StatutMecanique
-    from api.llm_semantic_engine import evaluate_similitude
+    from api.schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
+    from api.llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message
     from api.cache_manager import get_cached_classification, save_classification
     from api.deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII, get_depute_info
     from api.textes_resolver import extract_texte_ref, get_textes_reference, match_article_reference
@@ -35,8 +35,8 @@ try:
     from api.participants_resolver import fetch_participants, resumer_par_groupe, resolve_dossier_ref
 except ModuleNotFoundError:
     from deterministic_engine import process_deterministic_sorting, normalize_text
-    from schemas import EnrichedAmendment, StatutMecanique
-    from llm_semantic_engine import evaluate_similitude
+    from schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
+    from llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message
     from cache_manager import get_cached_classification, save_classification
     try:
         from deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII, get_depute_info
@@ -178,7 +178,8 @@ app.add_middleware(
 )
 
 class AnalyzeRequest(BaseModel):
-    amendements: list
+    model_config = ConfigDict(use_enum_values=True)
+    amendements: list = Field(..., max_length=2000)
     model: str = "mac_mistral"
     provider: str = "groq"
     api_key: Optional[str] = None
@@ -427,7 +428,8 @@ def health():
 
 class V2AnalyzeRequest(BaseModel):
     """Payload d'entrée pour le pipeline V2."""
-    amendements: list
+    model_config = ConfigDict(use_enum_values=True)
+    amendements: list = Field(..., max_length=2000)
     model: str = "local-model"
     llm_endpoint: Optional[str] = None
     base_url: str = "http://localhost:1234/v1" # rétrocompatibilité V1
@@ -878,10 +880,11 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                     
                     async with semaphore:
                         try:
+                            valid_endpoint = validate_endpoint_url(payload.llm_endpoint or payload.base_url)
                             resultat = await asyncio.to_thread(
                                 evaluate_similitude,
                                 amend_dict, candidats,
-                                llm_endpoint=payload.llm_endpoint or payload.base_url,
+                                llm_endpoint=valid_endpoint,
                                 model=payload.model, api_key=payload.api_key,
                                 timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
                                 texte_loi_reference=amend.texte_loi_reference,
@@ -889,7 +892,8 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                             llm_data = resultat.model_dump()
                             save_classification(amend.amendement_uid, llm_data)
                         except Exception as exc:
-                            logging.error(f"❌ LLM FAIL {amend.amendement_uid} : {exc}")
+                            clean_exc = sanitize_log_message(str(exc), payload.api_key)
+                            logging.error(f"❌ LLM FAIL {amend.amendement_uid} : {clean_exc}")
                             llm_data = {
                                 "statut": "Erreur IA",
                                 "analyse_intention": "⚠️ Impossible de joindre l'IA (Serveur local ou tunnel Ngrok hors-ligne). Vérifiez vos réglages IA.",
@@ -1056,10 +1060,11 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                 ]
                 
                 try:
+                    valid_endpoint = validate_endpoint_url(payload.llm_endpoint or payload.base_url)
                     resultat = await asyncio.to_thread(
                         evaluate_similitude,
                         amend_dict, candidats,
-                        llm_endpoint=payload.llm_endpoint or payload.base_url,
+                        llm_endpoint=valid_endpoint,
                         model=payload.model, api_key=payload.api_key,
                         timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
                         texte_loi_reference=target.texte_loi_reference,
@@ -1067,8 +1072,9 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                     llm_data = resultat.model_dump()
                     save_classification(target.amendement_uid, llm_data)
                 except Exception as exc:
-                    logging.error(f"❌ LLM FAIL {target.amendement_uid} : {exc}")
-                    exc_str = str(exc)
+                    clean_exc = sanitize_log_message(str(exc), payload.api_key)
+                    logging.error(f"❌ LLM FAIL {target.amendement_uid} : {clean_exc}")
+                    exc_str = clean_exc
                     exc_name = type(exc).__name__
                     if "AuthenticationError" in exc_name or "401" in exc_str or "Invalid API Key" in exc_str or "invalid_api_key" in exc_str:
                         error_msg = "⚠️ Clé API invalide ou expirée. Veuillez vérifier et mettre à jour votre clé dans les Réglages IA."
@@ -1090,6 +1096,98 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
             mapped["resultat_ia"]["rang"] = target_rang
         return mapped
         
+    except HTTPException:
+        raise
     except Exception as exc:
-        logging.error(f"❌ V2 LLM CRASH : {exc}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Erreur d'analyse LLM : {str(exc)}")
+        clean_crash = sanitize_log_message(str(exc))
+        logging.error(f"❌ V2 LLM CRASH : {clean_crash}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erreur d'analyse LLM : {clean_crash}")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ROUTE V2 — Analyse de Surtransposition et Conformité UE (EUR-Lex / Légifrance)
+# ══════════════════════════════════════════════════════════════════════════
+
+_SURTRANSPOSITION_CHECKER: Optional[Any] = None
+
+
+def get_surtransposition_checker():
+    global _SURTRANSPOSITION_CHECKER
+    if _SURTRANSPOSITION_CHECKER is None:
+        try:
+            from api.services.analysis.surtransposition_checker import SurtranspositionChecker
+        except ModuleNotFoundError:
+            from services.analysis.surtransposition_checker import SurtranspositionChecker
+        _SURTRANSPOSITION_CHECKER = SurtranspositionChecker()
+    return _SURTRANSPOSITION_CHECKER
+
+
+@app.post("/api/v2/surtransposition")
+async def v2_surtransposition(payload: SurtranspositionRequest):
+    """
+    Analyse de conformité européenne et détection de surtransposition.
+    Effectue une comparaison RAG en local contre les directives européennes (indexées depuis EUR-Lex)
+    avec détection heuristique et évaluation LLM déterministe.
+    """
+    try:
+        checker = get_surtransposition_checker()
+
+        # Cas 1 : Batch de plusieurs amendements
+        if payload.amendements:
+            results = []
+            for am in payload.amendements:
+                disp = extract_dispositif_raw(am) or am.get("dispositif") or ""
+                expose = extract_expose_sommaire(am) or am.get("expose_sommaire") or am.get("exposeSommaire") or ""
+                full_text = f"{disp}\n{expose}".strip()
+                art = am.get("article_vise") or am.get("article") or ""
+                celex = am.get("celex_id")
+
+                res = await asyncio.to_thread(
+                    checker.analyze_amendment,
+                    amendment_text=full_text,
+                    target_article=art,
+                    celex_id=celex,
+                )
+                res_dict = res.model_dump()
+                res_dict["amendement_uid"] = am.get("uid") or am.get("id") or am.get("amendement_uid")
+                results.append(res_dict)
+            return results
+
+        # Cas 2 : Amendement unitaire dans `amendement`
+        if payload.amendement:
+            am = payload.amendement
+            disp = extract_dispositif_raw(am) or am.get("dispositif") or ""
+            expose = extract_expose_sommaire(am) or am.get("expose_sommaire") or am.get("exposeSommaire") or ""
+            full_text = f"{disp}\n{expose}".strip()
+            art = am.get("article_vise") or am.get("article") or ""
+            celex = am.get("celex_id")
+
+            res = await asyncio.to_thread(
+                checker.analyze_amendment,
+                amendment_text=full_text,
+                target_article=art,
+                celex_id=celex,
+            )
+            res_dict = res.model_dump()
+            res_dict["amendement_uid"] = am.get("uid") or am.get("id") or am.get("amendement_uid")
+            return res_dict
+
+        # Cas 3 : Paramètres à plat
+        full_text = f"{payload.dispositif or ''}\n{payload.expose_sommaire or ''}".strip()
+        res = await asyncio.to_thread(
+            checker.analyze_amendment,
+            amendment_text=full_text,
+            target_article=payload.article_vise,
+            celex_id=payload.celex_id,
+        )
+        res_dict = res.model_dump()
+        if payload.amendement_uid:
+            res_dict["amendement_uid"] = payload.amendement_uid
+        return res_dict
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        clean_msg = sanitize_log_message(str(exc))
+        logging.error(f"❌ Erreur surtransposition : {clean_msg}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erreur d'analyse de surtransposition : {clean_msg}")
