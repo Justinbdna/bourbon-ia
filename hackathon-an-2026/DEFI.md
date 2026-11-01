@@ -16,11 +16,13 @@ Grâce à un administrateur de l'Assemblée nationale présent dans notre équip
 
 **La Solution : Bourbon.IA**
 Bourbon.IA comble cette faille. C'est un copilote 100 % local (Air-Gapped) qui intervient *avant* la publication, transformant une tâche chronophage et rébarbative en un processus automatisé et souverain :
-- **Le Scanner & Le Comparateur :** L'outil classe, résume et identifie sémantiquement les relations complexes : discussions communes, amendements identiques, doublons et isolés.
-- **Action Directe (UI) :** L'interface permet de supprimer les doublons en un clic, nettoyant la base de données instantanément.
+- **Le Scanner (tri déterministe, sans IA) :** identiques, doublons (même texte, même auteur, même commission), irrecevabilités (Art. 40 financière, Art. 45/98 cavalier ou entonnoir), gage financier et amendements isolés sont détectés instantanément, puis ordonnés selon l'ordre parlementaire (avant/sur l'article, articles bis/ter, sous-amendements rattachés à leur amendement).
+- **Le Comparateur (IA) :** sur les seuls cas ambigus, l'IA identifie les discussions communes et les amendements similaires, avec un garde-fou qui rejette tout rapprochement inventé. Elle résume aussi chaque amendement en une ou deux phrases neutres, à la demande.
+- **Le contexte législatif en direct :** texte de l'article visé récupéré automatiquement, commission saisie et thèmes du périmètre, groupe politique des auteurs, députés participants au texte, analyse de conformité européenne (surtransposition).
+- **Action Directe (UI) :** suppression des doublons en un clic, masquage des amendements écartés, recherche par thème et par auteur, export au format préjaune (RTF) pour alimenter Éloi.
 
 **Roadmap Technique**
-Pour les besoins du Hackathon, le front-end est déployé, mais le backend nécessite de faire tourner un LLM en local sur la machine de l'utilisateur (le prototype actuel est un monolithe). Si la solution est adoptée par l'Assemblée, notre équipe s'engage à faire évoluer ce prototype vers une architecture de production professionnelle (Micro-services, conteneurisation Docker).
+Pour le Hackathon, l'application complète (interface et serveur) est déployée sur Vercel. Afin que le jury puisse la tester sans installation, la démo publique utilise Groq (Llama 3.3) sur des amendements **déjà publics** : ce mode n'est pas souverain, et l'application l'annonce avant chaque envoi. En usage réel à l'Assemblée, Bourbon.IA tourne **intégralement en local** (LLM via LM Studio ou Ollama, textes de référence en fichiers locaux) : aucune donnée ne quitte le poste. Si la solution est adoptée, notre équipe s'engage à faire évoluer ce prototype monolithique vers une architecture de production professionnelle (micro-services, conteneurisation Docker).
 
 ### Image principale
 ![Image principale](images/cover.png)
@@ -33,11 +35,11 @@ Pour les besoins du Hackathon, le front-end est déployé, mais le backend néce
 ### Ressources utilisées
 
 - [ ] `openfisca-france-parameters` — Base de données de paramètres ✺ OpenFisca
-- [ ] `an-dossiers-legislatifs` — Dossiers législatifs de l'Assemblée nationale (législature courante) ✺ Assemblée nationale
+- [x] `an-dossiers-legislatifs` — Dossiers législatifs de l'Assemblée nationale (législature courante) ✺ Assemblée nationale
 - [x] `an-amendements-xvii` — Amendements déposés à l'Assemblée nationale (législature actuelle) ✺ Assemblée nationale
 - [ ] `an-comptes-rendus` — Comptes rendus de la séance publique à l'Assemblée nationale (législature actuelle) ✺ Assemblée nationale
 - [ ] `an-votes-xvii` — Votes des députés (législature actuelle) ✺ Assemblée nationale
-- [ ] `an-deputes-en-exercice` — Députés en exercice ✺ Assemblée nationale
+- [x] `an-deputes-en-exercice` — Députés en exercice ✺ Assemblée nationale
 - [ ] `an-deputes-historique` — Historique des députés ✺ Assemblée nationale
 - [ ] `an-deputes-senateurs-ministres-par-legislature` — Députés, sénateurs et ministres d'une législature ✺ Assemblée nationale
 - [ ] `an-agenda-reunions` — Agenda des réunions à l'Assemblée nationale (législature courante) ✺ Assemblée nationale
@@ -78,4 +80,4 @@ Pour les besoins du Hackathon, le front-end est déployé, mais le backend néce
 ### URL de démonstration
 https://bourbon-ia.vercel.app/
 
-**Note sur l'infrastructure :** Pour des raisons de puissance de calcul et d'accessibilité publique lors de l'évaluation, l'intelligence artificielle (Groq/Llama 3.3) est temporairement hébergée sur un Cloud sécurisé via une architecture Serverless Vercel. Toutefois, le code de Bourbon.IA est conçu pour être 100 % souverain et peut être exécuté intégralement en local.
+**Note sur l'infrastructure :** Pour des raisons de puissance de calcul et d'accessibilité publique lors de l'évaluation, la démo en ligne utilise l'IA Groq (Llama 3.3) via une architecture Serverless Vercel. Toutefois, le code de Bourbon.IA est conçu pour être 100 % souverain et peut être exécuté intégralement en local, sans aucune connexion à Internet. Les données parlementaires (textes de loi, députés) proviennent des données ouvertes de l'Assemblée nationale, via l'API Tricoteuses.
