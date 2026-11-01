@@ -625,7 +625,9 @@ def evaluate_similitude(
         return _repli_nouveau(f"structure inattendue ({exc})")
 
     # ── Garde-fou anti-hallucination : l'identifiant doit exister ──
-    if resultat.statut == "DISCUSSION_COMMUNE":
+    # (tous les statuts qui désignent une cible : « Discussion commune »,
+    # « Identique », « Similaire » — libellés exacts du schéma ci-dessus)
+    if resultat.statut in STATUTS_AVEC_CIBLE:
         ids_valides = {
             _resumer_candidat(c, i + 1)["id_discussion"]
             for i, c in enumerate(
