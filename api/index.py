@@ -94,6 +94,16 @@ def clean_html_text(text: str) -> str:
     return clean.strip()
 
 
+def _tronquer_expose_180(text: Optional[str]) -> str:
+    """Conserve strictement les 180 premiers caractères de l'exposé sommaire suivis de '...'."""
+    if not text:
+        return ""
+    clean = clean_html_text(text)
+    if len(clean) <= 180:
+        return clean
+    return clean[:180].rstrip() + "..."
+
+
 def extract_dispositif_raw(am: dict) -> str:
     """
     Extrait le dispositif en vérifiant TOUS les chemins possibles de l'Assemblée nationale :
@@ -985,29 +995,20 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                     amend_dict = {
                         "amendement": {
                             "uid": amend.amendement_uid,
-                            "numeroLong": amend.numero_long,
-                            "dispositif": amend.dispositif_raw,
-                            "exposeSommaire": amend.expose_sommaire,
-                            "divisionArticleDesignation": amend.article_vise,
+                            "divisionArticleDesignationCourte": amend.article_vise,
+                            "dispositif": clean_html_text(amend.dispositif_raw),
+                            "exposeSommaire": _tronquer_expose_180(amend.expose_sommaire),
                         },
-                        "auteur": {
-                            "nom": amend.auteur_nom,
-                            "prenom": amend.auteur_prenom,
-                            "trigramme": amend.auteur_trigramme,
-                            "groupePolitiqueRef": {"libelle": amend.groupe_politique},
-                        },
-                        "dossier": {"titre": amend.dossier_titre},
-                        "contexte_rag": contexte_rag,
                         "texte_loi_reference": amend.texte_loi_reference,
                     }
                     candidats = [
                         {
                             "id_discussion": a.amendement_uid,
                             "amendement": {
-                                "divisionArticleDesignation": a.article_vise,
-                                "dispositif": a.dispositif_raw,
+                                "divisionArticleDesignationCourte": a.article_vise,
+                                "dispositif": clean_html_text(a.dispositif_raw),
+                                "exposeSommaire": _tronquer_expose_180(a.expose_sommaire),
                             },
-                            "auteur": {"groupePolitiqueRef": {"libelle": a.groupe_politique}},
                         }
                         for a in enriched
                         if a.amendement_uid != amend.amendement_uid
@@ -1168,29 +1169,20 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                 amend_dict = {
                     "amendement": {
                         "uid": target.amendement_uid,
-                        "numeroLong": target.numero_long,
-                        "dispositif": target.dispositif_raw,
-                        "exposeSommaire": target.expose_sommaire,
-                        "divisionArticleDesignation": target.article_vise,
+                        "divisionArticleDesignationCourte": target.article_vise,
+                        "dispositif": clean_html_text(target.dispositif_raw),
+                        "exposeSommaire": _tronquer_expose_180(target.expose_sommaire),
                     },
-                    "auteur": {
-                        "nom": target.auteur_nom,
-                        "prenom": target.auteur_prenom,
-                        "trigramme": target.auteur_trigramme,
-                        "groupePolitiqueRef": {"libelle": target.groupe_politique},
-                    },
-                    "dossier": {"titre": target.dossier_titre},
-                    "contexte_rag": contexte_rag,
                     "texte_loi_reference": target.texte_loi_reference,
                 }
                 candidats = [
                     {
                         "id_discussion": a.amendement_uid,
                         "amendement": {
-                            "divisionArticleDesignation": a.article_vise,
-                            "dispositif": a.dispositif_raw,
+                            "divisionArticleDesignationCourte": a.article_vise,
+                            "dispositif": clean_html_text(a.dispositif_raw),
+                            "exposeSommaire": _tronquer_expose_180(a.expose_sommaire),
                         },
-                        "auteur": {"groupePolitiqueRef": {"libelle": a.groupe_politique}},
                     }
                     for a in enriched
                     if a.amendement_uid != target.amendement_uid

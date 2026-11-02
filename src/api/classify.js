@@ -124,8 +124,8 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
     signal,
     onProgress = () => {},
     onMechanical = () => {},
-    throttleDelayMs = 350,
-    retryDelayMs = 2500,
+    throttleDelayMs = 1200,
+    retryDelayMs = 6000,
   } = options
 
   let settings = { ...aiSettings }
@@ -146,7 +146,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
     amendements,
     ...reglagesLLM(settings),
     temperature: 0.1,
-    max_tokens: 1024,
+    max_tokens: 200,
   }
 
   // 1. Tri mécanique immédiat (sans LLM)
@@ -185,7 +185,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
       throw new DOMException('Aborted', 'AbortError')
     }
 
-    // Délai de lissage incompressible de 350 ms entre deux requêtes vers /api/v2/analyser-llm
+    // Délai de lissage incompressible de 1 200 ms entre deux requêtes vers /api/v2/analyser-llm (rythme 8K TPM)
     if (i > 0 && throttleDelayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, throttleDelayMs))
     }
@@ -203,7 +203,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
         body: JSON.stringify(singlePayload),
       })
 
-      // Gestion Anti-429 & Backoff Exponentiel (1 tentative de retry après 2,5 secondes)
+      // Gestion Anti-429 & Backoff (1 tentative de retry après 6 secondes pour reconstituer la fenêtre de tokens Groq)
       if (resSingle.status === 429) {
         await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
         if (signal?.aborted) {
