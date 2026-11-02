@@ -1,5 +1,34 @@
 import React from 'react';
 
+const MAPPING_ORGANES_XVII = {
+  'PO845401': 'RN',
+  'PO845407': 'EPR',
+  'PO845413': 'LFI-NFP',
+  'PO845419': 'SOC',
+  'PO845425': 'DR',
+  'PO845439': 'EcoS',
+  'PO845454': 'Dem',
+  'PO845470': 'HOR',
+  'PO845485': 'LIOT',
+  'PO845514': 'GDR',
+  'PO845520': 'UDR',
+  'PO840056': 'NI',
+};
+
+const STATUTS_TRI_EXCLUS = new Set([
+  'ISOLE',
+  'ISOLÉ',
+  'IDENTIQUE',
+  'IDENTIQUES',
+  'DOUBLON',
+  'DISCUSSION COMMUNE',
+  'SIMILAIRE',
+  'INCOMPATIBLE',
+  'NOUVEAU',
+  'NON CLASSE',
+  'NON CLASSÉ',
+]);
+
 const GROUP_COLORS = {
   // Groupes politiques officiels XVIIe & XVIe Législature
   'EPR': 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 border-purple-200 dark:border-purple-800',
@@ -22,16 +51,39 @@ const GROUP_COLORS = {
   'DEFAULT': 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700'
 };
 
-export default function PoliticalGroupTag({ group, groupRef }) {
-  if (!group && !groupRef) return null;
+export function resolvePoliticalGroup(group, groupRef, auteurs) {
+  const refStr = typeof groupRef === 'string' ? groupRef.trim() : '';
+  if (refStr && MAPPING_ORGANES_XVII[refStr]) {
+    return MAPPING_ORGANES_XVII[refStr];
+  }
 
-  const displayGroup = group || groupRef || 'Inconnu';
-  
-  // Recherche simple pour attribuer une couleur si le nom/ref contient le sigle
-  const foundKey = Object.keys(GROUP_COLORS).find(key => 
+  const grpStr = typeof group === 'string' ? group.trim() : '';
+  if (grpStr && MAPPING_ORGANES_XVII[grpStr]) {
+    return MAPPING_ORGANES_XVII[grpStr];
+  }
+
+  if (grpStr && !STATUTS_TRI_EXCLUS.has(grpStr.toUpperCase())) {
+    return grpStr;
+  }
+
+  // Extraction éventuelle depuis la chaîne auteur ex: "Mme Élisa Martin (LFI-NFP)"
+  const autStr = Array.isArray(auteurs) ? auteurs.join(' ') : String(auteurs || '');
+  const m = autStr.match(/\(([A-Za-z0-9-]+)\)/);
+  if (m && !STATUTS_TRI_EXCLUS.has(m[1].toUpperCase())) {
+    return m[1];
+  }
+
+  return '';
+}
+
+export default function PoliticalGroupTag({ group, groupRef, auteurs }) {
+  const displayGroup = resolvePoliticalGroup(group, groupRef, auteurs);
+  if (!displayGroup) return null;
+
+  const foundKey = Object.keys(GROUP_COLORS).find(key =>
     key !== 'DEFAULT' && displayGroup.toUpperCase().includes(key)
   );
-  
+
   const colorClasses = GROUP_COLORS[foundKey] || GROUP_COLORS.DEFAULT;
 
   return (

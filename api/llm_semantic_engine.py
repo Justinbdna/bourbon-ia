@@ -114,7 +114,16 @@ DEFAULT_ENDPOINT: str = "http://localhost:1234/v1"
 DEFAULT_MODEL: str = "local-model"          # placeholder accepté par LM Studio
 DEFAULT_TIMEOUT: float = 120.0
 DEFAULT_MAX_TOKENS: int = 1024              # doit couvrir le raisonnement + le JSON
+LOCAL_MAX_TOKENS: int = 256                 # budget restreint pour 8 Go RAM (KV-cache < 2048 tokens)
 DEFAULT_TEMPERATURE: float = 0.1            # tâche de jugement → quasi déterministe
+
+
+def _is_local_endpoint(endpoint: Optional[str]) -> bool:
+    """Détecte si l'endpoint vise un serveur local (Ollama / LM Studio sur localhost / 127.0.0.1)."""
+    if not endpoint:
+        return True
+    lower = str(endpoint).lower()
+    return any(h in lower for h in ("localhost", "127.0.0.1", "0.0.0.0", "[::1]", "::1"))
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -434,7 +443,7 @@ def generate_classification_prompt(
         lignes.extend([
             "",
             f'<TEXTE_LOI_INITIAL article="{article_nom}">',
-            str(texte_ref).strip(),
+            _tronquer_intelligemment(str(texte_ref).strip(), MAX_DISPOSITIF_CHARS),
             "</TEXTE_LOI_INITIAL>",
             "",
             "Consigne stricte : Tu dois analyser l'impact des amendements en concurrence PAR RAPPORT au texte de loi initial ci-dessus. "
@@ -585,6 +594,8 @@ def evaluate_similitude(
 
         effective_endpoint = validate_endpoint_url(llm_endpoint)
         is_groq = "api.groq.com" in effective_endpoint
+        is_local = _is_local_endpoint(effective_endpoint)
+        effective_max_tokens = min(max_tokens, LOCAL_MAX_TOKENS) if is_local else max_tokens
 
         if is_groq:
             if not model or model in ("local-model", "default", "llama3-8b-8192", "llama3-70b-8192", ""):
@@ -611,7 +622,7 @@ def evaluate_similitude(
                 {"role": "user", "content": prompt_utilisateur},
             ],
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_tokens=effective_max_tokens,
         )
         contenu = (reponse.choices[0].message.content or "").strip()
 

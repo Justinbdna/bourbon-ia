@@ -29,9 +29,16 @@ function getModelTypeBadge(modelObj) {
   }
   
   const isVoluminous = estimatedVram > 14 || /32b|70b/i.test(id);
-  const isRecommended = (estimatedVram > 0 && estimatedVram < 10) || /llama-?3\.?1-?8b|mistral-?7b/i.test(id);
+  const isLightweight8GB = /llama-?3\.?2-?3b|qwen-?2\.?5-?(?:3b|7b)|gemma-?3-?4b/i.test(id) || (estimatedVram > 0 && estimatedVram <= 5);
+  const isRecommended = isLightweight8GB || (estimatedVram > 0 && estimatedVram < 10) || /llama-?3\.?1-?8b|mistral-?7b/i.test(id);
 
-  if (isReasoning) {
+  if (isLightweight8GB) {
+    return {
+      icon: '⚡',
+      text: 'Mode Léger (8 Go RAM) — Inférence ultra-rapide (~2 à 4,5 Go RAM), idéal pour ordinateur portable.',
+      colorClass: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800'
+    }
+  } else if (isReasoning) {
     return { 
       icon: '🟡', 
       text: 'Modèle Reasoning — Mode analyse approfondie optimisé.', 
@@ -388,31 +395,78 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                   <p className="text-amber-700 dark:text-amber-400/90">⚠️ <strong>Attention Sécurité (CORS) :</strong> Votre adresse locale DOIT obligatoirement commencer par <strong>https://</strong> (utilisez un tunnel sécurisé comme Ngrok pour convertir votre port local http://127.0.0.1:1234).</p>
                 </div>
                 
-                {provider === 'local' && (modelsList.length > 0 || isFetchingModels) && (
+                {provider === 'local' && (
                   <div className="mt-4 space-y-3">
+                    <div className="p-3 rounded-lg border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/70 dark:bg-emerald-950/30 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
+                          ⚡ Mode Léger (8 Go RAM) — Préréglages Souverains
+                        </span>
+                        <span className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                          KV-cache &lt; 2048 tokens
+                        </span>
+                      </div>
+                      <p className="text-xs text-emerald-900/80 dark:text-emerald-200/80">
+                        Sélectionnez un modèle léger (Q4) optimisé pour tourner sur un ordinateur de 8 Go de RAM via Ollama ou LM Studio :
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+                        {[
+                          { id: 'llama3.2:3b', label: 'llama3.2:3b', desc: '~2,0 Go RAM — ultra-rapide' },
+                          { id: 'qwen2.5:3b', label: 'qwen2.5:3b', desc: '~2,2 Go RAM — français juridique' },
+                          { id: 'qwen2.5:7b-instruct-q4_K_M', label: 'qwen2.5:7b-instruct-q4_K_M', desc: '~4,5 Go RAM — haute précision' },
+                          { id: 'gemma3:4b', label: 'gemma3:4b', desc: '~2,6 Go RAM — équilibré' },
+                        ].map(preset => (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => setLocalModel(preset.id)}
+                            className={`text-left px-2.5 py-1.5 rounded border text-xs transition-colors ${
+                              localModel === preset.id
+                                ? 'bg-emerald-600 text-white border-emerald-700 font-semibold shadow-sm'
+                                : 'bg-white/80 dark:bg-surface border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                            }`}
+                          >
+                            <div className="font-mono text-[11px] truncate">{preset.label}</div>
+                            <div className={`text-[10px] ${localModel === preset.id ? 'text-emerald-100' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                              {preset.desc}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     <label className="block text-sm font-medium text-slate-800 dark:text-plume">
-                      Modèle IA
+                      Modèle IA Local
                     </label>
                     {isFetchingModels ? (
-                      <p className="text-xs text-ink-500">Recherche des modèles sur l'hôte local...</p>
-                    ) : (
-                      <>
-                        <select
-                          value={localModel}
-                          onChange={e => setLocalModel(e.target.value)}
-                          className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none"
-                        >
-                          {modelsList.map(m => (
-                            <option key={m.id} value={m.id}>{formatModelName(m.id)}</option>
-                          ))}
-                        </select>
-                        {modelBadgeLocal && (
-                          <div className={`p-2 mt-2 rounded-md border text-xs flex gap-2 items-start ${modelBadgeLocal.colorClass}`}>
-                            <span>{modelBadgeLocal.icon}</span>
-                            <span>{modelBadgeLocal.text}</span>
-                          </div>
+                      <p className="text-xs text-ink-500">Recherche des modèles sur l&apos;hôte local...</p>
+                    ) : modelsList.length > 0 ? (
+                      <select
+                        value={localModel}
+                        onChange={e => setLocalModel(e.target.value)}
+                        className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none"
+                      >
+                        {!modelsList.some(m => m.id === localModel) && localModel && (
+                          <option value={localModel}>{localModel}</option>
                         )}
-                      </>
+                        {modelsList.map(m => (
+                          <option key={m.id} value={m.id}>{formatModelName(m.id)}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={localModel}
+                        onChange={e => setLocalModel(e.target.value)}
+                        placeholder="Ex: llama3.2:3b, qwen2.5:3b, gemma3:4b..."
+                        className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none font-mono text-xs"
+                      />
+                    )}
+                    {modelBadgeLocal && (
+                      <div className={`p-2 mt-2 rounded-md border text-xs flex gap-2 items-start ${modelBadgeLocal.colorClass}`}>
+                        <span>{modelBadgeLocal.icon}</span>
+                        <span>{modelBadgeLocal.text}</span>
+                      </div>
                     )}
                   </div>
                 )}

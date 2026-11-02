@@ -9,6 +9,7 @@ import ThemeToggle from './components/ThemeToggle'
 import AISettingsModal from './components/AISettingsModal'
 import ConsentModal from './components/ConsentModal'
 import { encrypt, decrypt } from './utils/crypto'
+import { compareArticles } from './utils/sanitize'
 
 const STORAGE_KEY = 'bourbon_session_amendments'
 
@@ -92,7 +93,7 @@ export default function App() {
         const json = await decrypt(stored)
         const parsed = JSON.parse(json)
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setAmendments(parsed)
+          setAmendments([...parsed].sort(compareArticles))
         }
       } catch (e) {
         console.warn('Impossible de restaurer la session chiffrée (clé expirée ou données corrompues).', e)
@@ -184,7 +185,8 @@ export default function App() {
 
   async function handleImport(list, label) {
     try {
-      const cleanList = await normalizeAmendments(list)
+      const normalized = await normalizeAmendments(list)
+      const cleanList = Array.isArray(normalized) ? [...normalized].sort(compareArticles) : []
       // Données de test des badges de conformité UE — DÉVELOPPEMENT UNIQUEMENT.
       // `import.meta.env.DEV` vaut false au build : rien n'est servi en production.
       if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('demoUE')) {
@@ -202,12 +204,18 @@ export default function App() {
   }
 
   async function handleLoadSample() {
-    // Import dynamique : le jeu d'exemple (341 amendements réels, ~900 Ko)
-    // devient un chunk séparé, téléchargé uniquement si l'utilisateur le
-    // demande. Sans cela il alourdissait le bundle initial de tous les
-    // visiteurs, y compris ceux qui importent leur propre fichier.
-    const { default: sampleAmendments } = await import('./data/sampleAmendments.json')
-    handleImport(sampleAmendments, "Jeu de données d'exemple")
+    // Chargement à la demande depuis public/sample-amendments.json :
+    // n'alourdit jamais le bundle JS compilé par Vite.
+    try {
+      const response = await fetch('/sample-amendments.json')
+      if (!response.ok) {
+        throw new Error(`Impossible de charger le jeu d'exemple (HTTP ${response.status})`)
+      }
+      const sampleAmendments = await response.json()
+      await handleImport(sampleAmendments, "Jeu de données d'exemple")
+    } catch (err) {
+      setClassifyError(err.message)
+    }
   }
 
   function handleStopClassify() {

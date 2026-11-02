@@ -30,6 +30,7 @@ try:
         normalize_text,
         strip_html_for_display,
         detect_gage_financier,
+        get_article_sort_key,
     )
     from api.schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
     from api.llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
@@ -44,6 +45,7 @@ except ModuleNotFoundError:
         normalize_text,
         strip_html_for_display,
         detect_gage_financier,
+        get_article_sort_key,
     )
     from schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
     from llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
@@ -242,6 +244,9 @@ def _enrichir_a_import(resultat: dict, source: dict, signataires=None) -> dict:
                 groupe = resolu.get("groupe_principal", "") or ""
                 if groupe:
                     resultat["groupe_politique"] = groupe
+                    resultat["groupe"] = groupe
+        elif not resultat.get("groupe"):
+            resultat["groupe"] = resultat["groupe_politique"]
 
         # ── Commission + thèmes corrélés (uid d'organe embarqué dans l'uid) ──
         if not resultat.get("commission"):
@@ -288,7 +293,8 @@ def normaliser_amendement(data, index: int = 0) -> dict:
             raw_numero = am.get("identification", {}).get("numeroLong", "Inconnu")
             numero = safe_str(raw_numero, "Inconnu")
             
-            raw_article = am.get("pointeurFragmentTexte", {}).get("division", {}).get("titre", "")
+            div = am.get("pointeurFragmentTexte", {}).get("division", {})
+            raw_article = div.get("articleDesignationCourte") or div.get("titre") or ""
             article = format_article_title(safe_str(raw_article))
             
             auteur = ""
@@ -341,6 +347,9 @@ def normaliser_amendement(data, index: int = 0) -> dict:
         if not data.get("dispositif"):
             data["dispositif"] = extract_dispositif_raw(data)
             data["texte"] = data["dispositif"]
+        else:
+            data["dispositif"] = clean_html_text(data["dispositif"])
+            data["texte"] = data["dispositif"]
         if not data.get("expose_sommaire") and not data.get("exposeSommaire"):
             data["expose_sommaire"] = extract_expose_sommaire(data)
         if data.get("article"):
@@ -369,6 +378,7 @@ async def normalize_endpoint(payload: AnalyzeRequest):
             except Exception as exc:
                 logging.warning(f"⚠️ Erreur normalisation amendement {i}: {exc}")
                 results.append({"id": f"amdt-err-{i}", "numero": "Erreur", "article": "", "auteurs": [], "point_impact": {"type": ""}, "dispositif": "", "texte": "", "auteur": ""})
+        results.sort(key=lambda r: get_article_sort_key(r))
         return results
     except Exception as e:
         import traceback
@@ -780,15 +790,30 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
             "niveau_confiance": confiance,
         }
     elif not base.get("resultat_ia") and amend.statut_mecanique == StatutMecanique.NOUVEAU:
-        base["resultat_ia"] = {
-            "id": amend.amendement_uid,
-            "statut": "Isolé",
-            "justification": "En attente d'analyse IA...",
-            "alerte_couleur": "gris",
-            "analyse_intention": "",
-            "analyse_politique": "",
-            "niveau_confiance": 0.0,
-        }
+        if amend.skip_llm:
+            is_identique_ref = bool(amend.groupe_identique_id or "identique" in (amend.justification_mecanique or "").lower())
+            statut_display = "Identique" if is_identique_ref else "Isolé"
+            couleur = "rouge" if is_identique_ref else "gris"
+            justif = amend.justification_mecanique or "Amendement classé par filtrage déterministe."
+            base["resultat_ia"] = {
+                "id": amend.amendement_uid,
+                "statut": statut_display,
+                "justification": justif,
+                "alerte_couleur": couleur,
+                "analyse_intention": f"Détecté mécaniquement : {justif}",
+                "analyse_politique": "Classification déterministe (100 % fiable, sans IA).",
+                "niveau_confiance": 1.0,
+            }
+        else:
+            base["resultat_ia"] = {
+                "id": amend.amendement_uid,
+                "statut": "Isolé",
+                "justification": "En attente d'analyse IA...",
+                "alerte_couleur": "gris",
+                "analyse_intention": "",
+                "analyse_politique": "",
+                "niveau_confiance": 0.0,
+            }
 
     # ── Drapeaux de clustering et d'optimisation LLM ──
     base["_skipLLM"] = bool(amend.skip_llm or amend.statut_mecanique != StatutMecanique.NOUVEAU)
@@ -894,8 +919,8 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
         # ── Phase 2 : Tri déterministe (Identiques, Doublons, Hiérarchie AN) ──
         enriched = process_deterministic_sorting(enriched)
 
-        # ── Phase 3 : Filtre sémantique LLM (uniquement sur les NOUVEAUX) ──
-        nouveaux_count = sum(1 for a in enriched if a.statut_mecanique == StatutMecanique.NOUVEAU)
+        # ── Phase 3 : Filtre sémantique LLM (uniquement sur les NOUVEAUX non résolus mécaniquement) ──
+        nouveaux_count = sum(1 for a in enriched if a.statut_mecanique == StatutMecanique.NOUVEAU and not a.skip_llm)
         processed_llm = [0] # Liste pour mutabilité dans process_llm
         
         # Sémaphore pour limiter le nombre de requêtes simultanées
@@ -903,7 +928,7 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
         
         async def process_llm(amend: EnrichedAmendment, rang: int) -> dict:
             llm_data = None
-            if amend.statut_mecanique == StatutMecanique.NOUVEAU:
+            if amend.statut_mecanique == StatutMecanique.NOUVEAU and not amend.skip_llm:
                 processed_llm[0] += 1
                 cached = get_cached_classification(amend.amendement_uid)
                 if cached:

@@ -97,6 +97,7 @@ def classify_point_impact(dispositif_clean: str) -> tuple[int, PointImpact]:
         "supprimer cet article" in text
         or "supprimer l article" in text
         or "supprimer larticle" in text
+        or re.search(r"\b(?:cet\s+article|l\s*article(?:\s+(?:premier|1er|unique|\d+))?)\s+est\s+supprim[eé]\b", text)
     ):
         return (1, PointImpact.SUPPRESSION_ARTICLE)
 
@@ -128,6 +129,19 @@ def classify_point_impact(dispositif_clean: str) -> tuple[int, PointImpact]:
 
 _ALINEA_REGEX = re.compile(r"\balin[eé]as?\s*(\d+)", re.IGNORECASE)
 
+_STOPWORDS_CIBLE = {
+    "le", "la", "les", "de", "du", "des", "un", "une", "au", "aux", "a", "en",
+    "et", "ou", "par", "pour", "dans", "sur", "avec", "ce", "cet", "cette", "ces",
+    "son", "sa", "ses", "leur", "leurs", "meme", "memes", "suivant", "suivante",
+    "suivants", "suivantes", "mot", "mots", "nombre", "nombres", "montant", "montants",
+    "date", "dates", "annee", "annees", "reference", "references", "phrase", "alinea",
+    "alineas", "article", "premiere", "seconde", "deuxieme", "troisieme", "derniere",
+    "occurrence", "occurrences", "completer", "inserer", "rediger", "ainsi",
+    "substituer", "remplacer", "supprimer", "ajouter", "present", "presente",
+    "gouvernement", "remet", "parlement", "delai", "compter", "promulgation",
+    "rapport", "relatif", "relative", "olympiques", "paralympiques", "hiver", "jeux",
+}
+
 
 def extract_alinea_number(dispositif_clean: str, alinea_vise: str = "") -> str:
     """Extrait le numéro d'alinéa s'il est spécifié dans le champ ou présent dans le dispositif."""
@@ -139,25 +153,94 @@ def extract_alinea_number(dispositif_clean: str, alinea_vise: str = "") -> str:
     return ""
 
 
+def extract_sub_target(dispositif_clean: str) -> str:
+    """
+    Extrait la sous-cible légistique précise d'un amendement POINT_RESTREINT
+    (mot substitué, insertion après un mot, insertion après un alinéa, etc.)
+    afin d'isoler mécaniquement les amendements visant des endroits distincts.
+    """
+    if not dispositif_clean:
+        return ""
+    s = unicodedata.normalize("NFKD", dispositif_clean).encode("ASCII", "ignore").decode("utf-8").lower()
+    chapeau = s[:140]
+
+    if re.search(r"\bapres\s+l\s*alineas?\s+\d+\s+inserer\b", chapeau):
+        return "INSERER_APRES_ALINEA"
+    if re.search(r"\bavant\s+l\s*alineas?\s+\d+\s+inserer\b", chapeau):
+        return "INSERER_AVANT_ALINEA"
+    if re.search(r"\bcompleter\s+(?:cet\s+article|l\s*article|l\s*alinea\s+unique)\b", chapeau):
+        return "COMPLETER_ARTICLE"
+
+    m = re.search(
+        r"(?:substituer|remplacer)\s+(?:au|aux|le|la|les|a\s+la)\s+"
+        r"(?:mot|mots|nombre|nombres|montant|montants|date|dates|annee|annees|reference|references)\s+"
+        r"([a-z0-9\s]{1,40})",
+        chapeau,
+    )
+    if m:
+        words = [w for w in m.group(1).split() if w not in _STOPWORDS_CIBLE][:2]
+        if words:
+            return "SUBST_" + "_".join(words)
+
+    m = re.search(
+        r"apres\s+(?:le\s+mot|les\s+mots|l\s+annee|la\s+reference|"
+        r"la\s+\w+\s+occurrence\s+(?:du\s+mot|de\s+l\s+annee|des\s+mots))\s+"
+        r"([a-z0-9\s]{1,30})",
+        chapeau,
+    )
+    if m:
+        words = [w for w in m.group(1).split() if w not in _STOPWORDS_CIBLE][:2]
+        if words:
+            return "APRES_MOT_" + "_".join(words)
+
+    m = re.search(
+        r"supprimer\s+(?:le\s+mot|les\s+mots|la\s+fin\s+de|la\s+\w+\s+phrase|"
+        r"les\s+\w+\s+occurrences\s+des\s+mots)\s+"
+        r"([a-z0-9\s]{1,30})",
+        chapeau,
+    )
+    if m:
+        words = [w for w in m.group(1).split() if w not in _STOPWORDS_CIBLE][:2]
+        if words:
+            return "SUPPR_MOT_" + "_".join(words)
+
+    if re.search(r"\bau\s+debut\s+de\b", chapeau):
+        return "DEBUT"
+    if re.search(r"\brediger\s+ainsi\s+la\s+fin\b", chapeau):
+        return "FIN_PHRASE"
+
+    return ""
+
+
+def _content_keywords(text: str) -> set[str]:
+    """Extrait les mots-clés substantiels (>= 5 lettres, hors stopwords légistiques) d'un dispositif."""
+    s = unicodedata.normalize("NFKD", text or "").encode("ASCII", "ignore").decode("utf-8").lower()
+    return {w for w in s.split() if len(w) >= 5 and not w.isdigit() and w not in _STOPWORDS_CIBLE}
+
+
 def get_impact_zone_key(amend: EnrichedAmendment) -> str:
     """
     Calcule la clé composite de zone d'impact pour partitionner les amendements :
-    (article_vise, point_impact, alinea_vise).
+    (commission_ref, article_vise, point_impact, alinea_vise, sous_cible).
     """
     art = (amend.article_vise or "ART_GLOBAL").strip().upper()
+    comm = (amend.commission_ref or "").strip().upper()
+    prefix = f"{comm}||{art}" if comm else art
     impact = amend.point_impact or PointImpact.POINT_RESTREINT
 
     # Pour suppression / rédaction globale d'article : zone = article entier
     if impact in (PointImpact.SUPPRESSION_ARTICLE, PointImpact.REDACTION_GLOBALE_ARTICLE):
-        return f"{art}||GLOBAL_{impact.value}"
+        return f"{prefix}||GLOBAL_{impact.value}"
+
+    sub = extract_sub_target(amend.dispositif_clean) if impact == PointImpact.POINT_RESTREINT else ""
 
     # Pour un alinéa ou point restreint
     al = extract_alinea_number(amend.dispositif_clean, amend.alinea_vise)
     if al:
         amend.alinea_vise = al
-        return f"{art}||ALINEA_{al}"
+        return f"{prefix}||ALINEA_{al}||{sub}" if sub else f"{prefix}||ALINEA_{al}"
 
-    return f"{art}||{impact.value}"
+    return f"{prefix}||{impact.value}||{sub}" if sub else f"{prefix}||{impact.value}"
 
 
 BOILERPLATE_PATTERNS = [
@@ -281,26 +364,28 @@ def qualify_irrecevabilite(amend: EnrichedAmendment) -> str:
 def strip_html_for_display(text: Any) -> str:
     """
     Nettoie rigoureusement le HTML et décode toutes les entités pour l'affichage parlementaire.
-    Supprime les balises <p>, <br>, etc., et décode &nbsp;, &#160;, &#x2011;, &laquo;, &raquo;, etc.
+    Supprime les balises <p>, <br>, etc., et décode &nbsp;, &#160;, &#x2011;, &laquo;, &raquo;, &rsquo;, etc.
     """
     if not text:
         return ""
-    s = str(text)
-    # Remplacer les balises de saut de ligne et fermetures de paragraphe par un espace propre
+    # Unescape avant ET après suppression des balises pour traiter le HTML doublement échappé (&lt;p...&gt;)
+    s = html.unescape(str(text))
+    s = re.sub(r"</p>\s*<p[^>]*>", " ", s, flags=re.IGNORECASE)
     s = re.sub(r"<br\s*/?>", " ", s, flags=re.IGNORECASE)
     s = re.sub(r"</(?:p|div)>", " ", s, flags=re.IGNORECASE)
-    # Supprimer toutes les balises HTML restantes
     s = re.sub(r"<[^>]+>", " ", s)
-    # Décoder les entités HTML standard
     s = html.unescape(s)
-    # Remplacements ciblés des entités résiduelles
     s = s.replace("\xa0", " ").replace("&#160;", " ").replace("&nbsp;", " ")
     s = s.replace("&#x2011;", "‑")
     s = s.replace("&laquo;", "«").replace("&raquo;", "»")
+    s = s.replace("&rsquo;", "’").replace("&lsquo;", "‘")
     s = s.replace("&quot;", '"').replace("&apos;", "'")
     s = re.sub(r"[ \t]+", " ", s)
     s = re.sub(r"\n\s*\n+", "\n\n", s)
     return s.strip()
+
+
+strip_html_tags = strip_html_for_display
 
 
 def detect_gage_financier(dispositif: Any, raw_dict: Optional[dict] = None) -> bool:
@@ -337,7 +422,7 @@ def get_article_sort_key(target: Union[EnrichedAmendment, str, dict]) -> tuple[i
       (num_article, pos_article, sous_rang)
 
     Règles :
-      - Préambule / Titre : num_article = 0
+      - Préambule / Titre / Intitulé : num_article = 0 -> (0, 0, 0)
       - 'PREMIER', '1ER', 'unique', 'UNIQUE' -> num_article = 1
       - Extrait le numéro entier principal (2, 3, 4...)
       - Position relative :
@@ -365,8 +450,8 @@ def get_article_sort_key(target: Union[EnrichedAmendment, str, dict]) -> tuple[i
 
     s_norm = unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("utf-8").upper()
 
-    # 1. Préambule / Titre
-    if any(k in s_norm for k in ("PREAMBULE", "TITRE", "LIMINAIRE")):
+    # 1. Préambule / Titre / Intitulé
+    if any(k in s_norm for k in ("PREAMBULE", "TITRE", "LIMINAIRE", "INTITULE")):
         return (0, 0, 0)
 
     # 2. Détection du numéro principal de l'article
@@ -380,7 +465,7 @@ def get_article_sort_key(target: Union[EnrichedAmendment, str, dict]) -> tuple[i
 
     # 3. Positionnement relatif (AVANT / A / APRÈS / BIS / etc.)
     division = raw_dict.get("amendement", raw_dict).get("pointeurFragmentTexte", {}).get("division", {}) if isinstance(raw_dict, dict) else {}
-    pos_raw = str(division.get("avant_A_Apres") or "").strip().upper() if isinstance(division, dict) else ""
+    pos_raw = str(division.get("avant_A_Apres") or division.get("avantAApres") or "").strip().upper() if isinstance(division, dict) else ""
     art_add = str(division.get("articleAdditionnel") or "").strip().lower() if isinstance(division, dict) else ""
 
     is_avant = "AVANT" in s_norm or pos_raw == "AVANT"
@@ -419,6 +504,9 @@ def get_article_sort_key(target: Union[EnrichedAmendment, str, dict]) -> tuple[i
         pos_article = 0
 
     return (num_article, pos_article, sous_rang)
+
+
+article_sort_key = get_article_sort_key
 
 
 def _get_alinea_int_for_sort(amend: EnrichedAmendment) -> int:
@@ -648,9 +736,29 @@ def process_deterministic_sorting(
 
     for zone_key, zone_amends in zone_groups.items():
         cluster_fp = fingerprint(zone_key)
+        # Cas 2 — Amendements de suppression d'article : sort 100 % mécanique (skip_llm = True)
+        if all(a.point_impact == PointImpact.SUPPRESSION_ARTICLE for a in zone_amends):
+            for amend in zone_amends:
+                amend.skip_llm = True
+                amend.cluster_id = cluster_fp if len(zone_amends) > 1 else None
+                if amend.statut_mecanique == StatutMecanique.NOUVEAU:
+                    if len(zone_amends) == 1:
+                        amend.statut_mecanique = StatutMecanique.ISOLE_MECANIQUE
+                        amend.justification_mecanique = (
+                            f"Seul amendement déposé sur cette zone d'impact "
+                            f"({amend.article_vise or 'article'} - SUPPRESSION_ARTICLE). "
+                            f"Aucun concurrent en discussion commune."
+                        )
+                    else:
+                        amend.justification_mecanique = (
+                            f"Amendement de suppression d'article sur {amend.article_vise or 'article'} "
+                            f"(traitement mécanique sans LLM)."
+                        )
+            continue
+
         if len(zone_amends) == 1:
             amend = zone_amends[0]
-            # Si l'amendement est seul et n'est pas déjà un identique AN officiel
+            # Cas 5 — Orphelin de zone d'impact : seul sur sa cible -> ISOLE_MECANIQUE, skip_llm = True
             if amend.statut_mecanique == StatutMecanique.NOUVEAU:
                 amend.statut_mecanique = StatutMecanique.ISOLE_MECANIQUE
                 amend.skip_llm = True
@@ -662,15 +770,40 @@ def process_deterministic_sorting(
                     f"Aucun concurrent en discussion commune."
                 )
         else:
-            # Plusieurs amendements en concurrence sur le même point d'impact
+            # Plusieurs amendements sur la même zone d'impact
             distinct_texts = {a.dispositif_clean for a in zone_amends}
+            is_additive_zone = any(
+                tag in zone_key
+                for tag in ("APRES ART", "APRÈS ART", "AVANT ART", "COMPLETER_ARTICLE", "INSERER_APRES_ALINEA")
+            )
+            kws_by_id = {id(a): _content_keywords(a.dispositif_clean) for a in zone_amends} if is_additive_zone else {}
+
             for amend in zone_amends:
                 amend.cluster_id = cluster_fp
-                # S'il n'est pas déjà marqué identique mécanique
+                if amend.point_impact == PointImpact.SUPPRESSION_ARTICLE:
+                    amend.skip_llm = True
+                    continue
+                # S'il n'est pas déjà marqué identique ou doublon mécanique
                 if amend.statut_mecanique == StatutMecanique.NOUVEAU:
                     impact_label = amend.point_impact.value if amend.point_impact else "impact"
                     alinea_label = f"alinéa {amend.alinea_vise}" if amend.alinea_vise else impact_label
                     if len(distinct_texts) > 1:
+                        if is_additive_zone:
+                            my_kws = kws_by_id.get(id(amend), set())
+                            has_topic_overlap = any(
+                                len(my_kws & kws_by_id.get(id(other), set())) >= 2
+                                for other in zone_amends
+                                if other.dispositif_clean != amend.dispositif_clean
+                            )
+                            if not has_topic_overlap:
+                                amend.statut_mecanique = StatutMecanique.ISOLE_MECANIQUE
+                                amend.skip_llm = True
+                                amend.justification_mecanique = (
+                                    f"Seul amendement déposé sur cette zone d'impact "
+                                    f"({amend.article_vise or 'article'} - sujet distinct). "
+                                    f"Aucun concurrent en discussion commune."
+                                )
+                                continue
                         # Cas complexe : concurrence de textes différents sur la même zone
                         amend.skip_llm = False
                         amend.justification_mecanique = (
@@ -678,8 +811,12 @@ def process_deterministic_sorting(
                             f"{amend.article_vise or 'article'} ({alinea_label}) — aiguillé vers l'analyse IA."
                         )
                     else:
-                        # Tous identiques dans ce cluster : le référent reste NOUVEAU
-                        amend.skip_llm = False
+                        # Tous identiques dans ce cluster : aucun concurrent de texte distinct -> pas besoin de LLM
+                        amend.skip_llm = True
+                        amend.justification_mecanique = (
+                            f"Chef de file d'amendements identiques sur {amend.article_vise or 'article'} "
+                            f"(aucun autre texte concurrent sur cette zone)."
+                        )
 
     # ── Phase 5 : Tri stable officiel (article parlementaire, priorité interne AN, sous-amendements) ──
     amendments.sort(key=lambda a: (

@@ -10,14 +10,15 @@ import SkeletonLoader from './amendment/SkeletonLoader'
 import EUCompliancePanel from './amendment/EUCompliancePanel'
 import ResumeIA from './amendment/ResumeIA'
 import { analyzeSurtransposition } from '../api/classify'
+import { stripHtmlTags } from '../utils/sanitize'
 
 export function formatCleanArticleHeading(article) {
   if (!article) return 'Article —'
   const str = String(article).trim()
   // Dédupliquer les répétitions éventuelles ("Article Article PREMIER" -> "Article PREMIER")
-  let clean = str.replace(/^(article\s+|art\.\s*)+/gi, 'Article ')
-  // Vérifie si la chaîne commence déjà par article, art., après l'article ou avant l'article
-  if (/^(article|art\.|apr[eè]s\s+l['’]article|avant\s+l['’]article|apr[eè]s\s+l['’]art\.|avant\s+l['’]art\.)/i.test(clean)) {
+  const clean = str.replace(/^(article\s+|art\.\s*)+/gi, 'Article ')
+  // Si la chaîne commence déjà par Article, Art., Avant, Après, Titre ou Intitulé, ne pas préfixer à nouveau
+  if (/^(article|art\.|avant\b|apr[eè]s\b|titre\b|intitul[eé]\b)/i.test(clean)) {
     return clean
   }
   return `Article ${clean}`
@@ -141,8 +142,9 @@ export default function AmendmentDetail({ amendment, onClose, isLoading, aiSetti
           <div>
             <p className="text-ink-500 dark:text-ink-400 text-xs mb-1">Groupe</p>
             <PoliticalGroupTag
-              group={a.groupe_politique}
+              group={a.groupe_politique || (typeof a.groupe === 'string' ? a.groupe : '')}
               groupRef={a.groupRef ?? a.groupe_politique_ref}
+              auteurs={a.auteurs}
             />
           </div>
 
@@ -170,8 +172,10 @@ export default function AmendmentDetail({ amendment, onClose, isLoading, aiSetti
           {res ? (
             <div className="space-y-3 text-sm">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-slate-900 dark:text-plume">Rang {res.rang}</span>
-                <GroupeBadge type={res.groupe?.type} />
+                {res.rang != null && (
+                  <span className="font-semibold text-slate-900 dark:text-plume">Rang {res.rang}</span>
+                )}
+                <GroupeBadge statut={res.statut} groupe={res.groupe} type={res.groupe?.type} />
 
                 {/* ── 💡 Tooltip Chain of Thought ── */}
                 {res.analyse_intention && (
@@ -216,14 +220,14 @@ export default function AmendmentDetail({ amendment, onClose, isLoading, aiSetti
           <h4 className="font-display text-sm uppercase tracking-wide text-slate-900 dark:text-plume mb-2">
             Dispositif
           </h4>
-          <ScrollableText text={a.dispositif} />
+          <ScrollableText text={stripHtmlTags(a.dispositif)} />
         </section>
 
         <section className="bg-gray-50 dark:bg-surface border border-ink-200 dark:border-ink-700 rounded-md p-4">
           <h4 className="font-display text-sm uppercase tracking-wide text-slate-900 dark:text-plume mb-2">
             Exposé sommaire
           </h4>
-          <ScrollableText text={a.expose_sommaire} />
+          <ScrollableText text={stripHtmlTags(a.expose_sommaire || a.exposeSommaire)} />
         </section>
       </div>
     </div>

@@ -2,10 +2,10 @@ import { useState, useMemo } from 'react'
 import ImpactBadge from './ImpactBadge'
 import GroupeBadge from './GroupeBadge'
 import CommissionKeywords from './amendment/CommissionKeywords'
-import PoliticalGroupTag from './amendment/PoliticalGroupTag'
+import PoliticalGroupTag, { resolvePoliticalGroup } from './amendment/PoliticalGroupTag'
 import AmendmentSearchBar from './amendment/AmendmentSearchBar'
 import { downloadRtf } from '../utils/exportRtf'
-import { stripHtmlForDisplay } from '../utils/sanitize'
+import { stripHtmlTags } from '../utils/sanitize'
 
 const PAGE_SIZE = 50
 
@@ -14,7 +14,7 @@ const PAGE_SIZE = 50
 const EXTRAIT_MAX = 250
 
 function cleanText(text) {
-  return stripHtmlForDisplay(String(text ?? '')).replace(/\s+/g, ' ').trim()
+  return stripHtmlTags(String(text ?? '')).replace(/\s+/g, ' ').trim()
 }
 
 function ExtraitDispositif({ text }) {
@@ -235,8 +235,13 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               </tr>
             )}
             {pageItems.map(({ a, idx }) => {
-              const statut = a.statut || a.resultat_ia?.statut
-              const groupe = a.groupe || a.resultat_ia?.groupe
+              const statut = a.resultat_ia?.statut || a.statut
+              const groupeStatut = a.resultat_ia?.groupe
+              const groupePolitique = resolvePoliticalGroup(
+                a.groupe_politique || (typeof a.groupe === 'string' ? a.groupe : ''),
+                a.groupe_politique_ref || a.groupRef,
+                a.auteurs
+              )
               const isSelected = a.id === selectedId
               
               const isPending = isClassifying && !a.resultat_ia && !a.statut;
@@ -264,10 +269,10 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                     <span className="break-words leading-snug" title={auteursText}>{auteursText}</span>
                   </td>
                   <td className="px-3 py-4 text-sm text-slate-800 dark:text-slate-200 w-36 min-w-36 align-top">
-                    {(a.groupe_politique || a.groupe_politique_ref || a.groupRef) ? (
+                    {groupePolitique ? (
                       <div className="flex items-start">
                         <PoliticalGroupTag
-                          group={a.groupe_politique}
+                          group={groupePolitique}
                           groupRef={a.groupe_politique_ref || a.groupRef}
                         />
                       </div>
@@ -295,7 +300,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full min-w-[280px] align-top whitespace-normal break-words leading-snug"><ExtraitDispositif text={a.dispositif} /></td>
                   <td className="px-4 py-4 text-sm whitespace-nowrap align-top">
                     <div className="flex items-center gap-1">
-                      <GroupeBadge statut={statutToDisplay} groupe={groupe} isPending={isPending} />
+                      <GroupeBadge statut={statutToDisplay} groupe={groupeStatut} isPending={isPending} />
                       {/* 💡 Tooltip Chain of Thought (inline) */}
                       {a.resultat_ia?.analyse_intention && (
                         <div className="group relative inline-flex">
