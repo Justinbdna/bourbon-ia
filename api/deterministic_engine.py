@@ -772,9 +772,13 @@ def process_deterministic_sorting(
         else:
             # Plusieurs amendements sur la même zone d'impact
             distinct_texts = {a.dispositif_clean for a in zone_amends}
+            # Sécurité droit parlementaire : sur un même article ou un même alinéa existant,
+            # deux amendements au vocabulaire différent peuvent être incompatibles (Discussion commune).
+            # On ne filtre par recoupement thématique QUE sur les articles additionnels (APRÈS / AVANT ART.)
+            # portant sur des demandes de rapport indépendantes.
             is_additive_zone = any(
                 tag in zone_key
-                for tag in ("APRES ART", "APRÈS ART", "AVANT ART", "COMPLETER_ARTICLE", "INSERER_APRES_ALINEA")
+                for tag in ("APRES ART", "APRÈS ART", "AVANT ART", "APRES L'ARTICLE", "APRÈS L'ARTICLE", "AVANT L'ARTICLE")
             )
             kws_by_id = {id(a): _content_keywords(a.dispositif_clean) for a in zone_amends} if is_additive_zone else {}
 

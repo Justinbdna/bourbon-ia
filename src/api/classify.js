@@ -53,9 +53,10 @@ export async function analyzeSurtransposition(amendement, options = {}) {
 
 // Réglages IA communs au classement et au résumé (cf. ⚙️ Réglages IA).
 function reglagesLLM(aiSettings = {}) {
-  const provider = aiSettings.provider || 'local'
-  const localUrl = (aiSettings.localUrl || 'http://localhost:1234/v1').trim().replace(/\/+$/, '')
   const apiKey = (aiSettings.apiKey || '').trim()
+  const rawProvider = aiSettings.provider || 'local'
+  const provider = (rawProvider !== 'local' && apiKey) ? 'groq' : rawProvider
+  const localUrl = (aiSettings.localUrl || 'http://localhost:1234/v1').trim().replace(/\/+$/, '')
   return {
     model: provider === 'local' ? (aiSettings.localModel || 'local-model') : (aiSettings.groqModel || 'llama-3.3-70b-versatile'),
     provider,
