@@ -131,6 +131,14 @@ class EnrichedAmendment(BaseModel):
     rang_phrase: Optional[int] = Field(None, description="Rang numérique de la phrase visée")
     occurrence_mots: Optional[int] = Field(None, description="Nombre ou rang d'occurrences de mots visés")
     priorite_derouleur: Optional[int] = Field(None, description="Priorité mathématique d'appel au dérouleur de séance")
+    alerte_non_normatif: bool = Field(
+        False,
+        description="True si le dispositif présente une faible portée normative (neutron législatif, Art. 6 DDHC)",
+    )
+    motif_non_normatif: Optional[str] = Field(
+        None,
+        description="Motif détaillé du défaut de portée normative (Guide de légistique SGG / CE, Art. 6 DDHC)",
+    )
     
     raw_dict: dict = Field(default_factory=dict, description="Données d'origine pour préserver les métadonnées")
 

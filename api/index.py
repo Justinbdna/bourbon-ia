@@ -8,7 +8,7 @@ import html
 from typing import List, Dict, Any, Optional
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 from dotenv import load_dotenv
@@ -36,7 +36,9 @@ try:
         parse_chapeau,
         calculer_priorite_derouleur,
         auditer_recevabilite_art40,
+        detecter_dispositions_non_normatives,
     )
+    from api.export_rtf import generer_prejaune_rtf
     from api.schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
     from api.llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
     from api.cache_manager import get_cached_classification, save_classification
@@ -56,7 +58,9 @@ except ModuleNotFoundError:
         parse_chapeau,
         calculer_priorite_derouleur,
         auditer_recevabilite_art40,
+        detecter_dispositions_non_normatives,
     )
+    from export_rtf import generer_prejaune_rtf
     from schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
     from llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
     from cache_manager import get_cached_classification, save_classification
@@ -264,6 +268,8 @@ def _enrichir_a_import(resultat: dict, source: dict, signataires=None) -> dict:
         resultat["rang_phrase"] = chapeau_info.rang_phrase
         resultat["occurrence_mots"] = chapeau_info.occurrence_mots
         resultat["priorite_derouleur"] = calculer_priorite_derouleur(resultat)[0]
+        resultat["alerte_non_normatif"] = bool(chapeau_info.alerte_non_normatif)
+        resultat["motif_non_normatif"] = chapeau_info.motif_non_normatif
 
         # ── Groupe politique (référentiel local des députés) ──
         if not resultat.get("groupe_politique"):
@@ -394,9 +400,13 @@ def normaliser_amendement(data, index: int = 0) -> dict:
         logging.error(f"Erreur de normalisation sur l'amendement {index}: {e}\n{traceback.format_exc()}")
         return {"id": f"amdt-err-{index}", "numero": "Erreur", "article": "", "auteurs": [], "point_impact": {"type": ""}, "dispositif": "", "texte": "", "auteur": ""}
 
+_LAST_SESSION_AMENDMENTS: list[dict] = []
+
+
 @app.post("/api/normalize")
 @app.post("/api/v2/normaliser")
 async def normalize_endpoint(payload: AnalyzeRequest):
+    global _LAST_SESSION_AMENDMENTS
     try:
         # Résolution automatique du dossier législatif de référence
         texte_ref_id = extract_texte_ref(payload.amendements)
@@ -413,6 +423,7 @@ async def normalize_endpoint(payload: AnalyzeRequest):
                 logging.warning(f"⚠️ Erreur normalisation amendement {i}: {exc}")
                 results.append({"id": f"amdt-err-{i}", "numero": "Erreur", "article": "", "auteurs": [], "point_impact": {"type": ""}, "dispositif": "", "texte": "", "auteur": ""})
         results.sort(key=lambda r: get_article_sort_key(r))
+        _LAST_SESSION_AMENDMENTS = list(results)
         return results
     except Exception as e:
         import traceback
@@ -721,6 +732,8 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
         alinea_num=chapeau_info.alinea_num,
         rang_phrase=chapeau_info.rang_phrase,
         occurrence_mots=chapeau_info.occurrence_mots,
+        alerte_non_normatif=bool(chapeau_info.alerte_non_normatif),
+        motif_non_normatif=chapeau_info.motif_non_normatif,
         # ── Commission + corrélation thématique (résolu hors-ligne) ──
         **_resoudre_commission(am, dispositif_raw, expose),
         raw_dict=raw,
@@ -785,6 +798,8 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         "rang_phrase": amend.rang_phrase,
         "occurrence_mots": amend.occurrence_mots,
         "priorite_derouleur": amend.priorite_derouleur,
+        "alerte_non_normatif": amend.alerte_non_normatif,
+        "motif_non_normatif": amend.motif_non_normatif,
         "amendement_parent_ref": amend.amendement_parent_ref,
         "amendementParentRef": amend.amendement_parent_ref,
 
@@ -943,7 +958,9 @@ async def v2_mecanique(payload: V2AnalyzeRequest):
                 a.statut_mecanique = StatutMecanique.ISOLE_MECANIQUE
                 a.justification_mecanique = "Repli : tri mécanique non appliqué suite à une anomalie."
 
-        return [_to_frontend(a) for a in enriched]
+        mapped_list = [_to_frontend(a) for a in enriched]
+        _LAST_SESSION_AMENDMENTS = list(mapped_list)
+        return mapped_list
     except Exception as e:
         import traceback
         logging.error(f"❌ Crash v2_mecanique: {e}\n{traceback.format_exc()}")
@@ -1104,6 +1121,7 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
 
         elapsed = time.time() - start
         logging.info(f"✅ V2 Pipeline terminé en {elapsed:.1f}s — {len(resultats_finaux)} résultat(s)")
+        _LAST_SESSION_AMENDMENTS = list(resultats_finaux)
         return resultats_finaux
 
     except Exception as exc:
@@ -1466,3 +1484,86 @@ async def v2_surtransposition(payload: SurtranspositionRequest):
             "target_article": payload.article_vise,
             "analysis_mode": "HEURISTIC_FALLBACK",
         }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ROUTE V2 — Export Préjaune Parlementaire (RTF officiel de séance)
+# ══════════════════════════════════════════════════════════════════════════
+
+_DEFAULT_PREJAUNE_AMENDMENTS: list[dict] = [
+    {
+        "id": "AM-101",
+        "numero": "101",
+        "article": "Article 1er",
+        "auteurs": ["M. Jean-Luc Dupont"],
+        "groupe_politique": "EPR",
+        "dispositif": "Supprimer cet article.",
+        "expose_sommaire": "Amendement de suppression globale de l'article 1er.",
+    },
+    {
+        "id": "AM-102",
+        "numero": "102",
+        "article": "Article 1er",
+        "auteurs": ["Mme Marie Martin"],
+        "groupe_politique": "LFI-NFP",
+        "dispositif": "Supprimer cet article.",
+        "expose_sommaire": "Amendement identique de suppression de l'article 1er.",
+    },
+    {
+        "id": "AM-103",
+        "numero": "103",
+        "article": "Article 1er",
+        "auteurs": ["M. Pierre Durand"],
+        "groupe_politique": "DR",
+        "dispositif": "À l'alinéa 3, substituer au montant : « 10 000 € » le montant : « 25 000 € ».",
+        "expose_sommaire": "Relèvement du plafond prévu à l'alinéa 3.",
+    },
+]
+
+
+@app.get("/api/v2/export-prejaune")
+@app.post("/api/v2/export-prejaune")
+async def v2_export_prejaune(request: Request):
+    """
+    Génère et renvoie le fichier RTF officiel de dérouleur de séance (`prejaune_seance.rtf`)
+    avec le type MIME `application/rtf`, ordonné selon `ordonner_au_derouleur` et normalisé
+    selon la Charte orthotypographique du Journal officiel (DILA).
+    """
+    amendements_cibles: list[Any] = []
+    titre_texte: Optional[str] = request.query_params.get("titre")
+
+    # 1. Vérifier si un corps JSON est transmis (en POST ou en GET avec body)
+    try:
+        raw_body = await request.body()
+        if raw_body and raw_body.strip():
+            parsed_body = json.loads(raw_body.decode("utf-8"))
+            if isinstance(parsed_body, list):
+                amendements_cibles = parsed_body
+            elif isinstance(parsed_body, dict):
+                amendements_cibles = parsed_body.get("amendements") or []
+                titre_texte = titre_texte or parsed_body.get("titre")
+    except Exception:
+        pass
+
+    # 2. Sinon, vérifier le paramètre de requête `amendements` (JSON encodé en query string)
+    if not amendements_cibles and request.query_params.get("amendements"):
+        try:
+            q_parsed = json.loads(request.query_params["amendements"])
+            if isinstance(q_parsed, list):
+                amendements_cibles = q_parsed
+        except Exception:
+            pass
+
+    # 3. Sinon, utiliser la dernière session d'amendements normalisés/analysés ou le jeu de repli
+    if not amendements_cibles:
+        amendements_cibles = _LAST_SESSION_AMENDMENTS if _LAST_SESSION_AMENDMENTS else _DEFAULT_PREJAUNE_AMENDMENTS
+
+    rtf_content = generer_prejaune_rtf(amendements_cibles, titre_texte=titre_texte)
+    return Response(
+        content=rtf_content,
+        media_type="application/rtf",
+        headers={
+            "Content-Disposition": 'attachment; filename="prejaune_seance.rtf"',
+        },
+    )
+

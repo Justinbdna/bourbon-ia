@@ -108,6 +108,20 @@ export default function AmendmentDetail({ amendment, onClose, isLoading, aiSetti
                 </div>
               </div>
             )}
+            {a.alerte_non_normatif && (
+              <div className="group relative inline-flex font-sans">
+                <span
+                  className="inline-flex items-center gap-1 rounded-full bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-200 border border-sky-300 dark:border-sky-700 px-2.5 py-0.5 text-xs font-medium cursor-help"
+                  title={a.motif_non_normatif || "Dispositif à faible portée normative (risque de censure pour défaut de normativité, Art. 6 DDHC)."}
+                >
+                  ℹ️ Portée normative faible
+                </span>
+                <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 top-full left-0 mt-2 w-80 whitespace-normal bg-slate-900 text-white text-xs rounded-lg shadow-xl p-3 leading-relaxed">
+                  <p className="font-semibold text-sky-300 mb-1">ℹ️ Légistique — Portée normative (Art. 6 DDHC)</p>
+                  <p>{a.motif_non_normatif || "Dispositif à faible portée normative (risque de censure pour défaut de normativité, Art. 6 DDHC)."}</p>
+                </div>
+              </div>
+            )}
           </h3>
         </div>
         <button

@@ -764,6 +764,7 @@ def parse_chapeau(
     )
     occurrence_mots, occurrence_mention = _extraire_occurrence_mots(chapeau_masque)
     cible_type = _determiner_cible_type(chapeau_masque, verbe, alinea_num, rang_phrase)
+    audit_normatif = detecter_dispositions_non_normatives(texte)
 
     return ChapeauAnalysis(
         chapeau_brut=chapeau_brut,
@@ -780,6 +781,9 @@ def parse_chapeau(
         motif_ordinal=motif_ordinal,
         occurrence_mots=occurrence_mots,
         occurrence_mention=occurrence_mention,
+        alerte_non_normatif=audit_normatif["alerte_non_normatif"],
+        motif_non_normatif=audit_normatif["motif_non_normatif"],
+        formules_non_normatives=audit_normatif["formules_detectees"],
     )
 
 
@@ -1138,4 +1142,71 @@ def auditer_recevabilite_art40(dispositif: Any, raw_dict: Optional[dict] = None)
         "termes_risque": termes_detectes,
         "clause_credit_impot_presente": has_clause_credit_impot,
     }
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# CHANTIER 4 : Détecteur de dispositions non normatives (Guide de légistique SGG / CE)
+# ──────────────────────────────────────────────────────────────────────────
+
+MOTIF_NON_NORMATIF_DEFAUT = (
+    "Dispositif à faible portée normative (risque de censure pour défaut de normativité, Art. 6 DDHC)."
+)
+
+_FORMULES_NON_NORMATIVES: list[tuple[str, re.Pattern]] = [
+    ("a pour objectif de", re.compile(r"\b(?:a|ont)\s+pour\s+objectifs?\s+d(?:e\b|['’])", re.IGNORECASE)),
+    ("favorise par son action", re.compile(r"\bfavorise(?:nt)?\s+par\s+(?:son|leur)\s+action\b", re.IGNORECASE)),
+    ("veille à ce que", re.compile(r"\bveille(?:nt)?\s+[aà]\s+ce\s+qu(?:e\b|['’])", re.IGNORECASE)),
+    ("la Nation reconnaît", re.compile(r"\bla\s+nation\s+reconna[iî]t\b", re.IGNORECASE)),
+    ("se donne pour mission de", re.compile(r"\bse\s+donne(?:nt)?\s+pour\s+missions?\s+d(?:e\b|['’])", re.IGNORECASE)),
+    (
+        "encourage les initiatives visant à",
+        re.compile(r"\bencourage(?:nt)?\s+les\s+initiatives\s+visant\s+[aà]\b", re.IGNORECASE),
+    ),
+    ("a vocation à", re.compile(r"\b(?:a|ont)\s+vocation\s+[aà]\b", re.IGNORECASE)),
+]
+
+
+def detecter_dispositions_non_normatives(dispositif: Any) -> dict[str, Any]:
+    """
+    Détecte les dispositions dépourvues de portée normative (« neutrons législatifs »)
+    au sens du Guide de légistique (fiches 1.1.1 et 1.2.1) et de la jurisprudence du
+    Conseil constitutionnel (décisions n° 2004-500 DC et 2005-512 DC, Art. 6 DDHC).
+
+    Returns:
+        dict contenant :
+          - `alerte_non_normatif` (bool)
+          - `motif_non_normatif` (str | None)
+          - `formules_detectees` (list[str])
+    """
+    clean = _strip_html(dispositif)
+    if not clean:
+        return {
+            "alerte_non_normatif": False,
+            "motif_non_normatif": None,
+            "formules_detectees": [],
+        }
+
+    texte_unifie = re.sub(r"\s+", " ", clean)
+    formules_trouvees: list[str] = []
+    for label, pattern in _FORMULES_NON_NORMATIVES:
+        if pattern.search(texte_unifie):
+            formules_trouvees.append(label)
+
+    if formules_trouvees:
+        return {
+            "alerte_non_normatif": True,
+            "motif_non_normatif": MOTIF_NON_NORMATIF_DEFAUT,
+            "formules_detectees": formules_trouvees,
+        }
+
+    return {
+        "alerte_non_normatif": False,
+        "motif_non_normatif": None,
+        "formules_detectees": [],
+    }
+
+
+auditer_portee_normative = detecter_dispositions_non_normatives
+detecter_non_normatif = detecter_dispositions_non_normatives
+
 
