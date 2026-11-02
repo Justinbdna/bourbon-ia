@@ -113,15 +113,14 @@ MARQUEUR_TRONCATURE: str = " […texte tronqué]"
 DEFAULT_ENDPOINT: str = "http://localhost:1234/v1"
 DEFAULT_MODEL: str = "local-model"          # placeholder accepté par LM Studio
 DEFAULT_TIMEOUT: float = 120.0
-DEFAULT_MAX_TOKENS: int = 1024              # doit couvrir le raisonnement + le JSON
-LOCAL_MAX_TOKENS: int = 256                 # budget restreint pour 8 Go RAM (KV-cache < 2048 tokens)
+DEFAULT_MAX_TOKENS: int = 200               # bridage strict à 200 tokens pour économiser le quota TPM
+LOCAL_MAX_TOKENS: int = 200                 # budget restreint pour 8 Go RAM (KV-cache < 2048 tokens)
 DEFAULT_TEMPERATURE: float = 0.1            # tâche de jugement → quasi déterministe
+GROQ_DEFAULT_MODEL: str = "openai/gpt-oss-20b"
 GROQ_FALLBACK_MODELS: tuple[str, ...] = (
-    "llama-3.1-8b-instant",
     "openai/gpt-oss-20b",
     "qwen/qwen3.8-27b",
     "openai/gpt-oss-120b",
-    "llama-3.3-70b-versatile",
 )
 
 
@@ -207,32 +206,38 @@ STATUTS_AVEC_CIBLE: frozenset[str] = frozenset(
 STATUTS_SANS_CIBLE: frozenset[str] = frozenset({"Isolé", "NOUVEAU"})
 class LLMClassificationResponse(BaseModel):
     """
-    Réponse structurée attendue du LLM.
-
-    ⚠️  L'ORDRE DES CHAMPS EST SIGNIFIANT — c'est le mécanisme même du
-    « Chain of Thought » : le modèle génère du texte de façon séquentielle,
-    donc l'obliger à produire d'abord `analyse_intention` puis
-    `analyse_politique` le force à raisonner AVANT de trancher sur `statut`.
-    Inverser cet ordre reviendrait à lui faire deviner la conclusion, puis
-    la justifier après coup (rationalisation) — bien moins fiable.
+    Réponse structurée attendue du LLM, concise et sans gaspillage de tokens.
+    Accepte le format minifié {"statut", "confiance", "justification", "id_discussion_cible"}
+    tout en préservant la compatibilité avec {"analyse_intention", "analyse_politique", "niveau_confiance"}.
     """
 
-    # ── Étape de raisonnement (obligatoire, en premier) ──
-    analyse_intention: str = Field(
-        ...,
-        description="Ce que l'auteur cherche concrètement à modifier dans le texte "
-                    "(point d'impact, portée juridique, effet recherché).",
-    )
-    analyse_politique: str = Field(
-        ...,
-        description="Lecture politique : positionnement du groupe, stratégie de dépôt "
-                    "(obstruction, dépôt multiple), articulation avec le dossier législatif.",
-    )
-
-    # ── Verdict (après raisonnement) ──
     statut: Literal["Identique", "Similaire", "Discussion commune", "Isolé", "NOUVEAU"] = Field(
         ...,
         description="Verdict final de l'analyse sémantique.",
+    )
+    confiance: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Confiance du modèle (0.0 à 1.0).",
+    )
+    niveau_confiance: float = Field(
+        default=0.9,
+        ge=0.0,
+        le=1.0,
+        description="Confiance du modèle, de 0.0 à 1.0. Par convention, 0.0 signale un repli technique.",
+    )
+    justification: Optional[str] = Field(
+        default=None,
+        description="Explication concise en 1 phrase maximum.",
+    )
+    analyse_intention: str = Field(
+        default="",
+        description="Ce que l'auteur cherche concrètement à modifier dans le texte.",
+    )
+    analyse_politique: str = Field(
+        default="",
+        description="Lecture politique de l'amendement.",
     )
     id_discussion_cible: Optional[str] = Field(
         default=None,
@@ -240,37 +245,41 @@ class LLMClassificationResponse(BaseModel):
                     "statut = DISCUSSION_COMMUNE, et doit provenir des candidats "
                     "fournis (jamais inventé). None si statut = NOUVEAU.",
     )
-    niveau_confiance: float = Field(
-        ...,
-        ge=0.0,
-        le=1.0,
-        description="Confiance du modèle, de 0.0 à 1.0. Par convention, 0.0 signale "
-                    "un repli technique (le LLM n'a pas rendu de verdict exploitable).",
-    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            # Normaliser confiance / niveau_confiance
+            conf = data.get("confiance")
+            niv = data.get("niveau_confiance")
+            if conf is not None and niv is None:
+                data["niveau_confiance"] = float(conf)
+            elif niv is not None and conf is None:
+                data["confiance"] = float(niv)
+
+            # Normaliser justification / analyse_intention / analyse_politique
+            just = data.get("justification")
+            inten = data.get("analyse_intention")
+            pol = data.get("analyse_politique")
+            if just and not inten:
+                data["analyse_intention"] = str(just)
+            if just and not pol:
+                data["analyse_politique"] = str(just)
+            if inten and not just:
+                data["justification"] = str(inten)
+        return data
 
     @model_validator(mode="after")
     def _coherence_statut_cible(self) -> "LLMClassificationResponse":
         """
-        Refuse les réponses incohérentes. Elles sont fréquentes avec les petits
-        modèles locaux : annoncer une discussion commune sans désigner de cible
-        est inexploitable pour construire le dérouleur.
-
-        Ces `ValueError` sont interceptées par `evaluate_similitude()`, qui
-        applique alors le repli « NOUVEAU » — jamais de crash du pipeline.
-
-        ⚠️  Ce garde-fou était INACTIF : il comparait `statut` à
-        « DISCUSSION_COMMUNE », valeur qui n'existe plus depuis le passage aux
-        libellés « Discussion commune », « Similaire »… Aucune comparaison ne
-        pouvait aboutir, donc une réponse incohérente passait la validation.
-        Les constantes ci-dessous sont dérivées du Literal pour que ce
-        décalage ne puisse pas se reproduire silencieusement.
+        Refuse les réponses incohérentes.
         """
         if self.statut in STATUTS_AVEC_CIBLE and not self.id_discussion_cible:
             raise ValueError(
                 f"statut={self.statut!r} exige un id_discussion_cible non vide."
             )
         if self.statut in STATUTS_SANS_CIBLE and self.id_discussion_cible:
-            # Non bloquant sur le fond : on nettoie plutôt que de rejeter.
             self.id_discussion_cible = None
         return self
 
@@ -347,44 +356,17 @@ Tu n'as PAS à classer par ordre de priorité (suppression, rédaction globale, 
 - Si aucun candidat ne correspond, ou si la liste des candidats est vide, le statut est OBLIGATOIREMENT "Isolé" et `id_discussion_cible` vaut null.
 - Si tu hésites, choisis "Isolé" avec un `niveau_confiance` bas. Un faux Isolé est corrigeable par un humain ; une fausse discussion commune corrompt le dérouleur.
 
-## FORMAT DE SORTIE — STRICT
-Renvoie UNIQUEMENT un objet JSON, sans texte avant ni après, sans balise Markdown. Les clés doivent apparaître dans cet ordre EXACT :
-
-{
-  "analyse_intention": "<ce que l'auteur modifie concrètement : point d'impact et effet juridique>",
-  "analyse_politique": "<positionnement du groupe, stratégie de dépôt, lien avec le dossier>",
-  "statut": "Similaire" | "Discussion commune" | "Isolé",
-  "id_discussion_cible": "<identifiant copié d'un candidat>" | null,
-  "niveau_confiance": <nombre entre 0.0 et 1.0>
-}
-
-Tu dois remplir "analyse_intention" et "analyse_politique" AVANT de choisir "statut" : ton raisonnement doit précéder ta conclusion.
+## FORMAT DE SORTIE — STRICTEMENT MINIFIÉ ET CONCIS
+Réponds STRICTEMENT par un objet JSON minifié. Ne génère aucune formule de politesse ni texte introductif. Format : {"statut": "...", "confiance": 0.9, "justification": "Explication en 1 phrase maximum.", "id_discussion_cible": "..."}
+Statuts autorisés pour "statut" : "Discussion commune" | "Similaire" | "Isolé".
+Si statut est "Discussion commune" ou "Similaire", renseigne obligatoirement "id_discussion_cible" avec l'un des identifiants candidats. Si statut est "Isolé", "id_discussion_cible" vaut null.
 
 ## EXEMPLES
-
 ### Exemple 1 — Deux suppressions du même article (RÈGLE A)
-AMENDEMENT : Article 5 · "Supprimer cet article." · Mme Martin (Écologiste et Social)
-CANDIDATS : [{"id_discussion": "DISC-ART5-SUPPR", "article": "Article 5", "extrait": "Supprimer cet article.", "groupe": "La France insoumise"}]
-RÉPONSE :
-{
-  "analyse_intention": "L'auteure demande la suppression pure et simple de l'article 5. Le point d'impact est l'article entier, la portée est maximale.",
-  "analyse_politique": "Groupe d'opposition distinct du candidat, mais la convergence est totale sur l'objet : faire tomber l'article. La règle A s'applique sans réserve.",
-  "statut": "DISCUSSION_COMMUNE",
-  "id_discussion_cible": "DISC-ART5-SUPPR",
-  "niveau_confiance": 0.97
-}
+{"statut": "Discussion commune", "confiance": 0.97, "justification": "Deux suppressions du même article portées par des groupes opposés.", "id_discussion_cible": "DISC-ART5-SUPPR"}
 
 ### Exemple 2 — Point d'impact sans rapport (RÈGLE D)
-AMENDEMENT : Article 12 · "À l'alinéa 3, substituer aux mots : « trente jours » les mots : « soixante jours »." · M. Durand (Les Républicains)
-CANDIDATS : [{"id_discussion": "DISC-ART5-SUPPR", "article": "Article 5", "extrait": "Supprimer cet article.", "groupe": "La France insoumise"}]
-RÉPONSE :
-{
-  "analyse_intention": "Modification restreinte d'un délai procédural à l'alinéa 3 de l'article 12 : on double la durée, sans toucher à l'architecture du dispositif.",
-  "analyse_politique": "Amendement technique d'assouplissement, sans lien avec la suppression de l'article 5 portée par le candidat. Aucune exclusion juridique entre les deux.",
-  "statut": "Isolé",
-  "id_discussion_cible": null,
-  "niveau_confiance": 0.93
-}"""
+{"statut": "Isolé", "confiance": 0.93, "justification": "Modification technique d'un délai procédural sans rapport avec les suppressions.", "id_discussion_cible": null}"""
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -623,9 +605,11 @@ def _repli_nouveau(motif: str) -> LLMClassificationResponse:
         analyse_intention=intention,
         analyse_politique="Aucune analyse politique produite : repli technique. "
                           "Classement laissé au moteur déterministe.",
+        justification=intention,
         statut="NOUVEAU",
         id_discussion_cible=None,
         niveau_confiance=0.0,
+        confiance=0.0,
     )
 
 
@@ -663,12 +647,11 @@ def evaluate_similitude(
 
         effective_endpoint = validate_endpoint_url(llm_endpoint)
         is_groq = "api.groq.com" in effective_endpoint
-        is_local = _is_local_endpoint(effective_endpoint)
-        effective_max_tokens = min(max_tokens, LOCAL_MAX_TOKENS) if is_local else max_tokens
+        effective_max_tokens = min(max_tokens, 200)
 
         if is_groq:
-            if not model or model in ("local-model", "default", "llama3-8b-8192", "llama3-70b-8192", ""):
-                model = "llama-3.3-70b-versatile"
+            if not model or model in ("local-model", "default", "llama3-8b-8192", "llama3-70b-8192", "llama-3.3-70b-versatile", ""):
+                model = GROQ_DEFAULT_MODEL
 
         clean_key = str(api_key).strip() if api_key else ""
         default_headers = None
@@ -816,8 +799,8 @@ def resumer_amendement(
         is_groq = "api.groq.com" in effective_endpoint
 
         if is_groq:
-            if not model or model in ("local-model", "default", "llama3-8b-8192", "llama3-70b-8192", ""):
-                model = "llama-3.3-70b-versatile"
+            if not model or model in ("local-model", "default", "llama3-8b-8192", "llama3-70b-8192", "llama-3.3-70b-versatile", ""):
+                model = GROQ_DEFAULT_MODEL
 
         clean_key = str(api_key).strip() if api_key else ""
         default_headers = None

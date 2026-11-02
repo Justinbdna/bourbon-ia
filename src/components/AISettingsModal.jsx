@@ -78,7 +78,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
   const [apiKey, setApiKey] = useState(currentSettings?.apiKey || '')
   const [localUrl, setLocalUrl] = useState(currentSettings?.localUrl || 'http://localhost:1234/v1')
   const [localModel, setLocalModel] = useState(currentSettings?.localModel || '')
-  const [groqModel, setGroqModel] = useState(currentSettings?.groqModel || 'llama-3.3-70b-versatile')
+  const [groqModel, setGroqModel] = useState((currentSettings?.groqModel && currentSettings.groqModel !== 'llama-3.3-70b-versatile') ? currentSettings.groqModel : 'openai/gpt-oss-20b')
   
   const [modelsList, setModelsList] = useState([])
   const [isFetchingModels, setIsFetchingModels] = useState(false)
@@ -90,7 +90,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
       setApiKey(currentSettings?.apiKey || '')
       setLocalUrl(currentSettings?.localUrl || 'http://localhost:1234/v1')
       setLocalModel(currentSettings?.localModel || '')
-      setGroqModel(currentSettings?.groqModel || 'llama-3.3-70b-versatile')
+      setGroqModel((currentSettings?.groqModel && currentSettings.groqModel !== 'llama-3.3-70b-versatile') ? currentSettings.groqModel : 'openai/gpt-oss-20b')
       setPingStatus(null)
     }
   }, [isOpen, currentSettings])
@@ -103,7 +103,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
       if (provider === 'groq_auto') {
         if (isMounted) {
           // Modèle réellement utilisé en mode démo (cf. src/api/classify.js)
-          setModelsList([{ id: 'llama-3.3-70b-versatile' }])
+          setModelsList([{ id: 'openai/gpt-oss-20b' }])
           setIsFetchingModels(false)
         }
         return
@@ -153,7 +153,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
           setModelsList(filteredModels)
           if (provider === 'local' && !localModel && filteredModels.length > 0) setLocalModel(filteredModels[0].id)
           if (provider === 'groq' && filteredModels.length > 0 && (!groqModel || !filteredModels.some(m => m.id === groqModel))) {
-            const preferred = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'llama-3.3-70b-versatile', 'openai/gpt-oss-20b']
+            const preferred = ['openai/gpt-oss-20b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-120b']
             const best = preferred.find(p => filteredModels.some(m => m.id === p)) || filteredModels[0].id
             setGroqModel(best)
           }
@@ -186,7 +186,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
       apiKey: cleanKey,
       localUrl,
       localModel: localModel || 'local-model',
-      groqModel: groqModel || 'llama-3.3-70b-versatile'
+      groqModel: (groqModel && groqModel !== 'llama-3.3-70b-versatile') ? groqModel : 'openai/gpt-oss-20b'
     }
 
     if (effectiveProvider === 'local' || effectiveProvider === 'groq') {

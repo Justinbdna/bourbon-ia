@@ -14,7 +14,7 @@ export async function normalizeAmendments(amendements) {
   const response = await fetch(`${API_BASE_URL}/api/normalize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-    body: JSON.stringify({ amendements, model: 'llama-3.3-70b-versatile' }),
+    body: JSON.stringify({ amendements, model: 'openai/gpt-oss-20b' }),
   })
   if (!response.ok) {
     throw new ClassifyError(`Erreur de normalisation: ${await response.text()}`, response.status)
@@ -57,8 +57,11 @@ function reglagesLLM(aiSettings = {}) {
   const rawProvider = aiSettings.provider || 'local'
   const provider = (rawProvider !== 'local' && apiKey) ? 'groq' : rawProvider
   const localUrl = (aiSettings.localUrl || 'http://localhost:1234/v1').trim().replace(/\/+$/, '')
+  const safeGroqModel = (aiSettings.groqModel && aiSettings.groqModel !== 'llama-3.3-70b-versatile')
+    ? aiSettings.groqModel
+    : 'openai/gpt-oss-20b'
   return {
-    model: provider === 'local' ? (aiSettings.localModel || 'local-model') : (aiSettings.groqModel || 'llama-3.3-70b-versatile'),
+    model: provider === 'local' ? (aiSettings.localModel || 'local-model') : safeGroqModel,
     provider,
     llm_endpoint: provider === 'local' ? localUrl : 'https://api.groq.com/openai/v1',
     api_key: apiKey || (provider === 'local' ? 'local-key' : ''),

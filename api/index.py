@@ -442,7 +442,7 @@ class V2AnalyzeRequest(BaseModel):
     api_key: str = "local-key"
     provider: str = "local"  # "local" | "groq" (clé utilisateur) | "groq_auto" (clé serveur)
     temperature: float = 0.1
-    max_tokens: int = 1024
+    max_tokens: int = 200
     textes_reference: dict[str, str] = Field(default_factory=dict, description="Texte de loi initial par article (ex: {'Article 1er': '...'})")
 
 class V2AnalyzeSingleRequest(V2AnalyzeRequest):
@@ -465,8 +465,8 @@ class ResumeRequest(BaseModel):
 
 
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1"
-GROQ_DEFAULT_MODEL = "llama-3.3-70b-versatile"
-DEPRECATED_OR_DEFAULT_MODELS = {"", "default", "local-model", "llama3-8b-8192", "llama3-70b-8192"}
+GROQ_DEFAULT_MODEL = "openai/gpt-oss-20b"
+DEPRECATED_OR_DEFAULT_MODELS = {"", "default", "local-model", "llama3-8b-8192", "llama3-70b-8192", "llama-3.3-70b-versatile"}
 
 
 def _clean_api_key(raw: Optional[str]) -> str:
@@ -1025,7 +1025,7 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                                 llm_endpoint=valid_endpoint,
                                 model=modele_llm, api_key=cle_llm,
                                 key_source=source_cle,
-                                timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
+                                timeout=120.0, max_tokens=min(payload.max_tokens or 200, 200), temperature=payload.temperature,
                                 texte_loi_reference=amend.texte_loi_reference,
                             )
                             llm_data = resultat.model_dump()
@@ -1217,7 +1217,7 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                         llm_endpoint=valid_endpoint,
                         model=modele_llm, api_key=cle_llm,
                         key_source=source_cle,
-                        timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
+                        timeout=120.0, max_tokens=min(payload.max_tokens or 200, 200), temperature=payload.temperature,
                         texte_loi_reference=target.texte_loi_reference,
                     )
 

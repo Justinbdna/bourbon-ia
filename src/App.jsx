@@ -532,7 +532,7 @@ export default function App() {
 
       <footer className="max-w-[95%] mx-auto px-6 pb-8 text-center">
         <p className="text-sm text-neutre dark:text-ink-400 max-w-5xl mx-auto leading-relaxed">
-          💡 Note technique : Par défaut, cette démonstration publique utilise le mode Groq (Llama 3.3) pour la fluidité web. L'application reste 100 % conçue pour une exécution souveraine, locale et hors-ligne (sélectionnable dans les ⚙️ Réglages IA).
+          💡 Note technique : Par défaut, cette démonstration publique utilise le mode Groq (GPT-OSS 20B) pour la fluidité web. L'application reste 100 % conçue pour une exécution souveraine, locale et hors-ligne (sélectionnable dans les ⚙️ Réglages IA).
         </p>
       </footer>
 
@@ -605,7 +605,7 @@ export default function App() {
 
       <div className="absolute bottom-4 left-0 right-0 text-center text-xs text-slate-500 px-6 max-w-2xl mx-auto">
         <p>
-          💡 Note technique : Par défaut, cette démonstration publique utilise le mode Groq (Llama 3.3) pour la fluidité web. L'application reste 100 % conçue pour une exécution souveraine, locale et hors-ligne (sélectionnable dans les ⚙️ Réglages IA).
+          💡 Note technique : Par défaut, cette démonstration publique utilise le mode Groq (GPT-OSS 20B) pour la fluidité web. L'application reste 100 % conçue pour une exécution souveraine, locale et hors-ligne (sélectionnable dans les ⚙️ Réglages IA).
         </p>
       </div>
 
