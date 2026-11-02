@@ -62,3 +62,39 @@ def test_identifiant_present_accepte(monkeypatch):
 
     assert resultat.statut == "Discussion commune"
     assert resultat.id_discussion_cible == "AMDT-2"
+
+
+def test_extraire_et_reparer_json_tronque():
+    from api.llm_semantic_engine import _extraire_json, _reparer_json
+
+    # Cas 1 : bloc <think> non fermé avec JSON tronqué (quote et accolade manquantes)
+    reponse_brute = '<think>Analyse légistique... {"statut":"Discussion commune","justification":"Même objet visé'
+    premier_acc = reponse_brute.find("{")
+    repare = _reparer_json(reponse_brute[premier_acc:])
+    donnees = json.loads(repare)
+    assert donnees["statut"] == "Discussion commune"
+    assert "Même objet visé" in donnees["justification"]
+
+    # Cas 2 : virgule traînante avant accolade
+    reponse_virgule = '{"statut":"Isolé","confiance":0.9,"justification":"Indépendant",}'
+    repare2 = _reparer_json(reponse_virgule)
+    donnees2 = json.loads(repare2)
+    assert donnees2["statut"] == "Isolé"
+
+    # Cas 3 : réponse standard avec markdown
+    reponse_md = '```json\n{"statut":"Identique","confiance":0.95,"justification":"Strictement identique"}\n```'
+    extrait = _extraire_json(reponse_md)
+    donnees3 = json.loads(extrait)
+    assert donnees3["statut"] == "Identique"
+
+
+def test_evaluate_similitude_auto_complete_cible_si_omise(monkeypatch):
+    # Si le LLM minifié omet id_discussion_cible pour un statut avec cible,
+    # le moteur le rattache automatiquement au premier candidat valide
+    _faux_llm(monkeypatch, {"statut": "Discussion commune", "confiance": 0.9, "justification": "Même alinéa visé"})
+
+    resultat = evaluate_similitude(AMENDEMENT, CANDIDATS, "http://localhost:1234/v1")
+
+    assert resultat.statut == "Discussion commune"
+    assert resultat.id_discussion_cible == "AMDT-2"
+

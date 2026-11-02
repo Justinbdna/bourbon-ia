@@ -110,8 +110,8 @@ MARQUEUR_TRONCATURE: str = "..."
 DEFAULT_ENDPOINT: str = "http://localhost:1234/v1"
 DEFAULT_MODEL: str = "local-model"          # placeholder accepté par LM Studio
 DEFAULT_TIMEOUT: float = 120.0
-DEFAULT_MAX_TOKENS: int = 200               # bridage strict à 200 tokens pour économiser le quota TPM
-LOCAL_MAX_TOKENS: int = 200                 # budget restreint pour 8 Go RAM (KV-cache < 2048 tokens)
+DEFAULT_MAX_TOKENS: int = 350               # bridage optimisé à 350 tokens (marge raisonnement + fermeture JSON)
+LOCAL_MAX_TOKENS: int = 350                 # budget calibré pour 8 Go RAM (KV-cache < 2048 tokens)
 DEFAULT_TEMPERATURE: float = 0.1            # tâche de jugement → quasi déterministe
 GROQ_DEFAULT_MODEL: str = "openai/gpt-oss-20b"
 GROQ_FALLBACK_MODELS: tuple[str, ...] = (
@@ -273,9 +273,8 @@ class LLMClassificationResponse(BaseModel):
         Refuse les réponses incohérentes.
         """
         if self.statut in STATUTS_AVEC_CIBLE and not self.id_discussion_cible:
-            raise ValueError(
-                f"statut={self.statut!r} exige un id_discussion_cible non vide."
-            )
+            # evaluate_similitude se charge d'assigner le premier candidat valide
+            pass
         if self.statut in STATUTS_SANS_CIBLE and self.id_discussion_cible:
             self.id_discussion_cible = None
         return self
@@ -350,7 +349,8 @@ def _tronquer_intelligemment(texte: Optional[str], limite: int) -> str:
 # ══════════════════════════════════════════════════════════════════════════
 SYSTEM_PROMPT: str = (
     "Tu es un juriste parlementaire. Détermine si deux amendements doivent être en 'Discussion commune', "
-    "'Identique' ou 'Isolé'. Réponds STRICTEMENT en JSON minifié : "
+    "'Identique' ou 'Isolé'. Commence DIRECTEMENT ta réponse par '{'. N'émets aucun préambule, bloc de pensée ni explication hors du JSON. "
+    "Réponds STRICTEMENT en JSON minifié : "
     '{"statut":"...","confiance":0.9,"justification":"1 phrase max"}'
 )
 
@@ -483,12 +483,97 @@ def generate_classification_prompt(
     else:
         lignes.append("\nAucun candidat concurrent. Statut : Isolé.")
 
+    lignes.append("Commence DIRECTEMENT ta réponse par '{'. N'émets aucun préambule, bloc de pensée ni explication hors du JSON.")
+
     return "\n".join(lignes)
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# 5. EXTRACTION JSON ROBUSTE (modèles bavards / reasoning)
+# 5. EXTRACTION ET RÉPARATION JSON ROBUSTE (modèles bavards / reasoning)
 # ══════════════════════════════════════════════════════════════════════════
+def _reparer_json(texte: str) -> str:
+    """
+    Répare un JSON tronqué ou malformé généré par un LLM :
+    - Élimine les blocs de réflexion <think>...</think> résiduels
+    - Ferme les chaînes de caractères orphelines (guillemets non fermés)
+    - Supprime les virgules traînantes avant les fermetures
+    - Ferme les crochets et accolades non équilibrés
+    """
+    if not texte:
+        return ""
+
+    s = re.sub(r"<think>.*?</think>", " ", texte, flags=re.DOTALL | re.IGNORECASE)
+    s = re.sub(r"<think>.*$", " ", s, flags=re.DOTALL | re.IGNORECASE)
+    s = re.sub(r"```[a-zA-Z]*", " ", s).replace("```", " ").strip()
+
+    premier_idx = s.find("{")
+    if premier_idx == -1:
+        return s
+    s = s[premier_idx:]
+
+    try:
+        json.loads(s)
+        return s
+    except Exception:
+        pass
+
+    s = re.sub(r":\s*$", ': ""', s)
+
+    dans_chaine = False
+    echappe = False
+    accolades_ouvertes = 0
+    crochets_ouverts = 0
+
+    for car in s:
+        if dans_chaine:
+            if echappe:
+                echappe = False
+            elif car == "\\":
+                echappe = True
+            elif car == '"':
+                dans_chaine = False
+            continue
+        if car == '"':
+            dans_chaine = True
+        elif car == "{":
+            accolades_ouvertes += 1
+        elif car == "}":
+            if accolades_ouvertes > 0:
+                accolades_ouvertes -= 1
+        elif car == "[":
+            crochets_ouverts += 1
+        elif car == "]":
+            if crochets_ouverts > 0:
+                crochets_ouverts -= 1
+
+    repare = s
+    if dans_chaine:
+        repare += '"'
+    if crochets_ouverts > 0:
+        repare += "]" * crochets_ouverts
+    if accolades_ouvertes > 0:
+        repare += "}" * accolades_ouvertes
+
+    repare = re.sub(r",\s*([\}\]])", r"\1", repare)
+
+    try:
+        json.loads(repare)
+        return repare
+    except Exception:
+        dernier_delim = max(repare.rfind(","), repare.rfind("{"))
+        if dernier_delim > 0:
+            tronque = repare[:dernier_delim].rstrip()
+            open_braces = max(0, tronque.count("{") - tronque.count("}"))
+            if open_braces > 0:
+                tronque += "}" * open_braces
+            try:
+                json.loads(tronque)
+                return tronque
+            except Exception:
+                pass
+        return repare
+
+
 def _extraire_json(contenu: str) -> str:
     """
     Isole l'objet JSON d'une réponse de modèle, y compris quand celui-ci
@@ -497,12 +582,6 @@ def _extraire_json(contenu: str) -> str:
     Stratégie : on retire les blocs `<think>` et les clôtures Markdown, puis on
     scanne les accolades en suivant l'état des chaînes de caractères, et on
     retient le DERNIER objet complet et équilibré.
-
-    Pourquoi le dernier, et pas « du premier { au dernier } » : un modèle
-    reasoning produit souvent des accolades dans son raisonnement (exemple de
-    schéma, pseudo-code). L'approche naïve capture alors le raisonnement ET la
-    réponse dans une chaîne inparsable. Le prompt exigeant le JSON en fin de
-    réponse, le dernier objet équilibré est le bon.
     """
     if not contenu:
         raise ValueError("Réponse vide du modèle.")
@@ -538,9 +617,17 @@ def _extraire_json(contenu: str) -> str:
                 objets.append(texte[debut:i + 1])
                 debut = None
 
-    if not objets:
-        raise ValueError("Aucun objet JSON équilibré trouvé dans la réponse.")
-    return objets[-1]
+    if objets:
+        return objets[-1]
+
+    # Si aucun objet équilibré strict n'a été trouvé, tenter la réparation résiliente
+    premier_idx = texte.find("{")
+    if premier_idx != -1:
+        repare = _reparer_json(texte[premier_idx:])
+        if repare:
+            return repare
+
+    raise ValueError("Aucun objet JSON équilibré trouvé dans la réponse.")
 
 
 def _repli_nouveau(motif: str) -> LLMClassificationResponse:
@@ -601,7 +688,7 @@ def evaluate_similitude(
 
         effective_endpoint = validate_endpoint_url(llm_endpoint)
         is_groq = "api.groq.com" in effective_endpoint
-        effective_max_tokens = min(max_tokens, 200)
+        effective_max_tokens = min(max_tokens, 350)
 
         if is_groq:
             if not model or model in ("local-model", "default", "llama3-8b-8192", "llama3-70b-8192", "llama-3.3-70b-versatile", ""):
@@ -657,13 +744,27 @@ def evaluate_similitude(
         # pare-feu), erreurs HTTP, réponses inattendues du serveur local.
         return _repli_nouveau(f"{exc_name}: {exc_str[:180]}")
 
-    # ── Parsing ──
+    # ── Parsing (2 tentatives résilientes) ──
+    donnees = None
+    if not contenu or not contenu.strip():
+        return _repli_nouveau("Réponse vide du modèle.")
+
     try:
+        # Tentative 1 : extraction équilibrée
         brut = _extraire_json(contenu)
         donnees = json.loads(brut)
-    except (ValueError, json.JSONDecodeError) as exc:
-        logger.debug(f"Réponse brute non parsable : {contenu[:400]}")
-        return _repli_nouveau(f"JSON illisible ({exc})")
+    except Exception as exc1:
+        # Tentative 2 : réparation résiliente d'urgence
+        try:
+            premier_acc = contenu.find("{")
+            if premier_acc != -1:
+                repare = _reparer_json(contenu[premier_acc:])
+                donnees = json.loads(repare)
+            else:
+                raise ValueError("Aucun objet JSON équilibré trouvé dans la réponse.")
+        except Exception as exc2:
+            logger.debug(f"Réponse brute non parsable après 2 tentatives : {contenu[:400]}")
+            return _repli_nouveau(f"JSON illisible ({exc1})")
 
     # ── Validation de schéma ──
     try:
@@ -687,8 +788,11 @@ def evaluate_similitude(
             )
             if isinstance(c, dict)
         }
-        if not resultat.id_discussion_cible and ids_valides:
-            resultat.id_discussion_cible = next(iter(ids_valides))
+        if not resultat.id_discussion_cible:
+            if ids_valides:
+                resultat.id_discussion_cible = next(iter(ids_valides))
+            else:
+                return _repli_nouveau("aucun candidat disponible pour ce statut avec cible")
         elif resultat.id_discussion_cible not in ids_valides:
             return _repli_nouveau(
                 f"identifiant halluciné « {resultat.id_discussion_cible} » "

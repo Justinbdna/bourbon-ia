@@ -146,7 +146,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
     amendements,
     ...reglagesLLM(settings),
     temperature: 0.1,
-    max_tokens: 200,
+    max_tokens: 350,
   }
 
   // 1. Tri mécanique immédiat (sans LLM)

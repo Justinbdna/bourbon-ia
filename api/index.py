@@ -452,7 +452,7 @@ class V2AnalyzeRequest(BaseModel):
     api_key: str = "local-key"
     provider: str = "local"  # "local" | "groq" (clé utilisateur) | "groq_auto" (clé serveur)
     temperature: float = 0.1
-    max_tokens: int = 200
+    max_tokens: int = 350
     textes_reference: dict[str, str] = Field(default_factory=dict, description="Texte de loi initial par article (ex: {'Article 1er': '...'})")
 
 class V2AnalyzeSingleRequest(V2AnalyzeRequest):
@@ -963,34 +963,40 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                 else:
                     logging.info(f"🧠 LLM START {amend.amendement_uid} ({processed_llm[0]}/{nouveaux_count})")
                     contexte_rag = ""
-                    try:
-                        from api.tricoteuses_client import fetch_amendements
-                        def fetch_rag():
-                            res = fetch_amendements(uid=amend.amendement_uid, timeout=1.9)
-                            if not res: return ""
+                    # N'interroger Tricoteuses QUE si le corps du texte (dispositif/exposé) est totalement absent
+                    has_text = bool(
+                        (amend.dispositif_raw and amend.dispositif_raw.strip())
+                        or (amend.expose_sommaire and amend.expose_sommaire.strip())
+                    )
+                    if not has_text:
+                        try:
+                            from api.tricoteuses_client import fetch_amendements
+                            def fetch_rag():
+                                res = fetch_amendements(uid=amend.amendement_uid, timeout=1.9)
+                                if not res: return ""
+                                
+                                auteur_dict = res.get("auteur", {}) or {}
+                                nom = auteur_dict.get("nom", "")
+                                prenom = auteur_dict.get("prenom", "")
+                                groupe = (auteur_dict.get("groupePolitiqueRef") or {}).get("libelle", "Inconnu")
+                                nom_auteur = f"{prenom} {nom}".strip() or "Inconnu"
+                                
+                                dossier = res.get("dossierRef", {}) or {}
+                                statut_texte = dossier.get("titre", "Non renseigné")
+                                
+                                cosign = res.get("coSignataires", []) or []
+                                signataires = ", ".join([f"{s.get('prenom', '')} {s.get('nom', '')}".strip() for s in cosign]) if cosign else "Aucun"
+                                
+                                return (
+                                    f"\n## CONTEXTE POLITIQUE (RAG API)\n"
+                                    f"- Auteur : {nom_auteur} ({groupe})\n"
+                                    f"- Co-signataires : {signataires}\n"
+                                    f"- Statut du texte : {statut_texte}\n"
+                                )
                             
-                            auteur_dict = res.get("auteur", {}) or {}
-                            nom = auteur_dict.get("nom", "")
-                            prenom = auteur_dict.get("prenom", "")
-                            groupe = (auteur_dict.get("groupePolitiqueRef") or {}).get("libelle", "Inconnu")
-                            nom_auteur = f"{prenom} {nom}".strip() or "Inconnu"
-                            
-                            dossier = res.get("dossierRef", {}) or {}
-                            statut_texte = dossier.get("titre", "Non renseigné")
-                            
-                            cosign = res.get("coSignataires", []) or []
-                            signataires = ", ".join([f"{s.get('prenom', '')} {s.get('nom', '')}".strip() for s in cosign]) if cosign else "Aucun"
-                            
-                            return (
-                                f"\n## CONTEXTE POLITIQUE (RAG API)\n"
-                                f"- Auteur : {nom_auteur} ({groupe})\n"
-                                f"- Co-signataires : {signataires}\n"
-                                f"- Statut du texte : {statut_texte}\n"
-                            )
-                        
-                        contexte_rag = await asyncio.to_thread(fetch_rag)
-                    except Exception as e:
-                        logging.warning(f"RAG echoué pour {amend.amendement_uid}: {e}")
+                            contexte_rag = await asyncio.to_thread(fetch_rag)
+                        except Exception as e:
+                            logging.warning(f"RAG echoué pour {amend.amendement_uid}: {e}")
 
                     amend_dict = {
                         "amendement": {
@@ -1026,7 +1032,7 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                                 llm_endpoint=valid_endpoint,
                                 model=modele_llm, api_key=cle_llm,
                                 key_source=source_cle,
-                                timeout=120.0, max_tokens=min(payload.max_tokens or 200, 200), temperature=payload.temperature,
+                                timeout=120.0, max_tokens=min(payload.max_tokens or 350, 350), temperature=payload.temperature,
                                 texte_loi_reference=amend.texte_loi_reference,
                             )
                             llm_data = resultat.model_dump()
@@ -1112,59 +1118,65 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
         target_rang = next((i for i, a in enumerate(enriched, start=1) if a.amendement_uid == payload.target_uid), 1)
 
         llm_data = None
-        if target.statut_mecanique == StatutMecanique.NOUVEAU:
+        if target.statut_mecanique == StatutMecanique.NOUVEAU and not target.skip_llm:
             cached = get_cached_classification(target.amendement_uid)
             if cached:
                 cached["cached"] = True
                 llm_data = cached
             else:
                 contexte_rag = ""
-                try:
-                    from api.tricoteuses_client import fetch_amendements, fetch_acteurs
-                    def fetch_rag():
-                        res = fetch_amendements(uid=target.amendement_uid, timeout=1.9)
-                        if not res: return "", "Inconnu", "", "Inconnu"
-                        
-                        amend_data = res.get("data", {})
-                        acteur_ref = amend_data.get("signataires", {}).get("auteur", {}).get("acteurRef")
-                        
-                        nom_auteur = "Inconnu"
-                        prenom_auteur = ""
-                        groupe = "Inconnu"
-                        
-                        if acteur_ref:
-                            try:
-                                acteur_res = fetch_acteurs(uid=acteur_ref, timeout=1.5)
-                                if acteur_res:
-                                    acteur_data = acteur_res.get("data", {})
-                                    ident = acteur_data.get("etatCivil", {}).get("ident", {})
-                                    nom_auteur = ident.get("nom", "Inconnu")
-                                    prenom_auteur = ident.get("prenom", "")
-                                    groupe = (acteur_data.get("groupePolitiqueRef") or acteur_data.get("groupe") or {}).get("libelle", "Inconnu")
-                            except Exception as e:
-                                logging.warning(f"RAG fetch_acteurs echoué pour {acteur_ref}: {e}")
-                        
-                        nom_complet = f"{prenom_auteur} {nom_auteur}".strip() or "Inconnu"
-                        dossier = amend_data.get("dossierRef", {}) or {}
-                        statut_texte = dossier.get("titre", "Non renseigné")
-                        cosign = amend_data.get("signataires", {}).get("cosignataires", []) or []
-                        signataires = f"{len(cosign)} cosignataires" if cosign else "Aucun"
-                        
-                        contexte = (
-                            f"\n## CONTEXTE POLITIQUE (RAG API)\n"
-                            f"- Auteur : {nom_complet} ({groupe})\n"
-                            f"- Co-signataires : {signataires}\n"
-                            f"- Statut du texte : {statut_texte}\n"
-                        )
-                        return contexte, nom_auteur, prenom_auteur, groupe
-                        
-                    contexte_rag, req_nom, req_prenom, req_groupe = await asyncio.to_thread(fetch_rag)
-                    if req_nom != "Inconnu":
-                        target.auteur_nom = req_nom
-                        target.auteur_prenom = req_prenom
-                        target.groupe_politique = req_groupe
-                except Exception as e:
-                    logging.warning(f"RAG global echoué pour {target.amendement_uid}: {e}")
+                # N'interroger Tricoteuses QUE si le corps du texte (dispositif/exposé) est totalement absent
+                has_text = bool(
+                    (target.dispositif_raw and target.dispositif_raw.strip())
+                    or (target.expose_sommaire and target.expose_sommaire.strip())
+                )
+                if not has_text:
+                    try:
+                        from api.tricoteuses_client import fetch_amendements, fetch_acteurs
+                        def fetch_rag():
+                            res = fetch_amendements(uid=target.amendement_uid, timeout=1.9)
+                            if not res: return "", "Inconnu", "", "Inconnu"
+                            
+                            amend_data = res.get("data", {})
+                            acteur_ref = amend_data.get("signataires", {}).get("auteur", {}).get("acteurRef")
+                            
+                            nom_auteur = "Inconnu"
+                            prenom_auteur = ""
+                            groupe = "Inconnu"
+                            
+                            if acteur_ref:
+                                try:
+                                    acteur_res = fetch_acteurs(uid=acteur_ref, timeout=1.5)
+                                    if acteur_res:
+                                        acteur_data = acteur_res.get("data", {})
+                                        ident = acteur_data.get("etatCivil", {}).get("ident", {})
+                                        nom_auteur = ident.get("nom", "Inconnu")
+                                        prenom_auteur = ident.get("prenom", "")
+                                        groupe = (acteur_data.get("groupePolitiqueRef") or acteur_data.get("groupe") or {}).get("libelle", "Inconnu")
+                                except Exception as e:
+                                    logging.warning(f"RAG fetch_acteurs echoué pour {acteur_ref}: {e}")
+                            
+                            nom_complet = f"{prenom_auteur} {nom_auteur}".strip() or "Inconnu"
+                            dossier = amend_data.get("dossierRef", {}) or {}
+                            statut_texte = dossier.get("titre", "Non renseigné")
+                            cosign = amend_data.get("signataires", {}).get("cosignataires", []) or []
+                            signataires = f"{len(cosign)} cosignataires" if cosign else "Aucun"
+                            
+                            contexte = (
+                                f"\n## CONTEXTE POLITIQUE (RAG API)\n"
+                                f"- Auteur : {nom_complet} ({groupe})\n"
+                                f"- Co-signataires : {signataires}\n"
+                                f"- Statut du texte : {statut_texte}\n"
+                            )
+                            return contexte, nom_auteur, prenom_auteur, groupe
+                            
+                        contexte_rag, req_nom, req_prenom, req_groupe = await asyncio.to_thread(fetch_rag)
+                        if req_nom != "Inconnu":
+                            target.auteur_nom = req_nom
+                            target.auteur_prenom = req_prenom
+                            target.groupe_politique = req_groupe
+                    except Exception as e:
+                        logging.warning(f"RAG global echoué pour {target.amendement_uid}: {e}")
 
                 amend_dict = {
                     "amendement": {
@@ -1209,7 +1221,7 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                         llm_endpoint=valid_endpoint,
                         model=modele_llm, api_key=cle_llm,
                         key_source=source_cle,
-                        timeout=120.0, max_tokens=min(payload.max_tokens or 200, 200), temperature=payload.temperature,
+                        timeout=120.0, max_tokens=min(payload.max_tokens or 350, 350), temperature=payload.temperature,
                         texte_loi_reference=target.texte_loi_reference,
                     )
 
