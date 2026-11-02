@@ -71,7 +71,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
   const [apiKey, setApiKey] = useState(currentSettings?.apiKey || '')
   const [localUrl, setLocalUrl] = useState(currentSettings?.localUrl || 'http://localhost:1234/v1')
   const [localModel, setLocalModel] = useState(currentSettings?.localModel || '')
-  const [groqModel, setGroqModel] = useState(currentSettings?.groqModel || '')
+  const [groqModel, setGroqModel] = useState(currentSettings?.groqModel || 'llama-3.3-70b-versatile')
   
   const [modelsList, setModelsList] = useState([])
   const [isFetchingModels, setIsFetchingModels] = useState(false)
@@ -83,7 +83,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
       setApiKey(currentSettings?.apiKey || '')
       setLocalUrl(currentSettings?.localUrl || 'http://localhost:1234/v1')
       setLocalModel(currentSettings?.localModel || '')
-      setGroqModel(currentSettings?.groqModel || '')
+      setGroqModel(currentSettings?.groqModel || 'llama-3.3-70b-versatile')
       setPingStatus(null)
     }
   }, [isOpen, currentSettings])
@@ -184,35 +184,57 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
         }
         if (provider === 'groq') headers['Authorization'] = `Bearer ${apiKey}`
 
-        const modelToTest = provider === 'local' ? localModel : groqModel
+        const modelToTest = provider === 'local' 
+          ? (localModel || 'local-model') 
+          : (groqModel || 'llama-3.3-70b-versatile')
 
         const res = await fetch(chatEndpoint, { 
           method: 'POST', 
           headers,
           body: JSON.stringify({
-            model: modelToTest || 'default',
+            model: modelToTest,
             messages: [{ role: 'user', content: 'ping' }],
             max_tokens: 1
           })
         })
         
-        if (!res.ok) throw new Error('Status ' + res.status)
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403) {
+            throw new Error('AUTH_ERROR')
+          }
+          throw new Error('Status ' + res.status)
+        }
 
         setPingStatus({ type: 'success', message: '🟢 Modèle chargé et connecté' })
         setTimeout(() => {
           setPingStatus(null)
-          onSave({ provider, apiKey: provider === 'groq_auto' ? '' : apiKey, localUrl, localModel, groqModel })
+          onSave({ 
+            provider, 
+            apiKey: apiKey.trim(), 
+            localUrl, 
+            localModel: localModel || 'local-model', 
+            groqModel: groqModel || 'llama-3.3-70b-versatile' 
+          })
           onClose()
         }, 1500)
         return
-      } catch {
-        setPingStatus({ type: 'error', message: '⚠️ Échec du chargement : Mémoire VRAM insuffisante ou modèle indisponible sur le serveur hôte.' })
+      } catch (err) {
+        const errorMsg = err?.message === 'AUTH_ERROR'
+          ? '⚠️ Clé API Groq invalide ou expirée.'
+          : '⚠️ Échec du chargement : Mémoire VRAM insuffisante ou modèle indisponible sur le serveur hôte.'
+        setPingStatus({ type: 'error', message: errorMsg })
         setTimeout(() => setPingStatus(null), 4000)
         return
       }
     }
     
-    onSave({ provider, apiKey: provider === 'groq_auto' ? '' : apiKey, localUrl, localModel, groqModel })
+    onSave({ 
+      provider, 
+      apiKey: apiKey.trim(), 
+      localUrl, 
+      localModel: localModel || 'local-model', 
+      groqModel: groqModel || 'llama-3.3-70b-versatile' 
+    })
     onClose()
   }
 

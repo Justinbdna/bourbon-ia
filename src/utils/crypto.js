@@ -44,3 +44,38 @@ export async function decrypt(base64) {
   const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext)
   return new TextDecoder().decode(decrypted)
 }
+
+/**
+ * Récupère et déchiffre les réglages IA sauvegardés dans localStorage.
+ * Supporte la version chiffrée (prioritaire) et la version en clair (repli).
+ */
+export async function getDecryptedSettings() {
+  if (typeof window === 'undefined' || !window.localStorage) return null
+
+  const cipher = localStorage.getItem('bourbon_ai_settings_encrypted')
+  if (cipher) {
+    try {
+      const json = await decrypt(cipher)
+      const parsed = JSON.parse(json)
+      if (parsed && typeof parsed === 'object') {
+        return parsed
+      }
+    } catch (e) {
+      console.warn('[Bourbon.ia] Impossible de déchiffrer bourbon_ai_settings_encrypted :', e)
+    }
+  }
+
+  const plain = localStorage.getItem('bourbon_ai_settings')
+  if (plain) {
+    try {
+      const parsed = JSON.parse(plain)
+      if (parsed && typeof parsed === 'object') {
+        return parsed
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return null
+}

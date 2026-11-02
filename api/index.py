@@ -455,23 +455,59 @@ class ResumeRequest(BaseModel):
 
 
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1"
+GROQ_DEFAULT_MODEL = "llama-3.3-70b-versatile"
+DEPRECATED_OR_DEFAULT_MODELS = {"", "default", "local-model", "llama3-8b-8192", "llama3-70b-8192"}
 
 
-def _parametres_llm(payload: "V2AnalyzeRequest | ResumeRequest") -> tuple[str, str]:
+def _parametres_llm(payload: Any) -> tuple[str, str, str, str]:
     """
-    Renvoie (endpoint, clé API) pour l'appel LLM.
+    Renvoie (endpoint, clé API, source_clé, modèle) pour l'appel LLM.
+    source_clé vaut 'payload', 'env' ou 'default'.
 
-    Mode « groq_auto » (démo publique) : la clé est lue dans la variable
-    d'environnement GROQ_API_KEY du serveur — jamais dans le code ni envoyée
-    au navigateur. L'endpoint est alors FORCÉ sur Groq : un client ne doit pas
-    pouvoir faire envoyer la clé du serveur vers une autre adresse.
+    Règles de priorité stricte :
+    1. Si payload.api_key est renseigné et non vide (hors placeholders 'local-key', 'cle-absente') :
+       priorité absolue -> api_key = payload.api_key.strip(), source_clé = 'payload'.
+    2. Sinon, si provider == 'groq_auto' ou si l'endpoint vise Groq :
+       repli sur la variable serveur os.environ.get('GROQ_API_KEY', '').strip(), source_clé = 'env'.
+    3. Sinon :
+       api_key = user_key or 'local-key', source_clé = 'payload' si user_key else 'default'.
     """
-    if payload.provider == "groq_auto":
-        cle = os.getenv("GROQ_API_KEY", "")
-        if not cle:
+    provider = getattr(payload, "provider", None) or "groq_auto"
+    raw_key = getattr(payload, "api_key", None)
+    user_key = str(raw_key).strip() if raw_key is not None else ""
+
+    if provider == "groq_auto":
+        endpoint = GROQ_ENDPOINT
+    else:
+        endpoint = getattr(payload, "llm_endpoint", None) or getattr(payload, "base_url", None) or "http://localhost:1234/v1"
+
+    is_groq = "api.groq.com" in endpoint or provider == "groq_auto"
+
+    if user_key and user_key not in ("local-key", "cle-absente"):
+        api_key = user_key
+        key_source = "payload"
+    elif is_groq:
+        env_key = os.getenv("GROQ_API_KEY", "").strip()
+        api_key = env_key
+        key_source = "env"
+        if not env_key:
             logging.warning("Mode groq_auto demandé mais GROQ_API_KEY absente de l'environnement serveur.")
-        return GROQ_ENDPOINT, cle or "cle-absente"
-    return payload.llm_endpoint or payload.base_url, payload.api_key
+    else:
+        api_key = user_key or "local-key"
+        key_source = "payload" if user_key else "default"
+
+    raw_model = getattr(payload, "model", None)
+    model_str = str(raw_model).strip() if raw_model is not None else ""
+
+    if is_groq:
+        if not model_str or model_str in DEPRECATED_OR_DEFAULT_MODELS:
+            model = GROQ_DEFAULT_MODEL
+        else:
+            model = model_str
+    else:
+        model = model_str or "local-model"
+
+    return endpoint, api_key, key_source, model
 
 
 def _inject_textes_reference(enriched_list: list[EnrichedAmendment], textes_ref: dict[str, str]):
@@ -941,13 +977,14 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                     
                     async with semaphore:
                         try:
-                            endpoint_llm, cle_llm = _parametres_llm(payload)  # groq_auto : clé serveur
+                            endpoint_llm, cle_llm, source_cle, modele_llm = _parametres_llm(payload)
                             valid_endpoint = validate_endpoint_url(endpoint_llm)
                             resultat = await asyncio.to_thread(
                                 evaluate_similitude,
                                 amend_dict, candidats,
                                 llm_endpoint=valid_endpoint,
-                                model=payload.model, api_key=cle_llm,
+                                model=modele_llm, api_key=cle_llm,
+                                key_source=source_cle,
                                 timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
                                 texte_loi_reference=amend.texte_loi_reference,
                             )
@@ -1122,25 +1159,56 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                 ]
                 
                 try:
-                    endpoint_llm, cle_llm = _parametres_llm(payload)  # groq_auto : clé serveur
+                    endpoint_llm, cle_llm, source_cle, modele_llm = _parametres_llm(payload)
                     valid_endpoint = validate_endpoint_url(endpoint_llm)
+
+                    if "api.groq.com" in valid_endpoint and not cle_llm:
+                        if source_cle == "payload":
+                            raise HTTPException(status_code=401, detail="Clé API Groq personnelle invalide ou expirée")
+                        else:
+                            raise HTTPException(
+                                status_code=503,
+                                detail="La clé Groq de la démo n'est pas encore configurée sur le serveur (GROQ_API_KEY).",
+                            )
+
                     resultat = await asyncio.to_thread(
                         evaluate_similitude,
                         amend_dict, candidats,
                         llm_endpoint=valid_endpoint,
-                        model=payload.model, api_key=cle_llm,
+                        model=modele_llm, api_key=cle_llm,
+                        key_source=source_cle,
                         timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
                         texte_loi_reference=target.texte_loi_reference,
                     )
+
+                    if "Clé API Groq personnelle invalide ou expirée" in resultat.analyse_intention:
+                        raise HTTPException(status_code=401, detail="Clé API Groq personnelle invalide ou expirée")
+                    elif "Clé API Groq Vercel du projet invalide" in resultat.analyse_intention:
+                        raise HTTPException(status_code=401, detail="Clé API Groq Vercel du projet invalide")
+
                     llm_data = resultat.model_dump()
                     save_classification(target.amendement_uid, llm_data)
+                except HTTPException:
+                    raise
                 except Exception as exc:
                     clean_exc = sanitize_log_message(str(exc), cle_llm)
                     logging.error(f"❌ LLM FAIL {target.amendement_uid} : {clean_exc}")
                     exc_str = clean_exc
                     exc_name = type(exc).__name__
-                    if "AuthenticationError" in exc_name or "401" in exc_str or "Invalid API Key" in exc_str or "invalid_api_key" in exc_str:
-                        error_msg = "⚠️ Clé API invalide ou expirée. Veuillez vérifier et mettre à jour votre clé dans les Réglages IA."
+                    if (
+                        "AuthenticationError" in exc_name
+                        or "PermissionDeniedError" in exc_name
+                        or "401" in exc_str
+                        or "403" in exc_str
+                        or "Invalid API Key" in exc_str
+                        or "invalid_api_key" in exc_str
+                    ):
+                        auth_msg = (
+                            "Clé API Groq personnelle invalide ou expirée"
+                            if source_cle == "payload"
+                            else "Clé API Groq Vercel du projet invalide"
+                        )
+                        raise HTTPException(status_code=401, detail=auth_msg)
                     else:
                         error_msg = "⚠️ Impossible de joindre l'IA (Serveur local ou tunnel Ngrok hors-ligne). Vérifiez vos réglages IA."
 
@@ -1192,12 +1260,15 @@ async def v2_resumer(payload: ResumeRequest):
     fiche de détail. Même choix d'IA que le classement (locale, clé
     utilisateur ou « Groq (Démo) » avec la clé du serveur).
     """
-    if payload.provider == "groq_auto" and not os.getenv("GROQ_API_KEY"):
-        raise HTTPException(
-            status_code=503,
-            detail="La clé Groq de la démo n'est pas encore configurée sur le serveur (GROQ_API_KEY).",
-        )
-    endpoint_llm, cle_llm = _parametres_llm(payload)
+    endpoint_llm, cle_llm, source_cle, modele_llm = _parametres_llm(payload)
+    if "api.groq.com" in endpoint_llm and not cle_llm:
+        if source_cle == "payload":
+            raise HTTPException(status_code=401, detail="Clé API Groq personnelle invalide ou expirée")
+        else:
+            raise HTTPException(
+                status_code=503,
+                detail="La clé Groq de la démo n'est pas encore configurée sur le serveur (GROQ_API_KEY).",
+            )
     try:
         resume = await asyncio.to_thread(
             resumer_amendement,
@@ -1206,12 +1277,25 @@ async def v2_resumer(payload: ResumeRequest):
             payload.article,
             payload.texte_loi_reference,
             endpoint_llm,
-            model=payload.model,
+            model=modele_llm,
             api_key=cle_llm,
+            key_source=source_cle,
         )
     except RuntimeError as exc:
         message = sanitize_log_message(str(exc), cle_llm)
         logging.warning(f"⚠️ Résumé impossible ({payload.amendement_uid}) : {message}")
+        if (
+            "Clé API Groq" in message
+            or "401" in message
+            or "403" in message
+            or "invalide" in message.lower()
+        ):
+            auth_msg = (
+                "Clé API Groq personnelle invalide ou expirée"
+                if source_cle == "payload"
+                else "Clé API Groq Vercel du projet invalide"
+            )
+            raise HTTPException(status_code=401, detail=auth_msg)
         raise HTTPException(status_code=502, detail=message)
     return {"amendement_uid": payload.amendement_uid, "resume": resume}
 

@@ -30,8 +30,8 @@ def _faux_openai(monkeypatch, reponse="Supprime l'article 3 bis. L'auteur vise Ã
     appels = []
 
     class FauxClient:
-        def __init__(self, base_url=None, api_key=None, timeout=None):
-            appels.append({"base_url": base_url, "api_key": api_key})
+        def __init__(self, base_url=None, api_key=None, timeout=None, **kwargs):
+            appels.append({"base_url": base_url, "api_key": api_key, "kwargs": kwargs})
             self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=self._create))
 
         def _create(self, **kwargs):
@@ -63,11 +63,23 @@ def test_resume_groq_demo_utilise_la_cle_serveur_et_force_groq(monkeypatch):
     appels = _faux_openai(monkeypatch)
 
     r = client.post("/api/v2/resumer", json={**PAYLOAD, "provider": "groq_auto",
-                                             "llm_endpoint": "https://site-pirate.example/v1", "api_key": "x"})
+                                             "llm_endpoint": "https://site-pirate.example/v1", "api_key": ""})
 
     assert r.status_code == 200
     assert appels[0]["base_url"] == "https://api.groq.com/openai/v1"
     assert appels[0]["api_key"] == "cle-serveur-factice"
+
+
+def test_resume_groq_priorite_cle_utilisateur(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "cle-serveur-factice")
+    appels = _faux_openai(monkeypatch)
+
+    r = client.post("/api/v2/resumer", json={**PAYLOAD, "provider": "groq_auto",
+                                             "llm_endpoint": "https://site-pirate.example/v1", "api_key": "cle-utilisateur-perso"})
+
+    assert r.status_code == 200
+    assert appels[0]["base_url"] == "https://api.groq.com/openai/v1"
+    assert appels[0]["api_key"] == "cle-utilisateur-perso"
 
 
 def test_resume_ia_locale_refusee_sur_vercel(monkeypatch):

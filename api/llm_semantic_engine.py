@@ -561,6 +561,7 @@ def evaluate_similitude(
     *,
     model: str = DEFAULT_MODEL,
     api_key: str = "local-key",
+    key_source: str = "payload",
     timeout: float = DEFAULT_TIMEOUT,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     temperature: float = DEFAULT_TEMPERATURE,
@@ -583,7 +584,26 @@ def evaluate_similitude(
         from openai import OpenAI
 
         effective_endpoint = validate_endpoint_url(llm_endpoint)
-        client = OpenAI(base_url=effective_endpoint, api_key=api_key, timeout=timeout)
+        is_groq = "api.groq.com" in effective_endpoint
+
+        if is_groq:
+            if not model or model in ("local-model", "default", "llama3-8b-8192", "llama3-70b-8192", ""):
+                model = "llama-3.3-70b-versatile"
+
+        clean_key = str(api_key).strip() if api_key else ""
+        default_headers = None
+        if is_groq or clean_key:
+            default_headers = {
+                "Authorization": f"Bearer {clean_key}",
+                "Content-Type": "application/json",
+            }
+
+        client = OpenAI(
+            base_url=effective_endpoint,
+            api_key=clean_key or "local-key",
+            timeout=timeout,
+            default_headers=default_headers,
+        )
         reponse = client.chat.completions.create(
             model=model,
             messages=[
@@ -600,8 +620,20 @@ def evaluate_similitude(
     except Exception as exc:
         exc_str = sanitize_log_message(str(exc), api_key)
         exc_name = type(exc).__name__
-        if "AuthenticationError" in exc_name or "401" in exc_str or "Invalid API Key" in exc_str or "invalid_api_key" in exc_str:
-            return _repli_nouveau("⚠️ Clé API invalide ou expirée. Veuillez vérifier et mettre à jour votre clé dans les Réglages IA.")
+        if (
+            "AuthenticationError" in exc_name
+            or "PermissionDeniedError" in exc_name
+            or "401" in exc_str
+            or "403" in exc_str
+            or "Invalid API Key" in exc_str
+            or "invalid_api_key" in exc_str
+        ):
+            auth_msg = (
+                "Clé API Groq personnelle invalide ou expirée"
+                if key_source == "payload"
+                else "Clé API Groq Vercel du projet invalide"
+            )
+            return _repli_nouveau(auth_msg)
         # Couvre APITimeoutError, APIConnectionError (LM Studio éteint, CORS,
         # pare-feu), erreurs HTTP, réponses inattendues du serveur local.
         return _repli_nouveau(f"{exc_name}: {exc_str[:180]}")
@@ -673,6 +705,7 @@ def resumer_amendement(
     *,
     model: str = DEFAULT_MODEL,
     api_key: str = "local-key",
+    key_source: str = "payload",
     timeout: float = 60.0,
 ) -> str:
     """
@@ -697,7 +730,27 @@ def resumer_amendement(
     try:
         from openai import OpenAI
 
-        client = OpenAI(base_url=validate_endpoint_url(llm_endpoint), api_key=api_key, timeout=timeout)
+        effective_endpoint = validate_endpoint_url(llm_endpoint)
+        is_groq = "api.groq.com" in effective_endpoint
+
+        if is_groq:
+            if not model or model in ("local-model", "default", "llama3-8b-8192", "llama3-70b-8192", ""):
+                model = "llama-3.3-70b-versatile"
+
+        clean_key = str(api_key).strip() if api_key else ""
+        default_headers = None
+        if is_groq or clean_key:
+            default_headers = {
+                "Authorization": f"Bearer {clean_key}",
+                "Content-Type": "application/json",
+            }
+
+        client = OpenAI(
+            base_url=effective_endpoint,
+            api_key=clean_key or "local-key",
+            timeout=timeout,
+            default_headers=default_headers,
+        )
         reponse = client.chat.completions.create(
             model=model,
             messages=[
@@ -716,14 +769,27 @@ def resumer_amendement(
         raise RuntimeError(sanitize_log_message(str(exc), api_key)) from None
     except Exception as exc:
         exc_str = sanitize_log_message(str(exc), api_key)
-        if "AuthenticationError" in type(exc).__name__ or "401" in exc_str or "invalid_api_key" in exc_str:
-            raise RuntimeError("Clé API invalide ou expirée. Vérifiez les Réglages IA.") from None
-        if "Connection" in type(exc).__name__:
+        exc_name = type(exc).__name__
+        if (
+            "AuthenticationError" in exc_name
+            or "PermissionDeniedError" in exc_name
+            or "401" in exc_str
+            or "403" in exc_str
+            or "invalid_api_key" in exc_str
+            or "Invalid API Key" in exc_str
+        ):
+            auth_msg = (
+                "Clé API Groq personnelle invalide ou expirée"
+                if key_source == "payload"
+                else "Clé API Groq Vercel du projet invalide"
+            )
+            raise RuntimeError(auth_msg) from None
+        if "Connection" in exc_name:
             raise RuntimeError(
                 "Serveur d'IA injoignable : vérifiez que LM Studio / Ollama est démarré, "
                 "ou choisissez « Groq (Démo) » dans les Réglages IA."
             ) from None
-        raise RuntimeError(f"IA indisponible ({type(exc).__name__}).") from None
+        raise RuntimeError(f"IA indisponible ({exc_name}).") from None
 
     if not resume:
         raise RuntimeError("Réponse vide de l'IA.")

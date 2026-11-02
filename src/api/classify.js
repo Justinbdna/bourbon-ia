@@ -1,3 +1,5 @@
+import { getDecryptedSettings } from '../utils/crypto'
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:8000')
 
 export class ClassifyError extends Error {
@@ -12,7 +14,7 @@ export async function normalizeAmendments(amendements) {
   const response = await fetch(`${API_BASE_URL}/api/normalize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-    body: JSON.stringify({ amendements, model: 'llama3-8b-8192' }),
+    body: JSON.stringify({ amendements, model: 'llama-3.3-70b-versatile' }),
   })
   if (!response.ok) {
     throw new ClassifyError(`Erreur de normalisation: ${await response.text()}`, response.status)
@@ -53,11 +55,12 @@ export async function analyzeSurtransposition(amendement, options = {}) {
 function reglagesLLM(aiSettings = {}) {
   const provider = aiSettings.provider || 'local'
   const localUrl = (aiSettings.localUrl || 'http://localhost:1234/v1').trim().replace(/\/+$/, '')
+  const apiKey = (aiSettings.apiKey || '').trim()
   return {
     model: provider === 'local' ? (aiSettings.localModel || 'local-model') : (aiSettings.groqModel || 'llama-3.3-70b-versatile'),
     provider,
     llm_endpoint: provider === 'local' ? localUrl : 'https://api.groq.com/openai/v1',
-    api_key: aiSettings.apiKey || 'local-key',
+    api_key: apiKey || (provider === 'local' ? 'local-key' : ''),
   }
 }
 
@@ -66,6 +69,20 @@ function reglagesLLM(aiSettings = {}) {
  * Lève ClassifyError avec un message lisible en cas d'échec.
  */
 export async function resumerAmendement(amendement, aiSettings = {}, options = {}) {
+  let settings = { ...aiSettings }
+  if (!settings.apiKey) {
+    try {
+      const decrypted = await getDecryptedSettings()
+      if (decrypted) {
+        settings = { ...decrypted, ...settings, apiKey: settings.apiKey || decrypted.apiKey || '' }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  console.log("[Bourbon.ia] Transmission clé IA :", settings?.apiKey ? "Clé personnalisée injectée" : "Clé serveur par défaut")
+
   const response = await fetch(`${API_BASE_URL}/api/v2/resumer`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
@@ -76,7 +93,7 @@ export async function resumerAmendement(amendement, aiSettings = {}, options = {
       dispositif: amendement.dispositif || '',
       expose_sommaire: amendement.expose_sommaire || '',
       texte_loi_reference: amendement.texte_loi_reference || null,
-      ...reglagesLLM(aiSettings),
+      ...reglagesLLM(settings),
     }),
   })
   if (!response.ok) {
@@ -105,9 +122,23 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
     onMechanical = () => {},
   } = options
 
+  let settings = { ...aiSettings }
+  if (!settings.apiKey) {
+    try {
+      const decrypted = await getDecryptedSettings()
+      if (decrypted) {
+        settings = { ...decrypted, ...settings, apiKey: settings.apiKey || decrypted.apiKey || '' }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  console.log("[Bourbon.ia] Transmission clé IA :", settings?.apiKey ? "Clé personnalisée injectée" : "Clé serveur par défaut")
+
   const payload = {
     amendements,
-    ...reglagesLLM(aiSettings),
+    ...reglagesLLM(settings),
     temperature: 0.1,
     max_tokens: 1024,
   }
