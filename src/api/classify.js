@@ -194,6 +194,18 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
 
       if (!resSingle.ok) {
         const errText = await resSingle.text().catch(() => 'Erreur API unitaire')
+        if (resSingle.status === 401 || resSingle.status === 503) {
+          let detail = errText
+          try {
+            detail = JSON.parse(errText).detail || errText
+          } catch {
+            // garde errText
+          }
+          throw new ClassifyError(
+            `${detail}. Ouvrez ⚙️ Réglages IA → 🔑 Clé API pour saisir votre clé Groq valide (gsk_...), ou mettez à jour GROQ_API_KEY dans Vercel puis redéployez.`,
+            resSingle.status
+          )
+        }
         throw new Error(errText)
       }
 
@@ -213,7 +225,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
       }
 
     } catch (err) {
-      if (err.name === 'AbortError') throw err
+      if (err.name === 'AbortError' || err.name === 'ClassifyError') throw err
       console.error(`Erreur LLM sur ${amd.id}:`, err)
 
       currentIdx++

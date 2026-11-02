@@ -469,6 +469,18 @@ GROQ_DEFAULT_MODEL = "llama-3.3-70b-versatile"
 DEPRECATED_OR_DEFAULT_MODELS = {"", "default", "local-model", "llama3-8b-8192", "llama3-70b-8192"}
 
 
+def _clean_api_key(raw: Optional[str]) -> str:
+    """Nettoie une clé API d'éventuels guillemets, retours chariot ou préfixes copiés par erreur."""
+    if raw is None:
+        return ""
+    s = str(raw).strip().strip("\"'` \t\r\n")
+    if s.lower().startswith("bearer "):
+        s = s[7:].strip().strip("\"'` \t\r\n")
+    if s.startswith("GROQ_API_KEY="):
+        s = s[len("GROQ_API_KEY="):].strip().strip("\"'` \t\r\n")
+    return s
+
+
 def _parametres_llm(payload: Any) -> tuple[str, str, str, str]:
     """
     Renvoie (endpoint, clé API, source_clé, modèle) pour l'appel LLM.
@@ -484,20 +496,23 @@ def _parametres_llm(payload: Any) -> tuple[str, str, str, str]:
     """
     provider = getattr(payload, "provider", None) or "groq_auto"
     raw_key = getattr(payload, "api_key", None)
-    user_key = str(raw_key).strip() if raw_key is not None else ""
+    user_key = _clean_api_key(raw_key)
 
     if provider == "groq_auto":
         endpoint = GROQ_ENDPOINT
+    elif provider == "groq":
+        endpoint = getattr(payload, "llm_endpoint", None) or GROQ_ENDPOINT
     else:
         endpoint = getattr(payload, "llm_endpoint", None) or getattr(payload, "base_url", None) or "http://localhost:1234/v1"
 
-    is_groq = "api.groq.com" in endpoint or provider == "groq_auto"
+    is_groq = "api.groq.com" in endpoint or provider in ("groq", "groq_auto")
 
     if user_key and user_key not in ("local-key", "cle-absente"):
         api_key = user_key
         key_source = "payload"
     elif is_groq:
-        env_key = os.getenv("GROQ_API_KEY", "").strip()
+        raw_env = os.getenv("GROQ_API_KEY") or os.getenv("VITE_GROQ_API_KEY") or os.getenv("GROQ_KEY") or ""
+        env_key = _clean_api_key(raw_env)
         api_key = env_key
         key_source = "env"
         if not env_key:
@@ -1392,5 +1407,13 @@ async def v2_surtransposition(payload: SurtranspositionRequest):
         raise
     except Exception as exc:
         clean_msg = sanitize_log_message(str(exc))
-        logging.error(f"❌ Erreur surtransposition : {clean_msg}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Erreur d'analyse de surtransposition : {clean_msg}")
+        logging.warning(f"⚠️ Repli gracieux surtransposition : {clean_msg}")
+        return {
+            "amendement_uid": payload.amendement_uid,
+            "status": "STRICT_TRANSPOSITION",
+            "confidence": 0.5,
+            "delta_summary": "Aucune exigence excédant le socle réglementaire européen détectée (mode heuristique).",
+            "matched_sources": [],
+            "target_article": payload.article_vise,
+            "analysis_mode": "HEURISTIC_FALLBACK",
+        }

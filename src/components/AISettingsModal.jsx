@@ -147,10 +147,16 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
         }
         
         if (isMounted && data && Array.isArray(data.data)) {
-          const filteredModels = data.data.filter(m => m.type !== 'embeddings' && !/embed|nomic|rerank/i.test(m.id))
+          const filteredModels = data.data.filter(
+            m => m.type !== 'embeddings' && !/embed|nomic|rerank|whisper|orpheus|guard|safeguard|tts|vision-preview/i.test(m.id)
+          )
           setModelsList(filteredModels)
           if (provider === 'local' && !localModel && filteredModels.length > 0) setLocalModel(filteredModels[0].id)
-          if (provider === 'groq' && !groqModel && filteredModels.length > 0) setGroqModel(filteredModels[0].id)
+          if (provider === 'groq' && filteredModels.length > 0 && (!groqModel || !filteredModels.some(m => m.id === groqModel))) {
+            const preferred = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'llama-3.3-70b-versatile', 'openai/gpt-oss-20b']
+            const best = preferred.find(p => filteredModels.some(m => m.id === p)) || filteredModels[0].id
+            setGroqModel(best)
+          }
         } else if (isMounted) {
           setModelsList([])
         }
@@ -206,35 +212,37 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
           }
         }
 
-        const chatEndpoint = effectiveProvider === 'local' 
-          ? `${localUrl.replace(/\/+$/, '').replace(/\/[vV]1$/, '')}/v1/chat/completions` 
-          : 'https://api.groq.com/openai/v1/chat/completions'
-
-        const headers = {
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true'
-        }
-        if (effectiveProvider === 'groq') headers['Authorization'] = `Bearer ${cleanKey}`
-
-        const modelToTest = effectiveProvider === 'local' 
-          ? (localModel || 'local-model') 
-          : (groqModel || 'llama-3.3-70b-versatile')
-
-        const res = await fetch(chatEndpoint, { 
-          method: 'POST', 
-          headers,
-          body: JSON.stringify({
-            model: modelToTest,
-            messages: [{ role: 'user', content: 'ping' }],
-            max_tokens: 1
+        if (effectiveProvider === 'groq') {
+          const res = await fetch('https://api.groq.com/openai/v1/models', {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${cleanKey}`,
+              'Content-Type': 'application/json',
+            }
           })
-        })
-        
-        if (!res.ok) {
-          if (res.status === 401 || res.status === 403) {
-            throw new Error('AUTH_ERROR')
+          if (!res.ok) {
+            if (res.status === 401 || res.status === 403) {
+              throw new Error('AUTH_ERROR')
+            }
+            throw new Error('Status ' + res.status)
           }
-          throw new Error('Status ' + res.status)
+        } else {
+          const chatEndpoint = `${localUrl.replace(/\/+$/, '').replace(/\/[vV]1$/, '')}/v1/chat/completions`
+          const res = await fetch(chatEndpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true'
+            },
+            body: JSON.stringify({
+              model: localModel || 'local-model',
+              messages: [{ role: 'user', content: 'ping' }],
+              max_tokens: 1
+            })
+          })
+          if (!res.ok) {
+            throw new Error('Status ' + res.status)
+          }
         }
 
         // Sauvegarde immédiate dès validation pour éviter toute perte si la modale est fermée
