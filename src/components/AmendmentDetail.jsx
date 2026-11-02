@@ -87,9 +87,26 @@ export default function AmendmentDetail({ amendment, onClose, isLoading, aiSetti
               {a.rectification ? ` ${a.rectification}` : ''}
             </span>
             {a.est_gage && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 px-2.5 py-0.5 text-xs font-semibold">
-                💰 Gagé (Art. 40)
+              <span
+                className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 px-2.5 py-0.5 text-xs font-semibold font-sans"
+                title={a.gage_detecte ? `Gage constitutionnel détecté : ${a.gage_detecte}` : "Amendement gagé au titre de l'Article 40 de la Constitution"}
+              >
+                💰 Gagé (Art. 40){a.gage_detecte ? ` · ${a.gage_detecte}` : ''}
               </span>
+            )}
+            {a.alerte_recevabilite_art40 && (
+              <div className="group relative inline-flex font-sans">
+                <span
+                  className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-200 border border-rose-300 dark:border-rose-700 px-2.5 py-0.5 text-xs font-semibold cursor-help"
+                  title={a.motif_art40 || "Risque d'irrecevabilité financière au titre de l'Article 40 de la Constitution : perte de recettes ou charge publique détectée sans gage valide."}
+                >
+                  ⚠️ Risque Irrecevabilité Art. 40 (Absence de gage financier)
+                </span>
+                <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 top-full left-0 mt-2 w-80 whitespace-normal bg-slate-900 text-white text-xs rounded-lg shadow-xl p-3 leading-relaxed">
+                  <p className="font-semibold text-rose-300 mb-1">⚖️ Audit Constitutionnel — Article 40</p>
+                  <p>{a.motif_art40 || "Perte de recettes publiques ou création de charge détectée sans formule de gage financier valide (Tabac, Alcool, DGF ou Sécurité sociale)."}</p>
+                </div>
+              </div>
             )}
           </h3>
         </div>

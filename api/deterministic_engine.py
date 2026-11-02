@@ -31,6 +31,19 @@ from typing import Any, Optional, Union
 from api.schemas import EnrichedAmendment, PointImpact, StatutMecanique
 
 try:
+    from api.legal_chapeau_parser import (
+        parse_chapeau,
+        calculer_priorite_derouleur,
+        auditer_recevabilite_art40,
+    )
+except ModuleNotFoundError:
+    from legal_chapeau_parser import (
+        parse_chapeau,
+        calculer_priorite_derouleur,
+        auditer_recevabilite_art40,
+    )
+
+try:
     from api.deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII
 except ModuleNotFoundError:
     try:
@@ -533,33 +546,18 @@ def _get_alinea_int_for_sort(amend: EnrichedAmendment) -> int:
 
 def get_article_internal_sort_key(amend: EnrichedAmendment) -> tuple:
     """
-    Ordre de priorité réglementaire strict de l'Assemblée nationale au sein d'un article :
-      1. SUPPRESSION_ARTICLE
-      2. REDACTION_GLOBALE_ARTICLE
-      3. Numéro d'alinéa croissant (avec suppression alinéa < rédaction alinéa < point restreint)
-      4. Amendements de commission / rapporteur prioritaires
-      5. Ordre de dépôt
+    Ordre de priorité réglementaire strict de l'Assemblée nationale et du Sénat
+    au Dérouleur de séance sur un article donné :
+      1. Priorité mathématique au dérouleur (`calculer_priorite_derouleur`) :
+         - 10 : Suppression totale de l'article
+         - 20 : Rédaction globale de l'article
+         - 30 + (alinea_num * 10) + rang_phrase : Corps de l'article (alinéa 1..N, phrase 1..M)
+         - 800 : Compléter l'article in fine
+         - 900 : Article additionnel
+      2. Amendements de commission / rapporteur prioritaires à portée égale
+      3. Ordre de dépôt
     """
-    if amend.point_impact == PointImpact.SUPPRESSION_ARTICLE:
-        prio_type = 1
-        alinea_num = 0
-        sub_type = 0
-    elif amend.point_impact == PointImpact.REDACTION_GLOBALE_ARTICLE:
-        prio_type = 2
-        alinea_num = 0
-        sub_type = 0
-    else:
-        prio_type = 3
-        alinea_num = _get_alinea_int_for_sort(amend)
-        if amend.point_impact == PointImpact.SUPPRESSION_ALINEA:
-            sub_type = 1
-        elif amend.point_impact == PointImpact.REDACTION_ALINEA:
-            sub_type = 2
-        elif amend.point_impact == PointImpact.POINT_RESTREINT:
-            sub_type = 3
-        else:
-            sub_type = 4
-
+    derouleur_key = calculer_priorite_derouleur(amend)
     prio_rapporteur = 0 if amend.est_rapporteur else 1
 
     depot_num = 999999
@@ -575,7 +573,7 @@ def get_article_internal_sort_key(amend: EnrichedAmendment) -> tuple:
         if m:
             depot_num = int(m.group())
 
-    return (prio_type, alinea_num, sub_type, prio_rapporteur, depot_num, str(amend.numero_long or amend.amendement_uid))
+    return (derouleur_key, prio_rapporteur, depot_num, str(amend.numero_long or amend.amendement_uid))
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -608,8 +606,28 @@ def process_deterministic_sorting(
         priority, impact = classify_point_impact(amend.dispositif_clean)
         amend.point_impact = impact
 
-        # Détection du gage financier Art. 40
-        amend.est_gage = detect_gage_financier(amend.dispositif_raw or amend.dispositif_clean, amend.raw_dict)
+        # Analyse syntaxique du chapeau (AN / Sénat) et calcul de priorité au dérouleur
+        texte_source = amend.dispositif_raw or amend.dispositif_clean
+        chapeau_info = parse_chapeau(texte_source)
+        amend.verbe_action = chapeau_info.verbe_action or None
+        amend.cible_type = chapeau_info.cible_type or None
+        amend.alinea_num = chapeau_info.alinea_num
+        amend.rang_phrase = chapeau_info.rang_phrase
+        amend.occurrence_mots = chapeau_info.occurrence_mots
+        if chapeau_info.alinea_num is not None and not amend.alinea_vise:
+            amend.alinea_vise = str(chapeau_info.alinea_num)
+
+        prio_tuple = calculer_priorite_derouleur(amend)
+        amend.priorite_derouleur = prio_tuple[0]
+
+        # Audit constitutionnel de recevabilité financière (Article 40) et détection de gage
+        audit_40 = auditer_recevabilite_art40(texte_source, amend.raw_dict)
+        amend.alerte_recevabilite_art40 = audit_40["alerte_recevabilite_art40"]
+        amend.motif_art40 = audit_40["motif_art40"]
+        amend.gage_detecte = audit_40["gage_detecte"]
+        amend.est_gage = bool(audit_40["gage_detecte"]) or detect_gage_financier(
+            texte_source, amend.raw_dict
+        )
 
         # Extraction du rattachement de sous-amendement si présent dans raw_dict
         if not amend.amendement_parent_ref and amend.raw_dict:

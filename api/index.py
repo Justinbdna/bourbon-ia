@@ -32,6 +32,11 @@ try:
         detect_gage_financier,
         get_article_sort_key,
     )
+    from api.legal_chapeau_parser import (
+        parse_chapeau,
+        calculer_priorite_derouleur,
+        auditer_recevabilite_art40,
+    )
     from api.schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
     from api.llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
     from api.cache_manager import get_cached_classification, save_classification
@@ -46,6 +51,11 @@ except ModuleNotFoundError:
         strip_html_for_display,
         detect_gage_financier,
         get_article_sort_key,
+    )
+    from legal_chapeau_parser import (
+        parse_chapeau,
+        calculer_priorite_derouleur,
+        auditer_recevabilite_art40,
     )
     from schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
     from llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
@@ -235,11 +245,25 @@ def _enrichir_a_import(resultat: dict, source: dict, signataires=None) -> dict:
             if resultat.get(champ):
                 resultat[champ] = strip_html_for_display(resultat[champ])
 
-        # ── Détection de gage financier au titre de l'Art. 40 ──
-        resultat["est_gage"] = detect_gage_financier(
-            resultat.get("dispositif", "") or source.get("dispositif", ""),
+        # ── Détection de gage financier et audit recevabilité Art. 40 ──
+        disp_texte = resultat.get("dispositif", "") or source.get("dispositif", "")
+        audit_40 = auditer_recevabilite_art40(disp_texte, source)
+        resultat["alerte_recevabilite_art40"] = audit_40["alerte_recevabilite_art40"]
+        resultat["motif_art40"] = audit_40["motif_art40"]
+        resultat["gage_detecte"] = audit_40["gage_detecte"]
+        resultat["est_gage"] = bool(audit_40["gage_detecte"]) or detect_gage_financier(
+            disp_texte,
             source,
         )
+
+        # ── Analyse syntaxique du chapeau et priorité au dérouleur ──
+        chapeau_info = parse_chapeau(disp_texte)
+        resultat["verbe_action"] = chapeau_info.verbe_action or None
+        resultat["cible_type"] = chapeau_info.cible_type or None
+        resultat["alinea_num"] = chapeau_info.alinea_num
+        resultat["rang_phrase"] = chapeau_info.rang_phrase
+        resultat["occurrence_mots"] = chapeau_info.occurrence_mots
+        resultat["priorite_derouleur"] = calculer_priorite_derouleur(resultat)[0]
 
         # ── Groupe politique (référentiel local des députés) ──
         if not resultat.get("groupe_politique"):
@@ -665,7 +689,9 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
     elif isinstance(p_ref, str) and p_ref.strip() and p_ref.lower() not in ("none", "null", "false"):
         amendement_parent_ref = p_ref.strip()
 
-    est_gage = detect_gage_financier(dispositif_raw, raw)
+    audit_40 = auditer_recevabilite_art40(dispositif_raw, raw)
+    est_gage = bool(audit_40["gage_detecte"]) or detect_gage_financier(dispositif_raw, raw)
+    chapeau_info = parse_chapeau(dispositif_raw or "")
 
     return EnrichedAmendment(
         amendement_uid=str(uid),
@@ -687,6 +713,14 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
         est_rapporteur=is_rapporteur,
         amendement_parent_ref=amendement_parent_ref,
         est_gage=est_gage,
+        alerte_recevabilite_art40=audit_40["alerte_recevabilite_art40"],
+        motif_art40=audit_40["motif_art40"],
+        gage_detecte=audit_40["gage_detecte"],
+        verbe_action=chapeau_info.verbe_action or None,
+        cible_type=chapeau_info.cible_type or None,
+        alinea_num=chapeau_info.alinea_num,
+        rang_phrase=chapeau_info.rang_phrase,
+        occurrence_mots=chapeau_info.occurrence_mots,
         # ── Commission + corrélation thématique (résolu hors-ligne) ──
         **_resoudre_commission(am, dispositif_raw, expose),
         raw_dict=raw,
@@ -740,8 +774,17 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         "isIdentical": amend.est_identique_officiel,
         "discussionId": amend.id_discussion_identique,
 
-        # ── Gage financier (Art. 40) et sous-amendements ──
+        # ── Gage financier (Art. 40), audit de recevabilité et sous-amendements ──
         "est_gage": amend.est_gage,
+        "alerte_recevabilite_art40": amend.alerte_recevabilite_art40,
+        "motif_art40": amend.motif_art40,
+        "gage_detecte": amend.gage_detecte,
+        "verbe_action": amend.verbe_action,
+        "cible_type": amend.cible_type,
+        "alinea_num": amend.alinea_num,
+        "rang_phrase": amend.rang_phrase,
+        "occurrence_mots": amend.occurrence_mots,
+        "priorite_derouleur": amend.priorite_derouleur,
         "amendement_parent_ref": amend.amendement_parent_ref,
         "amendementParentRef": amend.amendement_parent_ref,
 

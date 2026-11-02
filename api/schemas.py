@@ -111,6 +111,26 @@ class EnrichedAmendment(BaseModel):
     texte_loi_reference: Optional[str] = Field(None, description="Texte initial de l'article de loi de référence")
     amendement_parent_ref: Optional[str] = Field(None, description="Référence de l'amendement parent s'il s'agit d'un sous-amendement")
     est_gage: bool = Field(False, description="True si l'amendement comporte une formule de gage financier au titre de l'Art. 40")
+    alerte_recevabilite_art40: bool = Field(
+        False,
+        description="True si une perte de recettes ou création de charge est détectée sans gage constitutionnel valide (Art. 40)",
+    )
+    motif_art40: Optional[str] = Field(
+        None,
+        description="Motif détaillé du risque d'irrecevabilité financière au titre de l'Article 40",
+    )
+    gage_detecte: Optional[str] = Field(
+        None,
+        description="Libellé du gage financier constitutionnel détecté (Tabac, Alcool, DGF, Sécurité sociale)",
+    )
+
+    # ── Analyse syntaxique du chapeau et ordre au dérouleur (api/legal_chapeau_parser.py) ──
+    verbe_action: Optional[str] = Field(None, description="Verbe cardinal d'action du chapeau (SUPPRIMER, REDIGER_AINSI, etc.)")
+    cible_type: Optional[str] = Field(None, description="Cible anatomique du chapeau (ARTICLE, ALINEA, PHRASE, MOTS, etc.)")
+    alinea_num: Optional[int] = Field(None, description="Numéro de pastille d'alinéa en marge extrait du chapeau")
+    rang_phrase: Optional[int] = Field(None, description="Rang numérique de la phrase visée")
+    occurrence_mots: Optional[int] = Field(None, description="Nombre ou rang d'occurrences de mots visés")
+    priorite_derouleur: Optional[int] = Field(None, description="Priorité mathématique d'appel au dérouleur de séance")
     
     raw_dict: dict = Field(default_factory=dict, description="Données d'origine pour préserver les métadonnées")
 
