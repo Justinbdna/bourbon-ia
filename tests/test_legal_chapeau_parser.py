@@ -480,3 +480,4 @@ def test_integration_pipeline_enrichissement_et_frontend():
     assert "prise en charge par l'État" in front["motif_art40"]
     assert front["alinea_num"] == 2
     assert front["priorite_derouleur"] == 50
+

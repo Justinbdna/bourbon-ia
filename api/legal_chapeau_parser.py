@@ -1138,3 +1138,4 @@ def auditer_recevabilite_art40(dispositif: Any, raw_dict: Optional[dict] = None)
         "termes_risque": termes_detectes,
         "clause_credit_impot_presente": has_clause_credit_impot,
     }
+
