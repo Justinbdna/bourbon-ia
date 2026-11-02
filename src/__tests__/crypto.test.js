@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { encrypt, decrypt } from '../utils/crypto'
+import { encrypt, decrypt, bufferToBase64, base64ToBuffer } from '../utils/crypto'
 
 // Polyfill sessionStorage in Node environment
 const storage = new Map()
@@ -52,5 +52,30 @@ describe('crypto.js — Chiffrement AES-256-GCM', () => {
     // Altération de la chaîne base64
     const corrupted = encrypted.slice(0, -4) + 'AAAA'
     await expect(decrypt(corrupted)).rejects.toThrow()
+  })
+
+  it('chiffre et déchiffre une charge JSON lourde (> 2 Mo) sans RangeError (Maximum call stack size exceeded)', async () => {
+    // Création d'un payload > 2,2 Mo (dépasse largement la limite de pile ~65 Ko de Safari/WebKit)
+    const repeatBlock = JSON.stringify({
+      uid: 'AMANR5L17PO419604B1641P0D1N000137',
+      article: 'Article PREMIER',
+      dispositif: 'Supprimer cet article. '.repeat(40),
+    })
+    const heavyJson = '[' + Array.from({ length: 2200 }, () => repeatBlock).join(',') + ']'
+    expect(heavyJson.length).toBeGreaterThan(2 * 1024 * 1024)
+
+    const encrypted = await encrypt(heavyJson)
+    expect(typeof encrypted).toBe('string')
+    expect(encrypted.length).toBeGreaterThan(2 * 1024 * 1024)
+
+    const decrypted = await decrypt(encrypted)
+    expect(decrypted.length).toBe(heavyJson.length)
+    expect(decrypted.slice(0, 200)).toBe(heavyJson.slice(0, 200))
+
+    // Vérification directe des helpers par blocs de 8192 octets
+    const rawBuf = new Uint8Array(150_000).fill(65).buffer
+    const b64 = bufferToBase64(rawBuf)
+    const restoredBuf = base64ToBuffer(b64)
+    expect(restoredBuf.byteLength).toBe(150_000)
   })
 })

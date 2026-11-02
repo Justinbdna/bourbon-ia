@@ -1225,6 +1225,8 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                         raise HTTPException(status_code=401, detail="Clé API Groq personnelle invalide ou expirée")
                     elif "Clé API Groq Vercel du projet invalide" in resultat.analyse_intention:
                         raise HTTPException(status_code=401, detail="Clé API Groq Vercel du projet invalide")
+                    elif "RateLimitError" in resultat.analyse_intention or "429" in resultat.analyse_intention:
+                        raise HTTPException(status_code=429, detail="Limite de requêtes Groq atteinte (HTTP 429)")
 
                     llm_data = resultat.model_dump()
                     save_classification(target.amendement_uid, llm_data)

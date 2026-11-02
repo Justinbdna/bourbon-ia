@@ -115,6 +115,59 @@ describe('classify.js — Pipeline Orchestrateur Frontend V2', () => {
     expect(results[0].resultat_ia.alerte_couleur).toBe('rouge')
   })
 
+  it('classifyAmendmentsV2 effectue un retry automatique concluant après un statut HTTP 429 (Rate Limit)', async () => {
+    const mechanicalData = [
+      { id: 'AM-429', statut_mecanique: 'NOUVEAU', _skipLLM: false },
+    ]
+
+    const retriedLlmData = {
+      id: 'AM-429',
+      statut_mecanique: 'NOUVEAU',
+      resultat_ia: {
+        statut: 'Discussion commune',
+        analyse_intention: 'Succès après backoff exponentiel',
+        niveau_confiance: 0.96,
+      },
+    }
+
+    let llmCallCount = 0
+    globalThis.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/v2/mecanique')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => mechanicalData,
+        })
+      }
+      if (url.includes('/api/v2/analyser-llm')) {
+        llmCallCount++
+        if (llmCallCount === 1) {
+          return Promise.resolve({
+            ok: false,
+            status: 429,
+            text: async () => 'Rate limit exceeded',
+          })
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => retriedLlmData,
+        })
+      }
+      return Promise.reject(new Error(`Unexpected URL: ${url}`))
+    })
+
+    const results = await classifyAmendmentsV2(mechanicalData, {
+      aiSettings: { provider: 'groq_auto' },
+      throttleDelayMs: 5,
+      retryDelayMs: 10,
+    })
+
+    expect(llmCallCount).toBe(2)
+    expect(results.length).toBe(1)
+    expect(results[0].resultat_ia.statut).toBe('Discussion commune')
+    expect(results[0].resultat_ia.niveau_confiance).toBe(0.96)
+  })
+
   it('analyzeSurtransposition effectue un appel API valide et retourne les données', async () => {
     const mockResult = {
       status: 'STRICT_TRANSPOSITION',

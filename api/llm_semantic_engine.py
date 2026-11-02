@@ -117,9 +117,10 @@ DEFAULT_MAX_TOKENS: int = 1024              # doit couvrir le raisonnement + le 
 LOCAL_MAX_TOKENS: int = 256                 # budget restreint pour 8 Go RAM (KV-cache < 2048 tokens)
 DEFAULT_TEMPERATURE: float = 0.1            # tâche de jugement → quasi déterministe
 GROQ_FALLBACK_MODELS: tuple[str, ...] = (
-    "openai/gpt-oss-120b",
-    "qwen/qwen3.8-27b",
+    "llama-3.1-8b-instant",
     "openai/gpt-oss-20b",
+    "qwen/qwen3.8-27b",
+    "openai/gpt-oss-120b",
     "llama-3.3-70b-versatile",
 )
 
@@ -135,7 +136,8 @@ def _call_chat_completion_with_fallback(
 ) -> Any:
     """
     Exécute client.chat.completions.create avec repli automatique de modèle sur Groq
-    si le modèle demandé (ex. llama-3.3-70b-versatile) renvoie 404 model_not_found / décommissionné.
+    si le modèle demandé renvoie 404 model_not_found / décommissionné ou 429 rate_limit_exceeded.
+    Donne la priorité aux modèles légers à quota TPM élevé (llama-3.1-8b-instant, openai/gpt-oss-20b).
     """
     try:
         return client.chat.completions.create(
@@ -147,14 +149,17 @@ def _call_chat_completion_with_fallback(
     except Exception as first_exc:
         exc_msg = str(first_exc).lower()
         exc_type = type(first_exc).__name__
-        is_model_err = (
+        is_recoverable_groq_err = (
             "notfounderror" in exc_type.lower()
+            or "ratelimiterror" in exc_type.lower()
             or "model_not_found" in exc_msg
+            or "rate_limit" in exc_msg
+            or "429" in exc_msg
             or "decommissioned" in exc_msg
             or "does not exist" in exc_msg
             or "do not have access" in exc_msg
         )
-        if not is_groq or not is_model_err:
+        if not is_groq or not is_recoverable_groq_err:
             raise
         for fallback_model in GROQ_FALLBACK_MODELS:
             if fallback_model == model:
@@ -168,7 +173,15 @@ def _call_chat_completion_with_fallback(
                 )
             except Exception as fb_exc:
                 fb_msg = str(fb_exc).lower()
-                if "model_not_found" in fb_msg or "does not exist" in fb_msg or "do not have access" in fb_msg:
+                fb_type = type(fb_exc).__name__.lower()
+                if (
+                    "model_not_found" in fb_msg
+                    or "does not exist" in fb_msg
+                    or "do not have access" in fb_msg
+                    or "ratelimiterror" in fb_type
+                    or "rate_limit" in fb_msg
+                    or "429" in fb_msg
+                ):
                     continue
                 raise
         raise first_exc

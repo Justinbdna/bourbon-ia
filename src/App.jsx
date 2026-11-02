@@ -111,22 +111,32 @@ export default function App() {
     restore()
   }, [consentGiven])
 
-  // ─── Auto-save chiffré (debounce 3s pour éviter la saturation CPU pendant la classification) ───
+  // Helper d'écriture sécurisée dans localStorage (tolérant à QuotaExceededError)
+  async function persistEncryptedSession(dataToSave) {
+    if (!consentGiven || !Array.isArray(dataToSave) || dataToSave.length === 0) return
+    try {
+      const cipher = await encrypt(JSON.stringify(dataToSave))
+      try {
+        localStorage.setItem(STORAGE_KEY, cipher)
+      } catch (storageErr) {
+        console.warn('Quota localStorage dépassé ou écriture refusée (auto-save ignoré) :', storageErr)
+      }
+    } catch (e) {
+      console.warn('Échec de l\'auto-save chiffré.', e)
+    }
+  }
+
+  // ─── Auto-save chiffré (debounced 3s, neutralisé pendant la boucle unitaire) ───
   useEffect(() => {
-    if (!consentGiven || amendments.length === 0) return
+    if (!consentGiven || amendments.length === 0 || isClassifying) return
     let cancelled = false
     const debounceTimer = setTimeout(async () => {
-      try {
-        const cipher = await encrypt(JSON.stringify(amendments))
-        if (!cancelled) {
-          localStorage.setItem(STORAGE_KEY, cipher)
-        }
-      } catch (e) {
-        console.warn('Échec de l\'auto-save chiffré.', e)
+      if (!cancelled) {
+        await persistEncryptedSession(amendments)
       }
     }, 3000)
     return () => { cancelled = true; clearTimeout(debounceTimer) }
-  }, [amendments, consentGiven])
+  }, [amendments, consentGiven, isClassifying])
 
   // ─── Nettoyage au démontage (anti memory leak) ───
   useEffect(() => {
@@ -277,7 +287,7 @@ export default function App() {
           // Met à jour l'état avec le tri mécanique pur immédiatement
           setAmendments(mecResults)
         },
-        onProgress: (partialResult, idx, total) => {
+        onProgress: (partialResult, idx, total, snapshot) => {
           if (partialResult) {
             setCurrentAnalyzing({ 
               uid: partialResult.id, 
@@ -287,11 +297,16 @@ export default function App() {
             })
           }
           setProgressInfo(prev => prev ? { ...prev, current: idx, total } : null)
+          // Sauvegarde uniquement par paliers de 25 amendements ou à 100 %
+          if (Array.isArray(snapshot) && snapshot.length > 0 && idx > 0 && (idx % 25 === 0 || idx === total)) {
+            persistEncryptedSession(snapshot)
+          }
         },
       })
 
       // Le V2 retourne les amendements COMPLETS (pas juste resultat_ia)
       setAmendments(v2Results)
+      await persistEncryptedSession(v2Results)
       setCurrentAnalyzing(null)
 
     } catch (err) {

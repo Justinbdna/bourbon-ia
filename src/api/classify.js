@@ -121,6 +121,8 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
     signal,
     onProgress = () => {},
     onMechanical = () => {},
+    throttleDelayMs = 350,
+    retryDelayMs = 2500,
   } = options
 
   let settings = { ...aiSettings }
@@ -174,9 +176,15 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
   let currentIdx = 0
   const total = mecaniques.length
 
-  for (const amd of aTraiter) {
+  for (let i = 0; i < aTraiter.length; i++) {
+    const amd = aTraiter[i]
     if (signal?.aborted) {
       throw new DOMException('Aborted', 'AbortError')
+    }
+
+    // Délai de lissage incompressible de 350 ms entre deux requêtes vers /api/v2/analyser-llm
+    if (i > 0 && throttleDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, throttleDelayMs))
     }
 
     const singlePayload = {
@@ -185,12 +193,26 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
     }
 
     try {
-      const resSingle = await fetch(`${API_BASE_URL}/api/v2/analyser-llm`, {
+      let resSingle = await fetch(`${API_BASE_URL}/api/v2/analyser-llm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
         signal,
         body: JSON.stringify(singlePayload),
       })
+
+      // Gestion Anti-429 & Backoff Exponentiel (1 tentative de retry après 2,5 secondes)
+      if (resSingle.status === 429) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
+        if (signal?.aborted) {
+          throw new DOMException('Aborted', 'AbortError')
+        }
+        resSingle = await fetch(`${API_BASE_URL}/api/v2/analyser-llm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+          signal,
+          body: JSON.stringify(singlePayload),
+        })
+      }
 
       if (!resSingle.ok) {
         const errText = await resSingle.text().catch(() => 'Erreur API unitaire')
@@ -205,6 +227,28 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
             `${detail}. Ouvrez ⚙️ Réglages IA → 🔑 Clé API pour saisir votre clé Groq valide (gsk_...), ou mettez à jour GROQ_API_KEY dans Vercel puis redéployez.`,
             resSingle.status
           )
+        }
+        if (resSingle.status === 429) {
+          // Second échec 429 consécutif : marquer en attente sans bloquer le reste de l'ordonnancement
+          currentIdx++
+          const indexObj = resultatsGlobaux.findIndex(r => r.id === amd.id)
+          if (indexObj !== -1) {
+            const waitingRes = {
+              id: amd.id,
+              statut: 'Isolé',
+              analyse_intention: '⏳ En attente (Quota IA temporairement atteint — HTTP 429).',
+              analyse_politique: 'Mise en attente automatique suite au plafond de requêtes par minute.',
+              justification: 'Quota de tokens par minute atteint (HTTP 429).',
+              alerte_couleur: 'orange',
+              niveau_confiance: 0.0,
+            }
+            resultatsGlobaux[indexObj] = {
+              ...resultatsGlobaux[indexObj],
+              resultat_ia: waitingRes
+            }
+            onProgress(waitingRes, nb_classes + currentIdx, total, resultatsGlobaux)
+          }
+          continue
         }
         throw new Error(errText)
       }
@@ -221,7 +265,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
 
       // Remonter la progression au composant React
       if (res.resultat_ia) {
-        onProgress(res.resultat_ia, nb_classes + currentIdx, total, [])
+        onProgress(res.resultat_ia, nb_classes + currentIdx, total, resultatsGlobaux)
       }
 
     } catch (err) {
@@ -244,7 +288,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
           ...resultatsGlobaux[indexObj],
           resultat_ia: errorRes
         }
-        onProgress(errorRes, nb_classes + currentIdx, total, [])
+        onProgress(errorRes, nb_classes + currentIdx, total, resultatsGlobaux)
       }
     }
   }
