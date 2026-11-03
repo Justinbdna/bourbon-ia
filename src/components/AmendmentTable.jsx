@@ -341,6 +341,10 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                               onClick={(e) => {
                                 e.stopPropagation()
                                 if (onSelect) onSelect(a.id)
+                                setTimeout(() => {
+                                  const el = document.getElementById('ia-analysis-block') || document.getElementById('amendment-detail-section')
+                                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                                }, 50)
                               }}
                               className="text-[11px] px-2.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1 border border-purple-500/40 bg-purple-950/40 text-purple-300 hover:bg-purple-900/60 hover:border-purple-400 hover:text-purple-100 transition-all cursor-pointer mt-1"
                               title="Voir l'explication du conflit dans la fiche"
@@ -352,7 +356,12 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation()
+                                if (onSelect) onSelect(a.id)
                                 if (onAnalyzeSingle) onAnalyzeSingle(a.uid || a.id)
+                                setTimeout(() => {
+                                  const el = document.getElementById('ia-analysis-block') || document.getElementById('amendment-detail-section')
+                                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                                }, 50)
                               }}
                               className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline mt-1 inline-flex items-center gap-1 cursor-pointer transition-colors"
                               title="Expliquer la concurrence de fond avec l'IA"

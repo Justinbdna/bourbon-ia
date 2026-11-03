@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import ScrollableText from './ScrollableText'
 import ImpactBadge from './ImpactBadge'
 import GroupeBadge from './GroupeBadge'
@@ -8,7 +8,6 @@ import LegislativeContext from './amendment/LegislativeContext'
 import IdentiqueAlert from './amendment/IdentiqueAlert'
 import SkeletonLoader from './amendment/SkeletonLoader'
 import EUCompliancePanel from './amendment/EUCompliancePanel'
-import ResumeIA from './amendment/ResumeIA'
 import { analyzeSurtransposition } from '../api/classify'
 import { stripHtmlTags } from '../utils/sanitize'
 
@@ -30,7 +29,7 @@ export default function AmendmentDetail({
   amendment,
   onClose,
   isLoading,
-  aiSettings,
+  aiSettings: _aiSettings,
   onAnalyzeSingle,
   analyzingUids,
 }) {
@@ -77,21 +76,40 @@ export default function AmendmentDetail({
     )
   }
 
+  const iaBlockRef = useRef(null)
+
   const a = amendment
-  const res = a.resultat_ia
-  const statut = res?.statut || a.statut || ''
+  const res = a?.resultat_ia
+  const statut = res?.statut || a?.statut || ''
   const isDiscussionCommune = statut === 'Discussion commune' || statut === 'Incompatible'
-  const isConflitDecrypte = Boolean(a.explication_ia || res?.explication_ia)
-  const texteExplicationIA = a.explication_ia || res?.explication_ia || (isConflitDecrypte ? (a.justification || res?.justification) : null)
-  const isAnalyzingThis = Boolean(
-    analyzingUids && (
+  const isAnalyzed = Boolean(a?.explication_ia || res?.explication_ia)
+  const isAnalyzing = Boolean(
+    a && analyzingUids && (
       (typeof analyzingUids.has === 'function' && (analyzingUids.has(a.id) || analyzingUids.has(a.uid))) ||
       (Array.isArray(analyzingUids) && (analyzingUids.includes(a.id) || analyzingUids.includes(a.uid)))
     )
   )
 
+  const texteIA =
+    (typeof a?.justification === 'string' && a.justification.trim() ? a.justification.trim() : null) ||
+    (typeof res?.justification === 'string' && res.justification.trim() ? res.justification.trim() : null) ||
+    (typeof res?.analyse_intention === 'string' && res.analyse_intention.trim() ? res.analyse_intention.trim() : null)
+
+  const cibleNumero = a?.cible_numero || res?.cible_numero
+
+  const handleTriggerAnalysis = () => {
+    if (onAnalyzeSingle && a) {
+      onAnalyzeSingle(a.uid || a.id)
+    }
+    setTimeout(() => {
+      if (iaBlockRef.current) {
+        iaBlockRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }
+    }, 50)
+  }
+
   return (
-    <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 flex flex-col h-full">
+    <div id="amendment-detail-section" className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 flex flex-col h-full">
       <div className="border-b border-ink-100 dark:border-ink-700 px-5 py-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-wide text-ink-500 dark:text-ink-400">
@@ -216,43 +234,50 @@ export default function AmendmentDetail({
           </div>
         </div>
 
-        {/* ── Décryptage IA (pour discussion commune) ou Résumé IA classique ── */}
-        {isDiscussionCommune ? (
-          <section className="rounded-lg bg-slate-50 dark:bg-purple-950/20 border border-purple-300 dark:border-purple-800/50 p-4">
+        {/* ── Bloc IA unifié en tête de volet ── */}
+        <section
+          id="ia-analysis-block"
+          ref={iaBlockRef}
+          className="rounded-lg bg-slate-50 dark:bg-purple-950/20 border border-purple-300 dark:border-purple-800/50 p-4 transition-all"
+        >
+          <div className="flex items-center justify-between">
             <h4 className="font-display text-sm uppercase tracking-wide text-purple-900 dark:text-purple-300 font-semibold flex items-center gap-1.5">
-              <span>🤖</span> Décryptage du conflit (IA locale)
+              <span>{isDiscussionCommune ? '🤖' : '✨'}</span>
+              {isDiscussionCommune
+                ? 'DÉCRYPTAGE DU CONFLIT (IA LOCALE)'
+                : 'ANALYSE LÉGISTIQUE (IA LOCALE)'}
             </h4>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Traité par votre IA locale : le texte ne quitte pas votre poste.
-            </p>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Traité par votre IA locale : le texte ne quitte pas votre poste.
+          </p>
 
-            {isAnalyzingThis ? (
-              <div className="flex items-center gap-2 mt-3 text-xs text-amber-400">
-                <span className="inline-block animate-spin">⏳</span>
-                <span>Analyse sémantique du conflit en cours par l'IA...</span>
-              </div>
-            ) : isConflitDecrypte && texteExplicationIA ? (
-              <div className="mt-3 bg-purple-950/30 border border-purple-800/40 rounded-lg p-3 text-sm text-purple-200 leading-relaxed whitespace-pre-line">
-                {texteExplicationIA}
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onAnalyzeSingle && onAnalyzeSingle(a.uid || a.id)}
-                className="mt-3 text-xs font-medium px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors cursor-pointer"
-              >
-                ⚡ Décrypter ce conflit par IA
-              </button>
-            )}
-          </section>
-        ) : (
-          <ResumeIA key={a.id ?? a.uid} amendment={a} aiSettings={aiSettings} />
-        )}
+          {isAnalyzing ? (
+            <div className="text-xs text-amber-300 flex items-center gap-2 mt-3 font-medium">
+              <span className="inline-block animate-spin">⏳</span>
+              <span>Analyse sémantique en cours par l'IA...</span>
+            </div>
+          ) : isAnalyzed && texteIA ? (
+            <div className="mt-3 bg-purple-950/30 border border-purple-800/40 rounded-lg p-3">
+              <p className="text-sm text-purple-100 leading-relaxed whitespace-pre-line">{texteIA}</p>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleTriggerAnalysis}
+              className="mt-3 text-xs font-medium px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors cursor-pointer"
+            >
+              {isDiscussionCommune
+                ? '⚡ Décrypter ce conflit par IA'
+                : '⚡ Analyser l\'amendement par IA'}
+            </button>
+          )}
+        </section>
 
         {/* ── Conformité européenne (surtransposition) — panneau dépliable ── */}
         <EUCompliancePanel result={euCompliance || a.eu_compliance} />
 
-        {/* ── Résultat IA (avec Chain of Thought) ── */}
+        {/* ── Résultat du classement (Mécanique / Déterministe) ── */}
         <section className="rounded-md bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-3.5">
           <h4 className="font-display text-sm uppercase tracking-wide text-slate-900 dark:text-plume mb-2">
             Résultat du classement
@@ -263,7 +288,12 @@ export default function AmendmentDetail({
                 {(res?.rang != null || a.rang != null) && (
                   <span className="font-semibold text-slate-900 dark:text-plume">Rang {res?.rang ?? a.rang}</span>
                 )}
-                <GroupeBadge statut={res?.statut || a.statut} groupe={res?.groupe || a.groupe} type={res?.groupe?.type || a.groupe?.type} />
+                <GroupeBadge statut={statut} groupe={res?.groupe || a.groupe} type={res?.groupe?.type || a.groupe?.type} />
+                {cibleNumero && (
+                  <span className="text-xs text-slate-400 font-mono">
+                    Cible : n° {cibleNumero}
+                  </span>
+                )}
 
                 {/* ── 💡 Tooltip Chain of Thought ── */}
                 {res?.analyse_intention && (
@@ -286,16 +316,14 @@ export default function AmendmentDetail({
                   </div>
                 )}
               </div>
-              {isDiscussionCommune ? (
-                <p className="text-ink-700 dark:text-ink-300 text-xs">
-                  {a.justification_mecanique ||
-                    ((a.cible_numero || res?.cible_numero)
-                      ? `Discussion commune sur cette division avec l'amendement n° ${a.cible_numero || res?.cible_numero}.`
-                      : "Amendement en discussion commune.")}
-                </p>
-              ) : (
-                <p className="text-ink-700 dark:text-ink-300">{res?.justification || a.justification}</p>
-              )}
+              <p className="text-ink-700 dark:text-ink-300 text-xs">
+                {a.justification_mecanique ||
+                  (cibleNumero
+                    ? `Discussion commune sur cette division avec l'amendement n° ${cibleNumero}.`
+                    : statut === 'Identique'
+                    ? "Amendement détecté rigoureusement identique."
+                    : "Amendement isolé sur cette division.")}
+              </p>
             </div>
           ) : (
             <p className="text-sm text-ink-500 dark:text-ink-400 italic">

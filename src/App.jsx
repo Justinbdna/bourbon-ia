@@ -190,7 +190,7 @@ export default function App() {
     }
   }
 
-  const selected = amendments.find((a) => a.id === selectedId) || null
+  const selected = amendments.find((a) => a.id === selectedId || a.uid === selectedId) || null
 
   // Dossier législatif du lot courant : on prend la première référence trouvée.
   // Un lot d'amendements porte en pratique sur un seul texte ; l'amendement
@@ -292,6 +292,9 @@ export default function App() {
     if (!targetUid) return
     const target = amendments.find((a) => a.id === targetUid || a.uid === targetUid)
     const uid = target?.uid || target?.id || targetUid
+    if (target && selectedId !== target.id) {
+      setSelectedId(target.id)
+    }
     setClassifyError(null)
     setAnalyzingUids((prev) => new Set(prev).add(uid).add(targetUid))
     try {
