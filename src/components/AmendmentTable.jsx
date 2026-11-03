@@ -59,7 +59,7 @@ function estDoublon(a) {
   return a.statut_mecanique === 'DOUBLON_MECANIQUE' || a.resultat_ia?.statut === 'Doublon'
 }
 
-export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, onExportJson, onAnalyzeSingle }) {
+export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, analyzingUids, onExportJson, onAnalyzeSingle }) {
   const [currentPage, setCurrentPage] = useState(0)
   const [filtre, setFiltre] = useState({ motCle: '', auteur: '' })
   const [masquerEcartes, setMasquerEcartes] = useState(false)
@@ -253,6 +253,14 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               }
               auteursText = auteursText || '—'
 
+              const isAnalyzingSingle = Boolean(
+                analyzingUids && (
+                  (typeof analyzingUids.has === 'function' && (analyzingUids.has(a.id) || analyzingUids.has(a.uid))) ||
+                  (Array.isArray(analyzingUids) && (analyzingUids.includes(a.id) || analyzingUids.includes(a.uid)))
+                )
+              )
+              const isConflitDecrypte = Boolean(a.explication_ia || a.resultat_ia?.explication_ia)
+
               return (
                 <tr 
                   key={a.id ?? `fallback-${idx}`}
@@ -263,14 +271,14 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   onClick={() => onSelect && onSelect(a.id)}
                   className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22] border-l-4 border-l-[#D91227]' : 'dark:bg-[#0B0C10] hover:bg-slate-50 dark:hover:bg-gray-900/50'}`}
                 >
-                  <td className={`px-2 py-3.5 w-[80px] min-w-[80px] max-w-[80px] text-sm text-slate-800 dark:text-slate-200 truncate sticky left-0 z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.article}>{String(a.article || "—").replace(/^Article\s+/i, "")}</td>
-                  <td className={`px-2 py-3.5 w-[75px] min-w-[75px] max-w-[75px] text-xs text-slate-800 dark:text-slate-200 truncate sticky left-[80px] z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.numero}>{a.numero}</td>
-                  <td className={`px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-[180px] min-w-[180px] max-w-[180px] align-top sticky left-[155px] z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`}>
+                  <td className={`px-2 py-3.5 w-[80px] min-w-[80px] max-w-[80px] text-sm text-slate-800 dark:text-slate-200 truncate sticky left-0 z-10 align-middle ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.article}>{String(a.article || "—").replace(/^Article\s+/i, "")}</td>
+                  <td className={`px-2 py-3.5 w-[75px] min-w-[75px] max-w-[75px] text-xs text-slate-800 dark:text-slate-200 truncate sticky left-[80px] z-10 align-middle ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.numero}>{a.numero}</td>
+                  <td className={`px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-[180px] min-w-[180px] max-w-[180px] align-middle sticky left-[155px] z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`}>
                     <span className="break-words leading-snug" title={auteursText}>{auteursText}</span>
                   </td>
-                  <td className="px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-[90px] min-w-[90px] align-top">
+                  <td className="px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-[90px] min-w-[90px] align-middle">
                     {groupePolitique ? (
-                      <div className="flex items-start">
+                      <div className="flex items-center">
                         <PoliticalGroupTag
                           group={groupePolitique}
                           groupRef={a.groupe_politique_ref || a.groupRef}
@@ -280,7 +288,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       <span className="text-xs text-slate-400">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-[140px] min-w-[140px] align-top">
+                  <td className="px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-[140px] min-w-[140px] align-middle">
                     <ImpactBadge
                       type={
                         typeof a.point_impact === 'string'
@@ -289,7 +297,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       }
                     />
                   </td>
-                  <td className="px-3 py-3.5 text-sm w-[200px] min-w-[200px] max-w-[200px] align-top">
+                  <td className="px-3 py-3.5 text-sm w-[200px] min-w-[200px] max-w-[200px] align-middle">
                     <CommissionKeywords
                       commission={a.commission}
                       commissionLibelle={a.commission_libelle}
@@ -297,15 +305,15 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       horsChamp={a.commission_hors_champ}
                     />
                   </td>
-                  <td className="px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-auto min-w-[200px] align-top whitespace-normal break-words leading-snug"><ExtraitDispositif text={a.dispositif} /></td>
-                  <td className="px-3 py-3.5 text-sm w-[150px] min-w-[150px] align-top">
+                  <td className="px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-auto min-w-[200px] align-middle whitespace-normal break-words leading-snug"><ExtraitDispositif text={a.dispositif} /></td>
+                  <td className="px-3 py-3.5 text-sm w-[150px] min-w-[150px] align-middle">
                     <div className="flex flex-col items-start gap-1.5 py-1">
-                      <div className="flex items-center gap-1">
+                      <div className="inline-flex items-center gap-1.5">
                         <GroupeBadge statut={statutToDisplay} groupe={groupeStatut} isPending={isPending} />
                         {/* 💡 Tooltip Chain of Thought (inline) */}
                         {a.resultat_ia?.analyse_intention && (
-                          <div className="group relative inline-flex">
-                            <span className="cursor-help text-sm" title={a.resultat_ia.analyse_intention}>💡</span>
+                          <div className="group relative inline-flex items-center">
+                            <span className="cursor-help text-xs leading-none" title={a.resultat_ia.analyse_intention}>💡</span>
                             <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bottom-full right-0 mb-2 w-64 whitespace-normal bg-slate-900 text-white text-xs rounded-lg shadow-xl p-2.5 leading-relaxed">
                               <p className="font-semibold text-amber-300 mb-1">
                                 {(statutToDisplay === 'Identique' || a.resultat_ia.analyse_intention?.startsWith('Détecté mécaniquement')) ? '⚙️ Tri Mécanique' : '🧠 Raisonnement IA'}
@@ -322,17 +330,29 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
 
                       {/* Déclencheur contextuel pour expliciter la concurrence légistique */}
                       {statutToDisplay === 'Discussion commune' && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            if (onAnalyzeSingle) onAnalyzeSingle(a.id)
-                          }}
-                          className="text-xs text-blue-400 hover:underline mt-1 flex items-center gap-1 font-medium transition-colors"
-                          title="Expliquer la concurrence de fond avec l'IA"
-                        >
-                          🔍 Pourquoi ce conflit ? (IA)
-                        </button>
+                        <div>
+                          {isAnalyzingSingle ? (
+                            <span className="text-[11px] text-amber-400 inline-flex items-center gap-1">
+                              ⏳ Analyse en cours...
+                            </span>
+                          ) : isConflitDecrypte ? (
+                            <span className="text-[11px] text-emerald-400 inline-flex items-center gap-1">
+                              ✓ Conflit décrypté
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (onAnalyzeSingle) onAnalyzeSingle(a.uid || a.id)
+                              }}
+                              className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline mt-1 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Expliquer la concurrence de fond avec l'IA"
+                            >
+                              🔍 Décrypter le conflit
+                            </button>
+                          )}
+                        </div>
                       )}
 
                       {a.alerte_recevabilite_art40 && (
@@ -367,7 +387,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-3.5 w-[80px] min-w-[80px] text-right text-sm font-medium">
+                  <td className="px-3 py-3.5 w-[80px] min-w-[80px] text-right text-sm font-medium align-middle">
                     <button onClick={(e) => { e.stopPropagation(); if (onDelete) onDelete(a.id); }} className="text-gray-400 hover:text-red-600 transition-colors">Retirer</button>
                   </td>
                 </tr>

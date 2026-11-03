@@ -39,6 +39,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [progressInfo, setProgressInfo] = useState(null)
   const [lastMechanicalSummary, setLastMechanicalSummary] = useState(null)
+  const [analyzingUids, setAnalyzingUids] = useState(() => new Set())
   const [showCloudWarning, setShowCloudWarning] = useState(false)
 
   // Consentement RGPD (sessionStorage = volatile)
@@ -289,12 +290,15 @@ export default function App() {
 
   async function handleAnalyzeSingle(targetUid) {
     if (!targetUid) return
+    const target = amendments.find((a) => a.id === targetUid || a.uid === targetUid)
+    const uid = target?.uid || target?.id || targetUid
     setClassifyError(null)
+    setAnalyzingUids((prev) => new Set(prev).add(uid).add(targetUid))
     try {
-      const resIa = await analyzeSingleAmendment(targetUid, amendments, aiSettings)
-      setAmendments(prev => {
-        const next = prev.map(a => {
-          if (a.id !== targetUid && a.uid !== targetUid) return a
+      const resIa = await analyzeSingleAmendment(uid, amendments, aiSettings)
+      setAmendments((prev) => {
+        const next = prev.map((a) => {
+          if (a.id !== targetUid && a.uid !== targetUid && a.id !== uid && a.uid !== uid) return a
           const newJustif = resIa?.justification || resIa?.analyse_intention || a.justification
           const preservedStatut = a.resultat_ia?.statut || a.statut || resIa?.statut
           const preservedGid = a.groupe_conflit_id ?? a.resultat_ia?.groupe_conflit_id ?? resIa?.groupe_conflit_id
@@ -306,6 +310,7 @@ export default function App() {
             groupe_conflit_id: preservedGid,
             cible_numero: preservedCible,
             justification: newJustif,
+            explication_ia: true,
             resultat_ia: {
               ...a.resultat_ia,
               ...resIa,
@@ -314,6 +319,7 @@ export default function App() {
               cible_numero: preservedCible,
               groupe: preservedGroupe,
               justification: newJustif,
+              explication_ia: true,
             },
           }
         })
@@ -323,6 +329,13 @@ export default function App() {
     } catch (err) {
       console.error(`Erreur analyse unitaire sur ${targetUid}:`, err)
       setClassifyError(err.message || `Impossible d'analyser l'amendement ${targetUid}.`)
+    } finally {
+      setAnalyzingUids((prev) => {
+        const next = new Set(prev)
+        next.delete(uid)
+        next.delete(targetUid)
+        return next
+      })
     }
   }
 
@@ -594,6 +607,7 @@ export default function App() {
               onDelete={handleDelete}
               onDeleteDoublons={handleDeleteDoublons}
               isClassifying={isClassifying}
+              analyzingUids={analyzingUids}
               onExportJson={handleExport}
               onAnalyzeSingle={handleAnalyzeSingle}
             />
