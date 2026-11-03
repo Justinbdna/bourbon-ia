@@ -149,10 +149,10 @@ export default function AmendmentDetail({ amendment, onClose, isLoading, aiSetti
           />
         )}
 
-        <div className="flex flex-wrap gap-4 text-sm">
+        <div className="flex flex-wrap items-center gap-4 py-2 text-sm text-slate-300">
           {/* ── Auteur enrichi ── */}
           <div>
-            <p className="text-ink-500 dark:text-ink-400 text-xs mb-1">Auteur(s)</p>
+            <span className="text-xs text-slate-400 block mb-0.5">Auteur(s)</span>
             {a.auteur_nom && a.auteur_nom !== "Inconnu" ? (
               <AuthorBadge data={{
                 auteur_nom: a.auteur_nom,
@@ -160,32 +160,42 @@ export default function AmendmentDetail({ amendment, onClose, isLoading, aiSetti
                 auteur_trigramme: a.auteur_trigramme
               }} />
             ) : (
-              <div className="max-h-24 overflow-y-auto text-sm bg-gray-100 text-slate-900 dark:bg-[#1A1B22] dark:text-white border border-gray-300 dark:border-gray-700 p-2 rounded mt-1">
-                <p className="font-medium">
+              <div className="inline-flex items-center px-2.5 py-1 text-xs font-medium bg-gray-100 text-slate-900 dark:bg-[#1A1B22] dark:text-white border border-gray-300 dark:border-gray-700 rounded-md">
+                <span>
                   {a.rapporteur ? 'Rapporteur — ' : ''}
                   {(a.auteurs || []).join(', ') || '—'}
-                </p>
+                </span>
               </div>
             )}
           </div>
 
           {/* ── Groupe politique ── */}
           <div>
-            <p className="text-ink-500 dark:text-ink-400 text-xs mb-1">Groupe</p>
-            <PoliticalGroupTag
-              group={a.groupe_politique || (typeof a.groupe === 'string' ? a.groupe : '')}
-              groupRef={a.groupRef ?? a.groupe_politique_ref}
-              auteurs={a.auteurs}
-            />
+            <span className="text-xs text-slate-400 block mb-0.5">Groupe</span>
+            <div className="flex items-center">
+              <PoliticalGroupTag
+                group={a.groupe_politique || (typeof a.groupe === 'string' ? a.groupe : '')}
+                groupRef={a.groupRef ?? a.groupe_politique_ref}
+                auteurs={a.auteurs}
+                className="px-2.5 py-1 text-xs"
+              />
+            </div>
           </div>
 
+          {/* ── Date de dépôt ── */}
           <div>
-            <p className="text-ink-500 dark:text-ink-400 text-xs">Date de dépôt</p>
-            <p className="text-ink-900 dark:text-plume font-medium">{a.date_depot || '—'}</p>
+            <span className="text-xs text-slate-400 block mb-0.5">Date de dépôt</span>
+            <span className="inline-flex items-center px-1 py-1 text-xs font-medium text-slate-900 dark:text-slate-100">
+              {a.date_depot || '—'}
+            </span>
           </div>
+
+          {/* ── Point d'impact ── */}
           <div>
-            <p className="text-ink-500 dark:text-ink-400 text-xs">Point d'impact</p>
-            <ImpactBadge type={a.point_impact?.type} />
+            <span className="text-xs text-slate-400 block mb-0.5">Point d'impact</span>
+            <div className="flex items-center">
+              <ImpactBadge type={a.point_impact?.type} className="px-2.5 py-1 text-xs" />
+            </div>
           </div>
         </div>
 

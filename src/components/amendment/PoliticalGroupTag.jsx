@@ -76,7 +76,7 @@ export function resolvePoliticalGroup(group, groupRef, auteurs) {
   return '';
 }
 
-export default function PoliticalGroupTag({ group, groupRef, auteurs }) {
+export default function PoliticalGroupTag({ group, groupRef, auteurs, className = '' }) {
   const displayGroup = resolvePoliticalGroup(group, groupRef, auteurs);
   if (!displayGroup) return null;
 
@@ -87,7 +87,7 @@ export default function PoliticalGroupTag({ group, groupRef, auteurs }) {
   const colorClasses = GROUP_COLORS[foundKey] || GROUP_COLORS.DEFAULT;
 
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${colorClasses}`}>
+    <span className={`inline-flex items-center rounded text-xs font-medium border ${colorClasses} ${className || 'px-2 py-0.5'}`}>
       {displayGroup}
     </span>
   );
