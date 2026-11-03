@@ -59,7 +59,7 @@ function estDoublon(a) {
   return a.statut_mecanique === 'DOUBLON_MECANIQUE' || a.resultat_ia?.statut === 'Doublon'
 }
 
-export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, analyzingUids, onExportJson, onAnalyzeSingle }) {
+export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, analyzingUids, onExportJson, onAnalyzeSingle, onFocusConflict }) {
   const [currentPage, setCurrentPage] = useState(0)
   const [filtre, setFiltre] = useState({ motCle: '', auteur: '' })
   const [masquerEcartes, setMasquerEcartes] = useState(false)
@@ -346,11 +346,17 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                if (onSelect) onSelect(a.id)
-                                setTimeout(() => {
-                                  const el = document.getElementById('ia-analysis-block') || document.getElementById('amendment-detail-section')
-                                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                                }, 50)
+                                if (onFocusConflict) {
+                                  onFocusConflict(a)
+                                } else {
+                                  if (onSelect) onSelect(a.id)
+                                  requestAnimationFrame(() => {
+                                    setTimeout(() => {
+                                      const el = document.getElementById('decryptage-conflit-card') || document.getElementById('amendment-detail-container')
+                                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+                                    }, 60)
+                                  })
+                                }
                               }}
                               className="text-[11px] px-2.5 py-1 rounded-full font-semibold inline-flex items-center gap-1.5 border border-purple-500/50 bg-purple-950/50 text-purple-200 hover:bg-purple-800 hover:border-purple-300 hover:text-white transition-all duration-150 cursor-pointer mt-1 shadow-sm hover:shadow-purple-500/30 hover:scale-[1.03] active:scale-[0.97]"
                               title="Voir l'explication du conflit dans la fiche"
@@ -362,12 +368,18 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                if (onSelect) onSelect(a.id)
-                                if (onAnalyzeSingle) onAnalyzeSingle(a.uid || a.id)
-                                setTimeout(() => {
-                                  const el = document.getElementById('ia-analysis-block') || document.getElementById('amendment-detail-section')
-                                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                                }, 50)
+                                if (onFocusConflict) {
+                                  onFocusConflict(a)
+                                } else {
+                                  if (onSelect) onSelect(a.id)
+                                  if (onAnalyzeSingle) onAnalyzeSingle(a.uid || a.id)
+                                  requestAnimationFrame(() => {
+                                    setTimeout(() => {
+                                      const el = document.getElementById('decryptage-conflit-card') || document.getElementById('amendment-detail-container')
+                                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+                                    }, 60)
+                                  })
+                                }
                               }}
                               className="text-[11px] px-2.5 py-1 rounded-full font-semibold inline-flex items-center gap-1.5 border border-blue-500/50 bg-blue-950/40 text-blue-300 hover:bg-blue-600 hover:border-blue-300 hover:text-white transition-all duration-150 cursor-pointer mt-1 shadow-sm hover:shadow-blue-500/30 hover:scale-[1.03] active:scale-[0.97]"
                               title="Expliquer la concurrence de fond avec l'IA"

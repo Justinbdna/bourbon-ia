@@ -32,9 +32,11 @@ export default function AmendmentDetail({
   aiSettings: _aiSettings,
   onAnalyzeSingle,
   analyzingUids,
+  shouldFocusConflict,
 }) {
-  const iaBlockRef = useRef(null)
+  const decryptageCardRef = useRef(null)
   const [euCompliance, setEuCompliance] = useState(amendment?.eu_compliance || null)
+  const [isHighlighted, setIsHighlighted] = useState(false)
 
   useEffect(() => {
     let isCurrent = true
@@ -58,18 +60,39 @@ export default function AmendmentDetail({
     }
   }, [amendment])
 
+  // Défilement centré et feedback lumineux dès que le focus conflit est demandé
+  useEffect(() => {
+    if (shouldFocusConflict) {
+      setIsHighlighted(true)
+      const highlightTimer = setTimeout(() => {
+        setIsHighlighted(false)
+      }, 1500)
+
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const el = decryptageCardRef.current || document.getElementById('decryptage-conflit-card')
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+          }
+        }, 60)
+      })
+
+      return () => clearTimeout(highlightTimer)
+    }
+  }, [shouldFocusConflict])
+
   // Défilement automatique doux vers la fiche dès qu'un amendement est sélectionné
   useEffect(() => {
-    if (amendment) {
+    if (amendment && !shouldFocusConflict) {
       const timer = setTimeout(() => {
-        const el = iaBlockRef.current || document.getElementById('ia-analysis-block') || document.getElementById('amendment-detail-section')
+        const el = document.getElementById('amendment-detail-container') || decryptageCardRef.current
         if (el) {
           el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
         }
-      }, 50)
+      }, 60)
       return () => clearTimeout(timer)
     }
-  }, [amendment?.id, amendment?.uid])
+  }, [amendment?.id, amendment?.uid, shouldFocusConflict])
 
   // ── Safe Rendering : Skeleton si en cours de chargement ──
   if (isLoading) {
@@ -113,15 +136,20 @@ export default function AmendmentDetail({
     if (onAnalyzeSingle && a) {
       onAnalyzeSingle(a.uid || a.id)
     }
-    setTimeout(() => {
-      if (iaBlockRef.current) {
-        iaBlockRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-      }
-    }, 50)
+    setIsHighlighted(true)
+    setTimeout(() => setIsHighlighted(false), 1500)
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const el = decryptageCardRef.current || document.getElementById('decryptage-conflit-card')
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+        }
+      }, 50)
+    })
   }
 
   return (
-    <div id="amendment-detail-section" className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 flex flex-col h-full">
+    <div id="amendment-detail-container" className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 flex flex-col h-full">
       <div className="border-b border-ink-100 dark:border-ink-700 px-5 py-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-wide text-ink-500 dark:text-ink-400">
@@ -248,9 +276,13 @@ export default function AmendmentDetail({
 
         {/* ── Bloc IA unifié en tête de volet ── */}
         <section
-          id="ia-analysis-block"
-          ref={iaBlockRef}
-          className="rounded-lg bg-slate-50 dark:bg-purple-950/20 border border-purple-300 dark:border-purple-800/50 p-4 transition-all"
+          id="decryptage-conflit-card"
+          ref={decryptageCardRef}
+          className={`scroll-mt-24 rounded-lg bg-slate-50 dark:bg-purple-950/20 border transition-all duration-700 p-4 ${
+            isHighlighted
+              ? 'ring-2 ring-purple-400 ring-offset-2 ring-offset-slate-900 border-purple-400 shadow-xl shadow-purple-950/60 scale-[1.01]'
+              : 'border-purple-300 dark:border-purple-800/50 shadow-sm'
+          }`}
         >
           <div className="flex items-center justify-between">
             <h4 className="font-display text-sm uppercase tracking-wide text-purple-900 dark:text-purple-300 font-semibold flex items-center gap-1.5">

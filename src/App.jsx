@@ -42,6 +42,7 @@ export default function App() {
   const [lastMechanicalSummary, setLastMechanicalSummary] = useState(null)
   const [analyzingUids, setAnalyzingUids] = useState(() => new Set())
   const [showCloudWarning, setShowCloudWarning] = useState(false)
+  const [focusConflictTrigger, setFocusConflictTrigger] = useState(0)
 
   // Consentement RGPD (sessionStorage = volatile)
   const [consentAsked, setConsentAsked] = useState(() => sessionStorage.getItem('bourbon_consent') !== null)
@@ -343,6 +344,39 @@ export default function App() {
     }
   }
 
+  function handleFocusConflict(amendment) {
+    if (!amendment) return
+    const targetUid = amendment.uid || amendment.id
+    setSelectedId(amendment.id)
+    setFocusConflictTrigger((prev) => prev + 1)
+
+    // Si le conflit n'a pas encore été décrypté par l'IA, déclencher l'analyse unitaire
+    const isAlreadyDecrypted = Boolean(
+      amendment.explication_ia || amendment.resultat_ia?.explication_ia
+    )
+    if (!isAlreadyDecrypted && targetUid) {
+      handleAnalyzeSingle(targetUid)
+    }
+
+    // Double requestAnimationFrame + court setTimeout pour garantir le rendu complet du DOM par React
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const targetElement =
+            document.getElementById('decryptage-conflit-card') ||
+            document.getElementById('amendment-detail-container')
+          if (targetElement) {
+            targetElement.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center', // Centre parfaitement l'encart dans la fenêtre
+              inline: 'nearest',
+            })
+          }
+        }, 60)
+      })
+    })
+  }
+
   async function handleClassify() {
     // ── MODALE CLOUD BLOQUANTE ──
     if (aiSettings.provider !== 'local') {
@@ -614,6 +648,7 @@ export default function App() {
               analyzingUids={analyzingUids}
               onExportJson={handleExport}
               onAnalyzeSingle={handleAnalyzeSingle}
+              onFocusConflict={handleFocusConflict}
             />
           </div>
           <div className="w-full">
@@ -625,6 +660,7 @@ export default function App() {
                 aiSettings={aiSettings}
                 onAnalyzeSingle={handleAnalyzeSingle}
                 analyzingUids={analyzingUids}
+                shouldFocusConflict={focusConflictTrigger}
               />
             </ErrorBoundary>
           </div>
