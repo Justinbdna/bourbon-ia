@@ -143,10 +143,10 @@ def test_evaluate_similitude_mode_local_turbo(monkeypatch):
     )
 
     assert resultat.statut == "Isolé"
-    assert captured_kwargs.get("max_tokens") == 150
+    assert captured_kwargs.get("max_tokens") == 250
     assert captured_kwargs.get("stop") == LOCAL_STOP_SEQUENCES
     messages = captured_kwargs.get("messages", [])
     assert len(messages) >= 3
-    assert "greffier légistique" in messages[0]["content"]
+    assert "Administrateur légistique" in messages[0]["content"]
 
 

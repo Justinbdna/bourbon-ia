@@ -111,7 +111,7 @@ DEFAULT_ENDPOINT: str = "http://localhost:1234/v1"
 DEFAULT_MODEL: str = "local-model"          # placeholder accepté par LM Studio
 DEFAULT_TIMEOUT: float = 120.0
 DEFAULT_MAX_TOKENS: int = 350               # bridage optimisé à 350 tokens (marge raisonnement + fermeture JSON)
-LOCAL_MAX_TOKENS: int = 350                 # budget calibré pour 8 Go RAM (KV-cache < 2048 tokens)
+LOCAL_MAX_TOKENS: int = 250                 # marge de sécurité à 250 tokens pour prévenir finish_reason='length'
 DEFAULT_TEMPERATURE: float = 0.1            # tâche de jugement → quasi déterministe
 GROQ_DEFAULT_MODEL: str = "openai/gpt-oss-20b"
 GROQ_FALLBACK_MODELS: tuple[str, ...] = (
@@ -356,11 +356,10 @@ SYSTEM_PROMPT: str = (
 )
 
 LOCAL_SYSTEM_PROMPT: str = (
-    "Tu es le greffier légistique de l'Assemblée nationale.\n"
-    "Compare l'amendement candidat avec les amendements déjà déposés sur l'article.\n"
-    "Réponds STRICTEMENT par un unique objet JSON sur une seule ligne.\n"
-    'Gabarit obligatoire : {"statut":"Isolé"|"Identique"|"Discussion commune","confiance":0.9,"cible":null|"NUMERO","justification":"1 phrase max"}\n'
-    "Ne génère aucun texte avant ou après. N'écris pas d'autres objets."
+    "Administrateur légistique de séance. Compare l'amendement candidat aux amendements déposés sur le même article.\n"
+    "Réponds EXCLUSIVEMENT par un unique objet JSON fermé sur une ligne.\n"
+    'Schéma strict : {"statut":"Isolé"|"Identique"|"Discussion commune","confiance":0.85,"cible":null|"NUMERO","justification":"1 phrase concise"}\n'
+    "Interdiction absolue de générer du texte hors du JSON."
 )
 
 LOCAL_ONE_SHOT_MESSAGES: list[dict[str, str]] = [
@@ -732,7 +731,7 @@ def evaluate_similitude(
         is_local = _is_local_endpoint(effective_endpoint) or provider in ("local", "lmstudio")
 
         if is_local:
-            effective_max_tokens = min(max_tokens or 150, 150)
+            effective_max_tokens = min(max_tokens or 250, 250)
             messages = [
                 {"role": "system", "content": LOCAL_SYSTEM_PROMPT},
                 *LOCAL_ONE_SHOT_MESSAGES,

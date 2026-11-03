@@ -10,6 +10,7 @@ import AISettingsModal from './components/AISettingsModal'
 import ConsentModal from './components/ConsentModal'
 import { encrypt, decrypt } from './utils/crypto'
 import { compareArticles } from './utils/sanitize'
+import { startKeepAlive, stopKeepAlive } from './utils/keepAliveWorker'
 
 const STORAGE_KEY = 'bourbon_session_amendments'
 
@@ -48,6 +49,7 @@ export default function App() {
   const abortRef = useRef(false)
   const abortControllerRef = useRef(null)
   const timerRef = useRef(null)
+  const startTimeRef = useRef(null)
 
   const [aiSettings, setAiSettings] = useState({ provider: fournisseurIAParDefaut(), apiKey: '', localUrl: 'http://localhost:1234/v1' })
 
@@ -144,6 +146,7 @@ export default function App() {
       abortRef.current = true
       if (abortControllerRef.current) abortControllerRef.current.abort()
       if (timerRef.current) clearInterval(timerRef.current)
+      stopKeepAlive()
     }
   }, [])
 
@@ -271,12 +274,24 @@ export default function App() {
     const controller = new AbortController()
     abortControllerRef.current = controller
 
+    startTimeRef.current = Date.now()
     setProgressInfo({ current: 0, total: amendments.length, elapsed: 0 })
 
     if (timerRef.current) clearInterval(timerRef.current)
     timerRef.current = setInterval(() => {
-      setProgressInfo(prev => prev ? { ...prev, elapsed: prev.elapsed + 1 } : null)
-    }, 1000)
+      if (startTimeRef.current) {
+        const tempsEcoule = Math.floor((Date.now() - startTimeRef.current) / 1000)
+        setProgressInfo(prev => prev ? { ...prev, elapsed: tempsEcoule } : null)
+      }
+    }, 500)
+
+    // Neutralisation de l'App Nap et de la mise en veille d'arrière-plan de Safari
+    startKeepAlive(() => {
+      if (startTimeRef.current) {
+        const tempsEcoule = Math.floor((Date.now() - startTimeRef.current) / 1000)
+        setProgressInfo(prev => prev ? { ...prev, elapsed: tempsEcoule } : null)
+      }
+    })
 
     try {
       setCurrentAnalyzing({ uid: '', numero: '...', index: 0, total: amendments.length })
@@ -296,7 +311,8 @@ export default function App() {
               total 
             })
           }
-          setProgressInfo(prev => prev ? { ...prev, current: idx, total } : null)
+          const tempsEcoule = startTimeRef.current ? Math.floor((Date.now() - startTimeRef.current) / 1000) : 0
+          setProgressInfo(prev => prev ? { ...prev, current: idx, total, elapsed: tempsEcoule } : null)
           // Sauvegarde uniquement par paliers de 25 amendements ou à 100 %
           if (Array.isArray(snapshot) && snapshot.length > 0 && idx > 0 && (idx % 25 === 0 || idx === total)) {
             persistEncryptedSession(snapshot)
@@ -317,7 +333,9 @@ export default function App() {
         setClassifyError(err.message || 'Erreur inconnue lors du classement.')
       }
     } finally {
+      stopKeepAlive()
       if (timerRef.current) clearInterval(timerRef.current)
+      startTimeRef.current = null
       abortControllerRef.current = null
       setIsClassifying(false)
       setProgressInfo(null)

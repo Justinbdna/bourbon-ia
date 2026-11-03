@@ -10,11 +10,10 @@ export class ClassifyError extends Error {
   }
 }
 
-export const LOCAL_PROMPT_SYSTEM = `Tu es le greffier légistique de l'Assemblée nationale.
-Compare l'amendement candidat avec les amendements déjà déposés sur l'article.
-Réponds STRICTEMENT par un unique objet JSON sur une seule ligne.
-Gabarit obligatoire : {"statut":"Isolé"|"Identique"|"Discussion commune","confiance":0.9,"cible":null|"NUMERO","justification":"1 phrase max"}
-Ne génère aucun texte avant ou après. N'écris pas d'autres objets.`
+export const LOCAL_PROMPT_SYSTEM = `Administrateur légistique de séance. Compare l'amendement candidat aux amendements déposés sur le même article.
+Réponds EXCLUSIVEMENT par un unique objet JSON fermé sur une ligne.
+Schéma strict : {"statut":"Isolé"|"Identique"|"Discussion commune","confiance":0.85,"cible":null|"NUMERO","justification":"1 phrase concise"}
+Interdiction absolue de générer du texte hors du JSON.`
 
 export const LOCAL_ONE_SHOT_MESSAGES = [
   {
@@ -32,9 +31,9 @@ export const LOCAL_STOP_SEQUENCES = ['\n\n', '}\n', '\n{', '```']
 export const STATUTS_VALIDES = ['Isolé', 'Identique', 'Discussion commune']
 
 /**
- * Parseur JSON chirurgical résilient aux bavardages multi-lignes et balises Markdown de Mistral.
- * Extrait le premier bloc JSON valide { ... }, le parse et applique un repli vers "Isolé"
- * si le statut est manquant ou non conforme.
+ * Parseur JSON chirurgical résilient aux bavardages multi-lignes, balises Markdown et coupures de fin de token.
+ * Extrait le premier bloc JSON valide { ... }, tente une fermeture automatique si l'accolade a été tronquée,
+ * et applique un repli gracieux vers "Isolé" en cas d'impossibilité de parsing.
  */
 export function safeParseJson(rawText) {
   if (!rawText || typeof rawText !== 'string') {
@@ -48,9 +47,42 @@ export function safeParseJson(rawText) {
 
   // Nettoyage des éventuels blocs <think> et codeblocks
   const sansThink = rawText.replace(/<think>[\s\S]*?<\/think>/gi, ' ').replace(/```[a-z]*|```/gi, ' ')
-  const match = sansThink.match(/\{[\s\S]*?\}/)
+  let match = sansThink.match(/\{[\s\S]*?\}/)
+  let jsonString = match ? match[0] : null
 
-  if (!match) {
+  // Si pas d'accolade fermante complète, tentative de fermeture automatique résiliente
+  if (!jsonString) {
+    const debutIdx = sansThink.indexOf('{')
+    if (debutIdx !== -1) {
+      let extrait = sansThink.slice(debutIdx).trim()
+      let inString = false
+      let escaped = false
+      for (let i = 0; i < extrait.length; i++) {
+        const c = extrait[i]
+        if (inString) {
+          if (escaped) escaped = false
+          else if (c === '\\') escaped = true
+          else if (c === '"') inString = false
+        } else if (c === '"') {
+          inString = true
+        }
+      }
+      if (inString) {
+        extrait += '"'
+      }
+      if (!extrait.endsWith('}')) {
+        extrait += '}'
+      }
+      try {
+        JSON.parse(extrait)
+        jsonString = extrait
+      } catch {
+        // Réparation impossible, maintien de jsonString = null
+      }
+    }
+  }
+
+  if (!jsonString) {
     return {
       statut: 'Isolé',
       confiance: 0.0,
@@ -60,10 +92,10 @@ export function safeParseJson(rawText) {
   }
 
   try {
-    const parsed = JSON.parse(match[0])
+    const parsed = JSON.parse(jsonString)
     let statut = parsed.statut
     const rawConfiance = parsed.confiance ?? parsed.niveau_confiance
-    const confiance = typeof rawConfiance === 'number' ? rawConfiance : 0.9
+    const confiance = typeof rawConfiance === 'number' ? rawConfiance : 0.85
     let cible = parsed.cible || parsed.id_discussion_cible || null
     let justification = parsed.justification || parsed.analyse_intention || parsed.analyse_politique || ''
 
@@ -87,7 +119,7 @@ export function safeParseJson(rawText) {
 
     return {
       statut,
-      confiance: Math.min(1.0, Math.max(0.0, Number(confiance) || 0.9)),
+      confiance: Math.min(1.0, Math.max(0.0, Number(confiance) || 0.85)),
       cible: cible ? String(cible) : null,
       justification: justification || 'Classification sémantique enregistrée.',
     }
@@ -132,7 +164,7 @@ export function buildLocalChatPayload(amendement, candidats = [], options = {}) 
       { role: 'user', content: userMsg },
     ],
     temperature,
-    max_tokens: 150,
+    max_tokens: 250,
     stop: LOCAL_STOP_SEQUENCES,
   }
 }
@@ -276,7 +308,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
     amendements,
     ...llmConf,
     temperature: 0.1,
-    max_tokens: isLocal ? 150 : 350,
+    max_tokens: isLocal ? 250 : 350,
     ...(isLocal ? { stop: LOCAL_STOP_SEQUENCES } : {}),
   }
 
@@ -308,11 +340,13 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
   const resultatsGlobaux = [...mecaniques]
   const total = mecaniques.length
 
-  // Débridage des performances pour LM Studio sur Apple Silicon :
-  // - Mode local : 0 ms de délai inter-requête et pool de 3 workers asynchrones simultanés
-  // - Mode Groq / distant : cadence protectrice 1 200 ms et 1 worker séquentiel (anti-429)
-  const CONCURRENCY = isLocal ? 3 : 1
+  // Cadence séquentielle stricte (1 seul slot actif) :
+  // - Mode local : 1 worker séquentiel strict pour allouer 100 % de la mémoire unifiée et du GPU Metal (M1 Pro)
+  //   avec zéro sleep artificiel (0 ms) pour une cadence maximale continue sans à-coups.
+  // - Mode Groq / distant : cadence protectrice 1 200 ms et 1 worker séquentiel (anti-429).
+  const CONCURRENCY = 1
   const effectiveThrottleMs = isLocal ? 0 : throttleDelayMs
+  const unitTimeoutMs = isLocal ? 10000 : 45000
 
   let completedCount = 0
   let nextQueueIndex = 0
@@ -339,11 +373,24 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
         target_uid: amd.id,
       }
 
+      // Coupe-circuit unitaire (timeout strict de 10s en local pour éviter tout gel de file)
+      const unitController = new AbortController()
+      let isUnitTimeout = false
+      const timeoutId = setTimeout(() => {
+        isUnitTimeout = true
+        unitController.abort()
+      }, unitTimeoutMs)
+
+      const onGlobalAbort = () => unitController.abort()
+      if (signal) {
+        signal.addEventListener('abort', onGlobalAbort, { once: true })
+      }
+
       try {
         let resSingle = await fetch(`${API_BASE_URL}/api/v2/analyser-llm`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-          signal,
+          signal: unitController.signal,
           body: JSON.stringify(singlePayload),
         })
 
@@ -356,7 +403,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
           resSingle = await fetch(`${API_BASE_URL}/api/v2/analyser-llm`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-            signal,
+            signal: unitController.signal,
             body: JSON.stringify(singlePayload),
           })
         }
@@ -416,7 +463,35 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
         }
 
       } catch (err) {
-        if (err.name === 'AbortError' || err.name === 'ClassifyError') throw err
+        if (signal?.aborted) {
+          throw new DOMException('Aborted', 'AbortError')
+        }
+        if (err.name === 'ClassifyError') throw err
+
+        // Coupe-circuit unitaire activé (timeout local ou réseau)
+        if (isUnitTimeout || (err.name === 'AbortError' && isUnitTimeout)) {
+          console.warn(`[Bourbon.ia] Coupe-circuit activé : timeout ${unitTimeoutMs / 1000}s dépassé pour ${amd.id}`)
+          completedCount++
+          const indexObj = resultatsGlobaux.findIndex(r => r.id === amd.id)
+          if (indexObj !== -1) {
+            const timeoutRes = {
+              id: amd.id,
+              statut: 'Isolé',
+              analyse_intention: 'Délai de réponse dépassé en local (timeout 10s).',
+              analyse_politique: 'Traitement interrompu après expiration du délai d\'attente de 10s.',
+              justification: 'Délai de réponse dépassé en local (timeout 10s).',
+              alerte_couleur: 'gris',
+              niveau_confiance: 0.5,
+            }
+            resultatsGlobaux[indexObj] = {
+              ...resultatsGlobaux[indexObj],
+              resultat_ia: timeoutRes,
+            }
+            onProgress(timeoutRes, nb_classes + completedCount, total, [...resultatsGlobaux])
+          }
+          continue
+        }
+
         console.error(`Erreur LLM sur ${amd.id}:`, err)
 
         completedCount++
@@ -436,6 +511,11 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
             resultat_ia: errorRes,
           }
           onProgress(errorRes, nb_classes + completedCount, total, [...resultatsGlobaux])
+        }
+      } finally {
+        clearTimeout(timeoutId)
+        if (signal) {
+          signal.removeEventListener('abort', onGlobalAbort)
         }
       }
     }

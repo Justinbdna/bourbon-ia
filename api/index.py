@@ -1087,7 +1087,7 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                         try:
                             endpoint_llm, cle_llm, source_cle, modele_llm = _parametres_llm(payload)
                             valid_endpoint = validate_endpoint_url(endpoint_llm)
-                            effective_max_tok = 150 if payload.provider in ("local", "lmstudio") else min(payload.max_tokens or 350, 350)
+                            effective_max_tok = 250 if payload.provider in ("local", "lmstudio") else min(payload.max_tokens or 350, 350)
                             resultat = await asyncio.to_thread(
                                 evaluate_similitude,
                                 amend_dict, candidats,
@@ -1280,7 +1280,7 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                                 detail="La clé Groq de la démo n'est pas encore configurée sur le serveur (GROQ_API_KEY).",
                             )
 
-                    effective_max_tok = 150 if payload.provider in ("local", "lmstudio") else min(payload.max_tokens or 350, 350)
+                    effective_max_tok = 250 if payload.provider in ("local", "lmstudio") else min(payload.max_tokens or 350, 350)
                     resultat = await asyncio.to_thread(
                         evaluate_similitude,
                         amend_dict, candidats,

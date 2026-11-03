@@ -250,6 +250,16 @@ describe('classify.js — Pipeline Orchestrateur Frontend V2', () => {
       expect(res.justification).toContain('Réécriture concurrente.')
     })
 
+    it('safeParseJson répare automatiquement les JSON tronqués sans accolade fermante', () => {
+      // Cas typique de finish_reason: "length" où la fermeture } a été coupée
+      const tronque = '{"statut":"Discussion commune","confiance":0.85,"cible":"CD18","justification":"Réécriture concurrente du même alinéa'
+      const res = safeParseJson(tronque)
+      expect(res.statut).toBe('Discussion commune')
+      expect(res.cible).toBe('CD18')
+      expect(res.confiance).toBe(0.85)
+      expect(res.justification).toContain('Réécriture concurrente')
+    })
+
     it('safeParseJson replie proprement vers "Isolé" en cas de statut non conforme ou absent', () => {
       const raw = '{"statut":"Inconnu","confiance":0.7}'
       const res = safeParseJson(raw)
@@ -268,7 +278,7 @@ describe('classify.js — Pipeline Orchestrateur Frontend V2', () => {
       expect(invalide.confiance).toBe(0.0)
     })
 
-    it('buildLocalChatPayload fabrique un prompt greffier compact avec stop sequences et max_tokens 150', () => {
+    it('buildLocalChatPayload fabrique un prompt greffier compact avec stop sequences et max_tokens 250', () => {
       const amendement = {
         id: 'AM-1',
         article: 'Article 3',
@@ -277,15 +287,16 @@ describe('classify.js — Pipeline Orchestrateur Frontend V2', () => {
       }
       const payload = buildLocalChatPayload(amendement, [{ id: 'AM-2', dispositif: 'Autre texte' }])
 
-      expect(payload.max_tokens).toBe(150)
+      expect(payload.max_tokens).toBe(250)
       expect(payload.stop).toEqual(LOCAL_STOP_SEQUENCES)
       expect(payload.messages[0].content).toBe(LOCAL_PROMPT_SYSTEM)
+      expect(payload.messages[0].content).toContain('Administrateur légistique')
       expect(payload.messages.slice(1, 3)).toEqual(LOCAL_ONE_SHOT_MESSAGES)
       expect(payload.messages[3].content).toContain('Amendement candidat (Article 3)')
       expect(payload.messages[3].content).toContain('[AM-2]')
     })
 
-    it('classifyAmendmentsV2 en mode local traite avec concurrence x3 et 0 ms de délai', async () => {
+    it('classifyAmendmentsV2 en mode local traite en séquentiel strict (1 seul slot) avec 0 ms de délai', async () => {
       const mechanicalData = [
         { id: 'AM-1', statut_mecanique: 'NOUVEAU', _skipLLM: false },
         { id: 'AM-2', statut_mecanique: 'NOUVEAU', _skipLLM: false },
@@ -308,8 +319,7 @@ describe('classify.js — Pipeline Orchestrateur Frontend V2', () => {
           maxConcurrentCalls = Math.max(maxConcurrentCalls, activeCalls)
           capturedPayloads.push(JSON.parse(init.body))
 
-          // Léger délai asynchrone pour vérifier la concurrence
-          await new Promise((r) => setTimeout(r, 20))
+          await new Promise((r) => setTimeout(r, 10))
           activeCalls--
 
           const targetUid = JSON.parse(init.body).target_uid
@@ -320,7 +330,7 @@ describe('classify.js — Pipeline Orchestrateur Frontend V2', () => {
               resultat_ia: {
                 id: targetUid,
                 statut: 'Isolé',
-                confiance: 0.9,
+                confiance: 0.85,
               },
             }),
           }
@@ -335,12 +345,61 @@ describe('classify.js — Pipeline Orchestrateur Frontend V2', () => {
       })
 
       expect(results.length).toBe(3)
-      // La concurrence x3 s'exécute bien en parallèle
-      expect(maxConcurrentCalls).toBeGreaterThanOrEqual(2)
-      // Vérifier que le payload envoyé contient max_tokens 150 et stop sequences
-      expect(capturedPayloads[0].max_tokens).toBe(150)
+      // Cadence séquentielle stricte : exactement 1 appel à la fois
+      expect(maxConcurrentCalls).toBe(1)
+      // Vérifier que le payload envoyé contient max_tokens 250 et stop sequences
+      expect(capturedPayloads[0].max_tokens).toBe(250)
       expect(capturedPayloads[0].stop).toEqual(LOCAL_STOP_SEQUENCES)
       expect(onProgress).toHaveBeenCalled()
+    })
+
+    it('classifyAmendmentsV2 active le coupe-circuit en cas de timeout sans bloquer la file', async () => {
+      const mechanicalData = [
+        { id: 'AM-SLOW', statut_mecanique: 'NOUVEAU', _skipLLM: false },
+        { id: 'AM-FAST', statut_mecanique: 'NOUVEAU', _skipLLM: false },
+      ]
+
+      globalThis.fetch = vi.fn().mockImplementation(async (url, init) => {
+        if (url.includes('/api/v2/mecanique')) {
+          return {
+            ok: true,
+            json: async () => mechanicalData,
+          }
+        }
+        if (url.includes('/api/v2/analyser-llm')) {
+          const body = JSON.parse(init.body)
+          if (body.target_uid === 'AM-SLOW') {
+            // Simule l'interruption par le coupe-circuit unitaire
+            const err = new DOMException('The user aborted a request.', 'AbortError')
+            // Simuler l'expiration du signal unitaire
+            if (init.signal) {
+              await new Promise((resolve) => setTimeout(resolve, 5))
+            }
+            throw err
+          }
+          return {
+            ok: true,
+            json: async () => ({
+              id: 'AM-FAST',
+              resultat_ia: {
+                id: 'AM-FAST',
+                statut: 'Discussion commune',
+                confiance: 0.85,
+              },
+            }),
+          }
+        }
+        return Promise.reject(new Error(`Unexpected URL: ${url}`))
+      })
+
+      // Pour le test, on force un timeout ultra-court via signal
+      const results = await classifyAmendmentsV2(mechanicalData, {
+        aiSettings: { provider: 'local' },
+      })
+
+      expect(results.length).toBe(2)
+      // Le second amendement a bien été traité malgré l'erreur sur le premier
+      expect(results[1].resultat_ia.statut).toBe('Discussion commune')
     })
   })
 })
