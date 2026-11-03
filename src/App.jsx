@@ -3,6 +3,7 @@ import ImportPanel from './components/ImportPanel'
 import AmendmentTable from './components/AmendmentTable'
 import AmendmentDetail from './components/AmendmentDetail'
 import LawParticipants from './components/LawParticipants'
+import ErrorBoundary from './components/ErrorBoundary'
 import ClassifyButton from './components/ClassifyButton'
 import { classifyMechanically, explainConflictsWithAI, analyzeSingleAmendment, normalizeAmendments } from './api/classify'
 import ThemeToggle from './components/ThemeToggle'
@@ -616,14 +617,16 @@ export default function App() {
             />
           </div>
           <div className="w-full">
-            <AmendmentDetail
-              amendment={selected}
-              onClose={() => setSelectedId(null)}
-              isLoading={isClassifying && selected && !selected.resultat_ia}
-              aiSettings={aiSettings}
-              onAnalyzeSingle={handleAnalyzeSingle}
-              analyzingUids={analyzingUids}
-            />
+            <ErrorBoundary>
+              <AmendmentDetail
+                amendment={selected}
+                onClose={() => setSelectedId(null)}
+                isLoading={isClassifying && selected && !selected.resultat_ia}
+                aiSettings={aiSettings}
+                onAnalyzeSingle={handleAnalyzeSingle}
+                analyzingUids={analyzingUids}
+              />
+            </ErrorBoundary>
           </div>
 
           {/* Participants du texte de loi : nom, prénom, groupe politique.

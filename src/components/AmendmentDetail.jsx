@@ -33,6 +33,7 @@ export default function AmendmentDetail({
   onAnalyzeSingle,
   analyzingUids,
 }) {
+  const iaBlockRef = useRef(null)
   const [euCompliance, setEuCompliance] = useState(amendment?.eu_compliance || null)
 
   useEffect(() => {
@@ -57,6 +58,19 @@ export default function AmendmentDetail({
     }
   }, [amendment])
 
+  // Défilement automatique doux vers la fiche dès qu'un amendement est sélectionné
+  useEffect(() => {
+    if (amendment) {
+      const timer = setTimeout(() => {
+        const el = iaBlockRef.current || document.getElementById('ia-analysis-block') || document.getElementById('amendment-detail-section')
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        }
+      }, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [amendment?.id, amendment?.uid])
+
   // ── Safe Rendering : Skeleton si en cours de chargement ──
   if (isLoading) {
     return (
@@ -75,8 +89,6 @@ export default function AmendmentDetail({
       </div>
     )
   }
-
-  const iaBlockRef = useRef(null)
 
   const a = amendment
   const res = a?.resultat_ia

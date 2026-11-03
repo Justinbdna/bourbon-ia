@@ -268,7 +268,13 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   onDragStart={(e) => handleDragStart(e, idx)}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => handleDrop(e, idx)}
-                  onClick={() => onSelect && onSelect(a.id)}
+                  onClick={() => {
+                    if (onSelect) onSelect(a.id)
+                    setTimeout(() => {
+                      const el = document.getElementById('ia-analysis-block') || document.getElementById('amendment-detail-section')
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                    }, 50)
+                  }}
                   className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22] border-l-4 border-l-[#D91227]' : 'dark:bg-[#0B0C10] hover:bg-slate-50 dark:hover:bg-gray-900/50'}`}
                 >
                   <td className={`px-2 py-3.5 w-[80px] min-w-[80px] max-w-[80px] text-sm text-slate-800 dark:text-slate-200 truncate sticky left-0 z-10 align-middle ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.article}>{String(a.article || "—").replace(/^Article\s+/i, "")}</td>
@@ -332,7 +338,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       {statutToDisplay === 'Discussion commune' && (
                         <div className="w-full">
                           {isAnalyzingSingle ? (
-                            <span className="text-[11px] text-amber-400 mt-1 inline-flex items-center gap-1">
+                            <span className="text-[11px] px-2.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1.5 border border-amber-500/40 bg-amber-950/40 text-amber-300 mt-1 animate-pulse">
                               ⏳ Analyse en cours...
                             </span>
                           ) : isConflitDecrypte ? (
@@ -346,7 +352,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                                   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
                                 }, 50)
                               }}
-                              className="text-[11px] px-2.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1 border border-purple-500/40 bg-purple-950/40 text-purple-300 hover:bg-purple-900/60 hover:border-purple-400 hover:text-purple-100 transition-all cursor-pointer mt-1"
+                              className="text-[11px] px-2.5 py-1 rounded-full font-semibold inline-flex items-center gap-1.5 border border-purple-500/50 bg-purple-950/50 text-purple-200 hover:bg-purple-800 hover:border-purple-300 hover:text-white transition-all duration-150 cursor-pointer mt-1 shadow-sm hover:shadow-purple-500/30 hover:scale-[1.03] active:scale-[0.97]"
                               title="Voir l'explication du conflit dans la fiche"
                             >
                               ✓ Conflit décrypté (IA)
@@ -363,7 +369,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                                   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
                                 }, 50)
                               }}
-                              className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline mt-1 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                              className="text-[11px] px-2.5 py-1 rounded-full font-semibold inline-flex items-center gap-1.5 border border-blue-500/50 bg-blue-950/40 text-blue-300 hover:bg-blue-600 hover:border-blue-300 hover:text-white transition-all duration-150 cursor-pointer mt-1 shadow-sm hover:shadow-blue-500/30 hover:scale-[1.03] active:scale-[0.97]"
                               title="Expliquer la concurrence de fond avec l'IA"
                             >
                               🔍 Décrypter le conflit (IA)
