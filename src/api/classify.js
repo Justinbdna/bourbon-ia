@@ -272,6 +272,91 @@ export async function resumerAmendement(amendement, aiSettings = {}, options = {
 }
 
 /**
+ * Exécute uniquement le tri mécanique déterministe (sans IA).
+ */
+export async function classifyMechanicalOnly(amendements, options = {}) {
+  const { aiSettings = {}, signal } = options
+
+  let settings = { ...aiSettings }
+  if (!settings.apiKey) {
+    try {
+      const decrypted = await getDecryptedSettings()
+      if (decrypted) {
+        settings = { ...decrypted, ...settings, apiKey: settings.apiKey || decrypted.apiKey || '' }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const payload = {
+    amendements,
+    ...reglagesLLM(settings),
+    temperature: 0.1,
+    max_tokens: 250,
+  }
+
+  const resMec = await fetch(`${API_BASE_URL}/api/v2/mecanique`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+    signal,
+    body: JSON.stringify(payload),
+  })
+
+  if (!resMec.ok) {
+    const errorText = await resMec.text().catch(() => 'Erreur inconnue')
+    throw new ClassifyError(`Pipeline Mécanique : ${errorText}`, resMec.status)
+  }
+
+  return await resMec.json()
+}
+
+/**
+ * Analyse sémantique unitaire ciblée par l'IA d'un amendement spécifique (ex: "Pourquoi ce conflit ?").
+ */
+export async function analyzeSingleAmendment(targetUid, amendements, aiSettings = {}, options = {}) {
+  const { signal } = options
+
+  let settings = { ...aiSettings }
+  if (!settings.apiKey) {
+    try {
+      const decrypted = await getDecryptedSettings()
+      if (decrypted) {
+        settings = { ...decrypted, ...settings, apiKey: settings.apiKey || decrypted.apiKey || '' }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const llmConf = reglagesLLM(settings)
+  const isLocal = llmConf.provider === 'local' || llmConf.provider === 'lmstudio'
+
+  const payload = {
+    amendements,
+    target_uid: targetUid,
+    ...llmConf,
+    temperature: 0.1,
+    max_tokens: isLocal ? 250 : 350,
+    ...(isLocal ? { stop: LOCAL_STOP_SEQUENCES } : {}),
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/v2/analyser-llm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+    signal,
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Erreur unitaire')
+    throw new ClassifyError(`Analyse unitaire IA : ${errorText}`, response.status)
+  }
+
+  return await response.json()
+}
+
+/**
  * Pipeline V2 — Orchestrateur frontend pour le backend FastAPI V2
  * (Tri déterministe → Cache SQLite → LLM Sémantique → Data Mapper)
  *

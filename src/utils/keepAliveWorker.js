@@ -1,17 +1,14 @@
 /**
- * src/utils/keepAliveWorker.js — Neutralisation de l'App Nap et de la mise en veille Safari
- * =========================================================================================
- * Safari et macOS suspendent ou brident agressivement les onglets d'arrière-plan ("App Nap"),
- * causant des interruptions de 2 à 4 minutes lors des traitements LLM en local.
+ * src/utils/keepAliveWorker.js — Cadencement d'arrière-plan sans aucun flux audio
+ * ==============================================================================
+ * Exécute un Web Worker autonome sur un thread OS isolé cadencé à 250 ms
+ * pour empêcher Safari et WebKit de suspendre la file asynchrone lors du traitement.
  *
- * Ce module combine deux mécanismes de protection de premier ordre :
- * 1. Un Web Worker cadencé à 250 ms (exécuté sur un thread OS isolé qui ne subit pas le gel UI).
- * 2. Un AudioContext silencieux à gain nul (identifie l'onglet comme lecteur multimédia actif sous macOS).
+ * NOTE IMPORTANTE : Tout hack d'AudioContext / Web Audio est STRICTEMENT PROSCRIT
+ * afin d'éviter l'apparition de l'icône haut-parleur (🔊) dans l'onglet du navigateur.
  */
 
 let workerInstance = null
-let audioContextInstance = null
-let silenceSourceInstance = null
 
 const WORKER_BLOB_CODE = `
 let intervalId = null;
@@ -29,39 +26,10 @@ self.onmessage = function(e) {
 `
 
 /**
- * Démarre le cadencement d'arrière-plan et le maintien d'éveil anti-App Nap.
+ * Démarre le Web Worker de pulsation d'arrière-plan.
  * @param {Function} [onTick] Callback optionnel invoqué à chaque impulsion (250 ms)
  */
 export function startKeepAlive(onTick) {
-  // 1. Initialisation de l'AudioContext silencieux (anti-App Nap macOS/WebKit)
-  try {
-    const AudioCtxClass = (typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext)) ||
-                          (typeof globalThis !== 'undefined' && (globalThis.AudioContext || globalThis.webkitAudioContext))
-    if (AudioCtxClass && !audioContextInstance) {
-      audioContextInstance = new AudioCtxClass()
-      // Buffer muet d'une seconde en boucle
-      const sampleRate = audioContextInstance.sampleRate || 22050
-      const buffer = audioContextInstance.createBuffer(1, sampleRate, sampleRate)
-      silenceSourceInstance = audioContextInstance.createBufferSource()
-      silenceSourceInstance.buffer = buffer
-      silenceSourceInstance.loop = true
-
-      const gainNode = audioContextInstance.createGain()
-      gainNode.gain.value = 0.00001 // Quasiment inaudible / gain nul
-      silenceSourceInstance.connect(gainNode)
-      gainNode.connect(audioContextInstance.destination)
-
-      silenceSourceInstance.start()
-      if (audioContextInstance.state === 'suspended') {
-        audioContextInstance.resume().catch(() => {})
-      }
-    }
-  } catch (e) {
-    // AudioContext peut être restreint avant interaction utilisateur directe
-    console.debug('[KeepAlive] AudioContext keep-alive non actif :', e.message)
-  }
-
-  // 2. Initialisation du Web Worker autonome
   try {
     const WorkerClass = (typeof Worker !== 'undefined' && Worker) ||
                         (typeof globalThis !== 'undefined' && globalThis.Worker)
@@ -86,7 +54,7 @@ export function startKeepAlive(onTick) {
 }
 
 /**
- * Arrête et libère toutes les ressources d'arrière-plan.
+ * Arrête immédiatement et termine le Web Worker d'arrière-plan.
  */
 export function stopKeepAlive() {
   if (workerInstance) {
@@ -97,26 +65,5 @@ export function stopKeepAlive() {
       // ignore
     }
     workerInstance = null
-  }
-
-  if (silenceSourceInstance) {
-    try {
-      silenceSourceInstance.stop()
-      silenceSourceInstance.disconnect()
-    } catch {
-      // ignore
-    }
-    silenceSourceInstance = null
-  }
-
-  if (audioContextInstance) {
-    try {
-      if (audioContextInstance.state !== 'closed') {
-        audioContextInstance.close().catch(() => {})
-      }
-    } catch {
-      // ignore
-    }
-    audioContextInstance = null
   }
 }

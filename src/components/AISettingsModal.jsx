@@ -297,7 +297,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
       aria-modal="true"
       aria-labelledby="settings-title"
     >
-      <div className="bg-white dark:bg-surface text-ink-900 dark:text-plume border border-ink-200 dark:border-ink-700 rounded-xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden">
+      <div className="bg-white dark:bg-surface text-ink-900 dark:text-plume border border-ink-200 dark:border-ink-700 rounded-xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
         <div className="px-6 py-4 border-b border-ink-200 dark:border-ink-700 bg-slate-50/50 dark:bg-obsidienne flex justify-between items-center">
           <h2 id="settings-title" className="text-lg font-bold text-slate-900 dark:text-plume">⚙️ Réglages IA</h2>
           <button onClick={onClose} className="text-ink-500 hover:text-ink-700 dark:text-ink-400 dark:hover:text-plume transition-colors" aria-label="Fermer">
@@ -305,11 +305,12 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
           </button>
         </div>
         
-        <div className="p-4 sm:p-6 space-y-6 overflow-y-auto">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="p-5 sm:p-6 space-y-6 overflow-y-auto">
+          {/* Sélecteur de fournisseur pleine largeur */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <button
               onClick={() => setProvider('groq_auto')}
-              className={`w-full py-2 px-2 rounded-md border font-medium text-xs sm:text-sm text-center transition-colors ${
+              className={`w-full py-2.5 px-3 rounded-lg border font-medium text-xs sm:text-sm text-center transition-colors ${
                 provider === 'groq_auto' 
                   ? 'bg-slate-100 border-slate-500 text-slate-900 dark:bg-slate-900/50 dark:border-slate-400 dark:text-plume shadow-sm' 
                   : 'bg-transparent border-ink-300 text-ink-600 hover:bg-ink-50 dark:border-ink-600 dark:text-ink-300 dark:hover:bg-ink-800'
@@ -319,7 +320,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
             </button>
             <button
               onClick={() => { setProvider('groq'); setPingStatus(null); }}
-              className={`w-full py-2 px-2 rounded-md border font-medium text-xs sm:text-sm text-center transition-colors ${
+              className={`w-full py-2.5 px-3 rounded-lg border font-medium text-xs sm:text-sm text-center transition-colors ${
                 provider === 'groq' 
                   ? 'bg-slate-100 border-slate-500 text-slate-900 dark:bg-slate-900/50 dark:border-slate-400 dark:text-plume shadow-sm' 
                   : 'bg-transparent border-ink-300 text-ink-600 hover:bg-ink-50 dark:border-ink-600 dark:text-ink-300 dark:hover:bg-ink-800'
@@ -329,7 +330,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
             </button>
             <button
               onClick={() => { setProvider('local'); setPingStatus(null); }}
-              className={`w-full py-2 px-2 rounded-md border font-medium text-xs sm:text-sm text-center transition-colors ${
+              className={`w-full py-2.5 px-3 rounded-lg border font-medium text-xs sm:text-sm text-center transition-colors ${
                 provider === 'local'
                   ? 'bg-slate-100 border-slate-500 text-slate-900 dark:bg-slate-900/50 dark:border-slate-400 dark:text-plume shadow-sm' 
                   : 'bg-transparent border-ink-300 text-ink-600 hover:bg-ink-50 dark:border-ink-600 dark:text-ink-300 dark:hover:bg-ink-800'
@@ -339,192 +340,249 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
             </button>
           </div>
 
+          {/* Grille responsive 2 colonnes */}
           {provider === 'groq_auto' && (
-            <div className="space-y-4">
-              <div className="flex items-start gap-2 bg-slate-50/50 dark:bg-obsidienne/50 p-4 rounded-md border border-slate-200 dark:border-slate-800/50">
-                <span className="text-lg">🔒</span>
-                <p className="text-sm text-slate-800 dark:text-plume/80 leading-relaxed">
-                  <strong>Mode Automatique :</strong> L'application utilise sa propre clé API pré-configurée. Vous n'avez rien à paramétrer !<br/><br/>
-                  <span className="text-xs">Vos requêtes sont sécurisées. Aucune donnée n'est stockée sur nos serveurs.</span>
-                </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 bg-slate-50/50 dark:bg-obsidienne/50 p-4 rounded-lg border border-slate-200 dark:border-slate-800/50">
+                  <span className="text-xl">🔒</span>
+                  <div className="text-xs sm:text-sm text-slate-800 dark:text-plume/80 leading-relaxed">
+                    <strong className="block mb-1 text-slate-900 dark:text-white">Mode Automatique :</strong>
+                    L'application utilise une clé API pré-configurée pour la démonstration web. Vous n'avez aucune configuration requise !
+                    <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                      Vos requêtes sont sécurisées. Aucune donnée n'est conservée sur des serveurs tiers.
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg border border-amber-200 dark:border-amber-800/50">
+                  <span className="text-xl">⚠️</span>
+                  <div className="text-xs sm:text-sm text-amber-900 dark:text-amber-200 leading-relaxed">
+                    <strong className="block mb-1">Attention aux quotas :</strong>
+                    En cas de forte affluence simultanée, cette API partagée peut atteindre les limites de requêtes (rate-limit).
+                  </div>
+                </div>
               </div>
-              
-              <div className="flex items-start gap-2 bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-md border border-yellow-200 dark:border-yellow-800/50">
-                <span className="text-lg">⚠️</span>
-                <p className="text-sm text-yellow-800 dark:text-yellow-200 leading-relaxed">
-                  <strong>Attention :</strong> En cas de forte affluence, cette API partagée peut atteindre ses limites de requêtes (rate-limit) et échouer. Pour une fiabilité garantie, utilisez votre propre Clé API ou l'IA Locale.
-                </p>
+
+              <div className="space-y-4">
+                <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-obsidienne space-y-3">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                    Modèle Démo Actif
+                  </span>
+                  <div className="text-sm font-mono font-semibold text-slate-900 dark:text-white">
+                    openai/gpt-oss-20b
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                    Modèle open-source optimisé hébergé sur le cloud Groq. Offre un temps de réponse inférieur à 2 secondes par amendement.
+                  </p>
+                  <div className="p-2 rounded border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                    <span>⚡</span>
+                    <span>Ultra-rapide — Aucune configuration requise</span>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-lg border border-blue-200 dark:border-blue-900/40 bg-blue-50/40 dark:bg-blue-950/20 text-xs text-blue-900 dark:text-blue-300 space-y-1">
+                  <span className="font-semibold block">Souveraineté totale ?</span>
+                  <p>
+                    Basculez sur l&apos;onglet <strong>💻 IA Locale</strong> pour faire tourner vos amendements en circuit fermé sur votre machine, sans aucune fuite de données vers l&apos;extérieur.
+                  </p>
+                </div>
               </div>
             </div>
           )}
 
           {provider === 'groq' && (
-            <div className="space-y-4">
-              <div className="space-y-3">
-                <label className="block text-sm font-medium text-slate-800 dark:text-plume">
-                  Clé API Personnelle
-                </label>
-                <input 
-                  type="password"
-                  value={apiKey}
-                  onChange={e => setApiKey(e.target.value)}
-                  placeholder="gsk_..."
-                  className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none"
-                />
-                
-                {pingStatus && provider === 'groq' && (
-                  <div className={`p-3 mt-2 rounded-md text-sm font-medium ${pingStatus.type === 'success' ? 'bg-green-100 text-green-800 border border-green-300' : pingStatus.type === 'error' ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-blue-100 text-blue-800 border border-blue-300'}`}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-800 dark:text-plume">
+                    Clé API Personnelle
+                  </label>
+                  <input 
+                    type="password"
+                    value={apiKey}
+                    onChange={e => setApiKey(e.target.value)}
+                    placeholder="gsk_..."
+                    className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none font-mono text-xs"
+                  />
+                  <p className="text-xs text-ink-700 dark:text-ink-300">
+                    Utilisez votre propre clé Groq pour lever toute contrainte de quota public.
+                  </p>
+                </div>
+
+                {pingStatus && (
+                  <div className={`p-3 rounded-md text-xs font-medium ${pingStatus.type === 'success' ? 'bg-green-100 text-green-800 border border-green-300' : pingStatus.type === 'error' ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-blue-100 text-blue-800 border border-blue-300'}`}>
                     {pingStatus.message}
                   </div>
                 )}
-                
-                <p className="text-xs text-ink-700 dark:text-ink-300 mt-2">
-                  Si les quotas sont atteints, vous pouvez utiliser la vôtre (Groq ou compatible).
-                </p>
-                
-                {provider === 'groq' && modelsList.length > 0 && (
-                  <div className="mt-4 space-y-3">
-                    <label className="block text-sm font-medium text-slate-800 dark:text-plume">
-                      Modèle
-                    </label>
+
+                <div className="flex items-start gap-2 bg-slate-50/50 dark:bg-obsidienne/50 p-3 rounded-md border border-slate-100 dark:border-slate-800/50">
+                  <span className="text-sm">🔒</span>
+                  <p className="text-xs text-slate-800 dark:text-plume/80 leading-relaxed">
+                    <strong>Sécurité :</strong> Votre clé est uniquement sauvegardée localement dans votre navigateur de manière chiffrée.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-800 dark:text-plume">
+                    Modèle Groq
+                  </label>
+                  {isFetchingModels ? (
+                    <p className="text-xs text-ink-500">Chargement des modèles...</p>
+                  ) : modelsList.length > 0 ? (
                     <select
                       value={groqModel}
                       onChange={e => setGroqModel(e.target.value)}
-                      className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none"
+                      className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none text-xs"
                     >
                       {modelsList.map(m => (
                         <option key={m.id} value={m.id}>{formatModelName(m.id)}</option>
                       ))}
                     </select>
-                    {modelBadgeGroq && (
-                      <div className={`p-2 mt-2 rounded-md border text-xs flex gap-2 items-start ${modelBadgeGroq.colorClass}`}>
-                        <span>{modelBadgeGroq.icon}</span>
-                        <span>{modelBadgeGroq.text}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {provider === 'groq' && isFetchingModels && <p className="text-xs text-ink-500">Chargement des modèles...</p>}
-              </div>
-              <div className="flex items-start gap-2 bg-slate-50/50 dark:bg-obsidienne/50 p-3 rounded-md border border-slate-100 dark:border-slate-800/50">
-                <span className="text-sm">🔒</span>
-                <p className="text-xs text-slate-800 dark:text-plume/80 leading-relaxed">
-                  <strong>Sécurité :</strong> Votre clé est uniquement sauvegardée localement sur votre navigateur. Elle n'est jamais stockée sur nos serveurs.
-                </p>
+                  ) : (
+                    <input
+                      type="text"
+                      value={groqModel}
+                      onChange={e => setGroqModel(e.target.value)}
+                      placeholder="openai/gpt-oss-20b"
+                      className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none font-mono text-xs"
+                    />
+                  )}
+                  {modelBadgeGroq && (
+                    <div className={`p-2.5 mt-2 rounded-md border text-xs flex gap-2 items-start ${modelBadgeGroq.colorClass}`}>
+                      <span>{modelBadgeGroq.icon}</span>
+                      <span>{modelBadgeGroq.text}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-obsidienne text-xs text-slate-600 dark:text-slate-400 space-y-1.5">
+                  <span className="font-semibold text-slate-800 dark:text-white block">Accélération matérielle</span>
+                  <p>
+                    L'architecture Groq LPU permet d'obtenir des temps d'inférence très rapides même sur des volumes importants d'amendements.
+                  </p>
+                </div>
               </div>
             </div>
           )}
-          
-          {provider === 'local' && (
-            <div className="space-y-5">
-              <div className="space-y-3">
-                <label className="block text-sm font-medium text-slate-800 dark:text-plume">
-                  Endpoint API Locale
-                </label>
-                <input 
-                  type="text"
-                  value={localUrl}
-                  onChange={e => setLocalUrl(e.target.value)}
-                  placeholder="http://localhost:1234/v1"
-                  className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none"
-                />
-                <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-3 bg-neutral-100 dark:bg-neutral-800/50 p-3 rounded-md space-y-2 border border-neutral-200 dark:border-neutral-700/50">
-                  <p>💡 <strong>Navigateur recommandé :</strong> Google Chrome ou Edge (basés sur Chromium).</p>
-                  <p className="text-amber-700 dark:text-amber-400/90">⚠️ <strong>Attention Sécurité (CORS) :</strong> Votre adresse locale DOIT obligatoirement commencer par <strong>https://</strong> (utilisez un tunnel sécurisé comme Ngrok pour convertir votre port local http://127.0.0.1:1234).</p>
-                </div>
-                
-                {provider === 'local' && (
-                  <div className="mt-4 space-y-3">
-                    <div className="p-3 rounded-lg border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/70 dark:bg-emerald-950/30 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
-                          ⚡ Mode Léger (8 Go RAM) — Préréglages Souverains
-                        </span>
-                        <span className="text-[11px] text-emerald-700 dark:text-emerald-400">
-                          KV-cache &lt; 2048 tokens
-                        </span>
-                      </div>
-                      <p className="text-xs text-emerald-900/80 dark:text-emerald-200/80">
-                        Sélectionnez un modèle léger (Q4) optimisé pour tourner sur un ordinateur de 8 Go de RAM via Ollama ou LM Studio :
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
-                        {[
-                          { id: 'llama3.2:3b', label: 'llama3.2:3b', desc: '~2,0 Go RAM — ultra-rapide' },
-                          { id: 'qwen2.5:3b', label: 'qwen2.5:3b', desc: '~2,2 Go RAM — français juridique' },
-                          { id: 'qwen2.5:7b-instruct-q4_K_M', label: 'qwen2.5:7b-instruct-q4_K_M', desc: '~4,5 Go RAM — haute précision' },
-                          { id: 'gemma3:4b', label: 'gemma3:4b', desc: '~2,6 Go RAM — équilibré' },
-                        ].map(preset => (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            onClick={() => setLocalModel(preset.id)}
-                            className={`text-left px-2.5 py-1.5 rounded border text-xs transition-colors ${
-                              localModel === preset.id
-                                ? 'bg-emerald-600 text-white border-emerald-700 font-semibold shadow-sm'
-                                : 'bg-white/80 dark:bg-surface border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
-                            }`}
-                          >
-                            <div className="font-mono text-[11px] truncate">{preset.label}</div>
-                            <div className={`text-[10px] ${localModel === preset.id ? 'text-emerald-100' : 'text-emerald-700 dark:text-emerald-400'}`}>
-                              {preset.desc}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
 
-                    <label className="block text-sm font-medium text-slate-800 dark:text-plume">
-                      Modèle IA Local
-                    </label>
-                    {isFetchingModels ? (
-                      <p className="text-xs text-ink-500">Recherche des modèles sur l&apos;hôte local...</p>
-                    ) : modelsList.length > 0 ? (
-                      <select
-                        value={localModel}
-                        onChange={e => setLocalModel(e.target.value)}
-                        className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none"
-                      >
-                        {!modelsList.some(m => m.id === localModel) && localModel && (
-                          <option value={localModel}>{localModel}</option>
-                        )}
-                        {modelsList.map(m => (
-                          <option key={m.id} value={m.id}>{formatModelName(m.id)}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        type="text"
-                        value={localModel}
-                        onChange={e => setLocalModel(e.target.value)}
-                        placeholder="Ex: llama3.2:3b, qwen2.5:3b, gemma3:4b..."
-                        className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none font-mono text-xs"
-                      />
-                    )}
-                    {modelBadgeLocal && (
-                      <div className={`p-2 mt-2 rounded-md border text-xs flex gap-2 items-start ${modelBadgeLocal.colorClass}`}>
-                        <span>{modelBadgeLocal.icon}</span>
-                        <span>{modelBadgeLocal.text}</span>
-                      </div>
-                    )}
+          {provider === 'local' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+              {/* Colonne gauche : URL & Réseau */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-800 dark:text-plume">
+                    Endpoint API Locale
+                  </label>
+                  <input 
+                    type="text"
+                    value={localUrl}
+                    onChange={e => setLocalUrl(e.target.value)}
+                    placeholder="http://localhost:1234/v1"
+                    className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none font-mono text-xs"
+                  />
+                </div>
+
+                <div className="text-xs text-neutral-600 dark:text-neutral-400 bg-neutral-100 dark:bg-neutral-800/50 p-3 rounded-lg space-y-2 border border-neutral-200 dark:border-neutral-700/50">
+                  <p>💡 <strong>Navigateur recommandé :</strong> Google Chrome ou Edge (basés sur Chromium).</p>
+                  <p className="text-amber-700 dark:text-amber-400/90">
+                    ⚠️ <strong>CORS / Sécurité :</strong> Si l&apos;application est hébergée en HTTPS, votre endpoint local doit être sécurisé (ex: tunnel Ngrok HTTPS) ou accessible sans blocage d&apos;origine croisée.
+                  </p>
+                </div>
+
+                {pingStatus && (
+                  <div className={`p-3 rounded-md text-xs font-medium ${pingStatus.type === 'success' ? 'bg-green-100 text-green-800 border border-green-300' : pingStatus.type === 'error' ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-blue-100 text-blue-800 border border-blue-300'}`}>
+                    {pingStatus.message}
                   </div>
                 )}
+
+                <div className="bg-slate-50 dark:bg-obsidienne rounded-lg p-3.5 border border-slate-200 dark:border-slate-800 text-xs text-ink-700 dark:text-ink-300 space-y-1.5">
+                  <h3 className="font-semibold text-slate-900 dark:text-plume">Tutoriel Rapide (Air-Gapped)</h3>
+                  <ol className="space-y-1 list-decimal list-inside text-[11px] leading-relaxed">
+                    <li>Démarrer <strong>LM Studio</strong> ou <strong>Ollama</strong>.</li>
+                    <li>Activer impérativement l&apos;option <strong>CORS</strong> dans le serveur local.</li>
+                    <li>Copier l&apos;URL locale (<code className="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded font-mono">http://localhost:1234/v1</code>).</li>
+                  </ol>
+                </div>
               </div>
 
-              {pingStatus && provider === 'local' && (
-                <div className={`p-3 rounded-md text-sm font-medium ${pingStatus.type === 'success' ? 'bg-green-100 text-green-800 border border-green-300' : pingStatus.type === 'error' ? 'bg-red-100 text-red-800 border border-red-300' : 'bg-blue-100 text-blue-800 border border-blue-300'}`}>
-                  {pingStatus.message}
+              {/* Colonne droite : Modèle & Préréglages */}
+              <div className="space-y-4">
+                <div className="p-3.5 rounded-lg border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/70 dark:bg-emerald-950/30 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-300">
+                      ⚡ Mode Léger (8 Go RAM)
+                    </span>
+                    <span className="text-[10px] text-emerald-700 dark:text-emerald-400">
+                      KV-cache &lt; 2048
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-900/80 dark:text-emerald-200/80">
+                    Modèles quantifiés (Q4) optimisés pour MacBook / PC 8 Go RAM :
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
+                    {[
+                      { id: 'llama3.2:3b', label: 'llama3.2:3b', desc: '~2,0 Go RAM — ultra-rapide' },
+                      { id: 'qwen2.5:3b', label: 'qwen2.5:3b', desc: '~2,2 Go RAM — français' },
+                      { id: 'qwen2.5:7b-instruct-q4_K_M', label: 'qwen2.5:7b-q4', desc: '~4,5 Go RAM — précis' },
+                      { id: 'gemma3:4b', label: 'gemma3:4b', desc: '~2,6 Go RAM — équilibré' },
+                    ].map(preset => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => setLocalModel(preset.id)}
+                        className={`text-left px-2 py-1.5 rounded border text-xs transition-colors ${
+                          localModel === preset.id
+                            ? 'bg-emerald-600 text-white border-emerald-700 font-semibold shadow-sm'
+                            : 'bg-white/90 dark:bg-surface border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                        }`}
+                      >
+                        <div className="font-mono text-[11px] truncate">{preset.label}</div>
+                        <div className={`text-[10px] ${localModel === preset.id ? 'text-emerald-100' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                          {preset.desc}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              )}
-              
-              <div className="bg-slate-50 dark:bg-obsidienne rounded-lg p-5 border border-slate-200 dark:border-slate-800 shadow-inner">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-plume mb-3">Tutoriel IA Locale</h3>
-                <ol className="text-sm text-ink-700 dark:text-ink-300 space-y-2 list-decimal list-inside">
-                  <li>Installer <strong>LM Studio</strong>, <strong>Ollama</strong> ou <strong>VLM</strong>.</li>
-                  <li>Télécharger un modèle d'IA local recommandé : Meta-Llama-3.1-8B-Instruct ou Mistral-7B-Instruct-v0.3.</li>
-                  <li><strong>ACTIVER IMPÉRATIVEMENT LE CORS</strong> (Cross-Origin Resource Sharing) dans les paramètres du serveur local.</li>
-                  <li>Démarrer le serveur local de l'application.</li>
-                  <li>Copier-coller l'adresse IP (ex: <code className="bg-slate-800 text-emerald-400 dark:bg-slate-900 dark:text-emerald-300 px-2 py-0.5 rounded text-xs font-mono break-all">http://localhost:1234/v1</code>). Si votre navigateur bloque les requêtes (CORS/HTTP), utilisez un tunnel Ngrok pour obtenir un lien sécurisé HTTPS.</li>
-                </ol>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-800 dark:text-plume">
+                    Modèle IA Local
+                  </label>
+                  {isFetchingModels ? (
+                    <p className="text-xs text-ink-500">Recherche des modèles sur l&apos;hôte local...</p>
+                  ) : modelsList.length > 0 ? (
+                    <select
+                      value={localModel}
+                      onChange={e => setLocalModel(e.target.value)}
+                      className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none text-xs"
+                    >
+                      {!modelsList.some(m => m.id === localModel) && localModel && (
+                        <option value={localModel}>{localModel}</option>
+                      )}
+                      {modelsList.map(m => (
+                        <option key={m.id} value={m.id}>{formatModelName(m.id)}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={localModel}
+                      onChange={e => setLocalModel(e.target.value)}
+                      placeholder="Ex: llama3.2:3b, qwen2.5:3b, gemma3:4b..."
+                      className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none font-mono text-xs"
+                    />
+                  )}
+                  {modelBadgeLocal && (
+                    <div className={`p-2.5 mt-2 rounded-md border text-xs flex gap-2 items-start ${modelBadgeLocal.colorClass}`}>
+                      <span>{modelBadgeLocal.icon}</span>
+                      <span>{modelBadgeLocal.text}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}

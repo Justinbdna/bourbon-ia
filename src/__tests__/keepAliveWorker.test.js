@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { startKeepAlive, stopKeepAlive } from '../utils/keepAliveWorker'
 
-describe('keepAliveWorker.js — Neutralisation App Nap et veille Safari', () => {
+describe('keepAliveWorker.js — Cadencement d\'arrière-plan sans audio', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     stopKeepAlive()
@@ -11,12 +11,22 @@ describe('keepAliveWorker.js — Neutralisation App Nap et veille Safari', () =>
     stopKeepAlive()
   })
 
-  it('startKeepAlive et stopKeepAlive s\'exécutent sans erreur en environnement sans Web Audio / Worker', () => {
+  it('startKeepAlive et stopKeepAlive s\'exécutent sans erreur en environnement sans Web Worker', () => {
     expect(() => startKeepAlive()).not.toThrow()
     expect(() => stopKeepAlive()).not.toThrow()
   })
 
-  it('startKeepAlive initialise un AudioContext et un Worker quand disponibles', () => {
+  it('ne comporte aucune référence d\'AudioContext ni ne génère de flux sonore', () => {
+    const audioCtxSpy = vi.fn()
+    globalThis.AudioContext = audioCtxSpy
+    if (typeof window !== 'undefined') window.AudioContext = audioCtxSpy
+
+    startKeepAlive()
+    expect(audioCtxSpy).not.toHaveBeenCalled()
+    stopKeepAlive()
+  })
+
+  it('startKeepAlive initialise un Worker et stopKeepAlive appelle terminate()', () => {
     const mockPostMessage = vi.fn()
     const mockTerminate = vi.fn()
     class MockWorker {
@@ -26,63 +36,27 @@ describe('keepAliveWorker.js — Neutralisation App Nap et veille Safari', () =>
       }
     }
 
-    const mockStart = vi.fn()
-    const mockStop = vi.fn()
-    const mockDisconnect = vi.fn()
-    const mockConnect = vi.fn()
-    const mockCreateBuffer = vi.fn().mockReturnValue({})
-    const mockCreateBufferSource = vi.fn().mockReturnValue({
-      buffer: null,
-      loop: false,
-      connect: mockConnect,
-      start: mockStart,
-      stop: mockStop,
-      disconnect: mockDisconnect,
-    })
-    const mockCreateGain = vi.fn().mockReturnValue({
-      gain: { value: 1 },
-      connect: mockConnect,
-    })
-
-    class MockAudioContext {
-      constructor() {
-        this.sampleRate = 44100
-        this.state = 'running'
-        this.destination = {}
-        this.createBuffer = mockCreateBuffer
-        this.createBufferSource = mockCreateBufferSource
-        this.createGain = mockCreateGain
-        this.close = vi.fn().mockResolvedValue(undefined)
-      }
-    }
-
     const originalWorker = globalThis.Worker
-    const originalAudioContext = globalThis.AudioContext
     const originalCreateObjectURL = globalThis.URL?.createObjectURL
 
     globalThis.Worker = MockWorker
-    globalThis.AudioContext = MockAudioContext
     if (typeof window !== 'undefined') {
       window.Worker = MockWorker
-      window.AudioContext = MockAudioContext
     }
     if (!globalThis.URL) globalThis.URL = {}
     globalThis.URL.createObjectURL = vi.fn().mockReturnValue('blob:test')
 
     try {
       startKeepAlive()
-      expect(mockStart).toHaveBeenCalled()
       expect(mockPostMessage).toHaveBeenCalledWith('start')
 
       stopKeepAlive()
       expect(mockTerminate).toHaveBeenCalled()
-      expect(mockStop).toHaveBeenCalled()
+      expect(mockPostMessage).toHaveBeenCalledWith('stop')
     } finally {
       globalThis.Worker = originalWorker
-      globalThis.AudioContext = originalAudioContext
       if (typeof window !== 'undefined') {
         window.Worker = originalWorker
-        window.AudioContext = originalAudioContext
       }
       if (originalCreateObjectURL) {
         globalThis.URL.createObjectURL = originalCreateObjectURL

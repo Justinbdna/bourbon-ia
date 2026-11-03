@@ -4,7 +4,7 @@ import AmendmentTable from './components/AmendmentTable'
 import AmendmentDetail from './components/AmendmentDetail'
 import LawParticipants from './components/LawParticipants'
 import ClassifyButton from './components/ClassifyButton'
-import { classifyAmendmentsV2, normalizeAmendments } from './api/classify'
+import { classifyAmendmentsV2, classifyMechanicalOnly, analyzeSingleAmendment, normalizeAmendments } from './api/classify'
 import ThemeToggle from './components/ThemeToggle'
 import AISettingsModal from './components/AISettingsModal'
 import ConsentModal from './components/ConsentModal'
@@ -37,7 +37,6 @@ export default function App() {
   const [classifyError, setClassifyError] = useState(null)
   const [warnings, setWarnings] = useState([])
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [isReasoningMode, setIsReasoningMode] = useState(false)
   const [progressInfo, setProgressInfo] = useState(null)
   const [showCloudWarning, setShowCloudWarning] = useState(false)
 
@@ -242,6 +241,73 @@ export default function App() {
   function handleStopClassify() {
     abortRef.current = true
     if (abortControllerRef.current) abortControllerRef.current.abort()
+  }
+
+  async function handleMechanicalClassify() {
+    setIsClassifying(true)
+    setClassifyError(null)
+    setWarnings([])
+    abortRef.current = false
+
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
+    startTimeRef.current = Date.now()
+    setProgressInfo({ current: 0, total: amendments.length, elapsed: 0 })
+
+    if (timerRef.current) clearInterval(timerRef.current)
+    timerRef.current = setInterval(() => {
+      if (startTimeRef.current) {
+        const tempsEcoule = Math.floor((Date.now() - startTimeRef.current) / 1000)
+        setProgressInfo(prev => prev ? { ...prev, elapsed: tempsEcoule } : null)
+      }
+    }, 500)
+
+    startKeepAlive(() => {
+      if (startTimeRef.current) {
+        const tempsEcoule = Math.floor((Date.now() - startTimeRef.current) / 1000)
+        setProgressInfo(prev => prev ? { ...prev, elapsed: tempsEcoule } : null)
+      }
+    })
+
+    try {
+      const mecResults = await classifyMechanicalOnly(amendments, {
+        aiSettings,
+        signal: controller.signal,
+      })
+      setAmendments(mecResults)
+      await persistEncryptedSession(mecResults)
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        setWarnings(prev => [...prev, "Classement mécanique annulé."])
+      } else {
+        console.error('Erreur classement mécanique:', err)
+        setClassifyError(err.message || 'Erreur inconnue lors du classement mécanique.')
+      }
+    } finally {
+      stopKeepAlive()
+      if (timerRef.current) clearInterval(timerRef.current)
+      startTimeRef.current = null
+      abortControllerRef.current = null
+      setIsClassifying(false)
+      setProgressInfo(null)
+    }
+  }
+
+  async function handleAnalyzeSingle(targetUid) {
+    if (!targetUid) return
+    setClassifyError(null)
+    try {
+      const resIa = await analyzeSingleAmendment(targetUid, amendments, aiSettings)
+      setAmendments(prev => {
+        const next = prev.map(a => (a.id === targetUid || a.uid === targetUid) ? { ...a, resultat_ia: resIa } : a)
+        persistEncryptedSession(next)
+        return next
+      })
+    } catch (err) {
+      console.error(`Erreur analyse unitaire sur ${targetUid}:`, err)
+      setClassifyError(err.message || `Impossible d'analyser l'amendement ${targetUid}.`)
+    }
   }
 
   async function handleClassify() {
@@ -484,10 +550,9 @@ export default function App() {
           loading={isClassifying}
           error={classifyError}
           warnings={warnings}
-          onClick={handleClassify}
+          onMechanicalClick={handleMechanicalClassify}
+          onLlmClick={handleClassify}
           onStop={handleStopClassify}
-          isReasoningMode={isReasoningMode}
-          onToggleReasoning={setIsReasoningMode}
           progressInfo={progressInfo}
         />
 
@@ -515,6 +580,7 @@ export default function App() {
               onDeleteDoublons={handleDeleteDoublons}
               isClassifying={isClassifying}
               onExportJson={handleExport}
+              onAnalyzeSingle={handleAnalyzeSingle}
             />
           </div>
           <div className="w-full">

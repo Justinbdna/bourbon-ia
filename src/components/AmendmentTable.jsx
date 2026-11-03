@@ -59,7 +59,7 @@ function estDoublon(a) {
   return a.statut_mecanique === 'DOUBLON_MECANIQUE' || a.resultat_ia?.statut === 'Doublon'
 }
 
-export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, onExportJson }) {
+export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, onExportJson, onAnalyzeSingle }) {
   const [currentPage, setCurrentPage] = useState(0)
   const [filtre, setFiltre] = useState({ motCle: '', auteur: '' })
   const [masquerEcartes, setMasquerEcartes] = useState(false)
@@ -215,15 +215,15 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-100 dark:bg-[#1A1B22] border-b border-gray-200 dark:border-gray-800">
             <tr>
-              <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20 min-w-20 max-w-20 sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-0">Art.</th>
-              <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20 min-w-20 max-w-20 sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-20">N°</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[220px] min-w-[220px] max-w-[220px] sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-40 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">Auteur(s)</th>
-              <th className="px-3 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-36 min-w-36">Groupe</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-44 min-w-44">Point d'impact</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[320px] min-w-[320px] max-w-[320px]">Commission / Thèmes</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-full min-w-[280px]">Extrait du dispositif</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider whitespace-nowrap">Statut</th>
-              <th className="px-4 py-4 text-right text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider whitespace-nowrap">Actions</th>
+              <th className="px-2 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[80px] min-w-[80px] max-w-[80px] sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-0">Art.</th>
+              <th className="px-2 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[75px] min-w-[75px] max-w-[75px] sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-[80px]">N°</th>
+              <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[180px] min-w-[180px] max-w-[180px] sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-[155px] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">Auteur(s)</th>
+              <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[90px] min-w-[90px]">Groupe</th>
+              <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[140px] min-w-[140px]">Point d'impact</th>
+              <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[200px] min-w-[200px] max-w-[200px]">Commission / Thèmes</th>
+              <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-auto min-w-[200px]">Extrait du dispositif</th>
+              <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[150px] min-w-[150px]">Statut</th>
+              <th className="px-3 py-3 text-right text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[80px] min-w-[80px]">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-[#0B0C10] divide-y divide-gray-200 dark:divide-gray-800">
@@ -263,12 +263,12 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   onClick={() => onSelect && onSelect(a.id)}
                   className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22] border-l-4 border-l-[#D91227]' : 'dark:bg-[#0B0C10] hover:bg-slate-50 dark:hover:bg-gray-900/50'}`}
                 >
-                  <td className={`px-2 py-4 w-20 min-w-20 max-w-20 text-sm text-slate-800 dark:text-slate-200 truncate sticky left-0 z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.article}>{String(a.article || "—").replace(/^Article\s+/i, "")}</td>
-                  <td className={`px-1 py-4 w-20 min-w-20 max-w-20 text-xs text-slate-800 dark:text-slate-200 truncate sticky left-20 z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.numero}>{a.numero}</td>
-                  <td className={`px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-[220px] min-w-[220px] max-w-[220px] align-top sticky left-40 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`}>
+                  <td className={`px-2 py-3.5 w-[80px] min-w-[80px] max-w-[80px] text-sm text-slate-800 dark:text-slate-200 truncate sticky left-0 z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.article}>{String(a.article || "—").replace(/^Article\s+/i, "")}</td>
+                  <td className={`px-2 py-3.5 w-[75px] min-w-[75px] max-w-[75px] text-xs text-slate-800 dark:text-slate-200 truncate sticky left-[80px] z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.numero}>{a.numero}</td>
+                  <td className={`px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-[180px] min-w-[180px] max-w-[180px] align-top sticky left-[155px] z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`}>
                     <span className="break-words leading-snug" title={auteursText}>{auteursText}</span>
                   </td>
-                  <td className="px-3 py-4 text-sm text-slate-800 dark:text-slate-200 w-36 min-w-36 align-top">
+                  <td className="px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-[90px] min-w-[90px] align-top">
                     {groupePolitique ? (
                       <div className="flex items-start">
                         <PoliticalGroupTag
@@ -280,7 +280,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       <span className="text-xs text-slate-400">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-44 min-w-44 align-top">
+                  <td className="px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-[140px] min-w-[140px] align-top">
                     <ImpactBadge
                       type={
                         typeof a.point_impact === 'string'
@@ -289,7 +289,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       }
                     />
                   </td>
-                  <td className="px-4 py-4 text-sm w-[320px] min-w-[320px] max-w-[320px] align-top">
+                  <td className="px-3 py-3.5 text-sm w-[200px] min-w-[200px] max-w-[200px] align-top">
                     <CommissionKeywords
                       commission={a.commission}
                       commissionLibelle={a.commission_libelle}
@@ -297,8 +297,8 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       horsChamp={a.commission_hors_champ}
                     />
                   </td>
-                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full min-w-[280px] align-top whitespace-normal break-words leading-snug"><ExtraitDispositif text={a.dispositif} /></td>
-                  <td className="px-4 py-4 text-sm whitespace-nowrap align-top">
+                  <td className="px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-auto min-w-[200px] align-top whitespace-normal break-words leading-snug"><ExtraitDispositif text={a.dispositif} /></td>
+                  <td className="px-3 py-3.5 text-sm w-[150px] min-w-[150px] align-top">
                     <div className="flex flex-col items-start gap-1.5">
                       <div className="flex items-center gap-1">
                         <GroupeBadge statut={statutToDisplay} groupe={groupeStatut} isPending={isPending} />
@@ -319,13 +319,29 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                           </div>
                         )}
                       </div>
+
+                      {/* Déclencheur contextuel pour expliciter la concurrence légistique */}
+                      {statutToDisplay === 'Discussion commune' && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (onAnalyzeSingle) onAnalyzeSingle(a.id)
+                          }}
+                          className="text-xs text-blue-400 hover:underline mt-1 flex items-center gap-1 font-medium transition-colors"
+                          title="Expliquer la concurrence de fond avec l'IA"
+                        >
+                          🔍 Pourquoi ce conflit ? (IA)
+                        </button>
+                      )}
+
                       {a.alerte_recevabilite_art40 && (
                         <div className="group relative inline-flex">
                           <span
-                            className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-200 border border-rose-300 dark:border-rose-700 px-2.5 py-0.5 text-xs font-semibold cursor-help"
+                            className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-200 border border-rose-300 dark:border-rose-700 px-2 py-0.5 text-[11px] font-semibold cursor-help"
                             title={a.motif_art40 || "Risque d'irrecevabilité financière au titre de l'Article 40 de la Constitution : perte de recettes ou charge publique détectée sans gage valide."}
                           >
-                            ⚠️ Risque Irrecevabilité Art. 40 (Absence de gage financier)
+                            ⚠️ Art. 40 (sans gage)
                           </span>
                           <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bottom-full right-0 mb-2 w-72 whitespace-normal bg-slate-900 text-white text-xs rounded-lg shadow-xl p-2.5 leading-relaxed">
                             <p className="font-semibold text-rose-300 mb-1">⚖️ Audit Constitutionnel — Article 40</p>
@@ -337,10 +353,10 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       {a.alerte_non_normatif && (
                         <div className="group relative inline-flex">
                           <span
-                            className="inline-flex items-center gap-1 rounded-full bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-200 border border-sky-300 dark:border-sky-700 px-2.5 py-0.5 text-xs font-medium cursor-help"
+                            className="inline-flex items-center gap-1 rounded-full bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-200 border border-sky-300 dark:border-sky-700 px-2 py-0.5 text-[11px] font-medium cursor-help"
                             title={a.motif_non_normatif || "Dispositif à faible portée normative (risque de censure pour défaut de normativité, Art. 6 DDHC)."}
                           >
-                            ℹ️ Portée normative faible
+                            ℹ️ Portée faible
                           </span>
                           <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bottom-full right-0 mb-2 w-72 whitespace-normal bg-slate-900 text-white text-xs rounded-lg shadow-xl p-2.5 leading-relaxed">
                             <p className="font-semibold text-sky-300 mb-1">ℹ️ Légistique — Portée normative (Art. 6 DDHC)</p>
@@ -351,7 +367,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <td className="px-3 py-3.5 w-[80px] min-w-[80px] text-right text-sm font-medium">
                     <button onClick={(e) => { e.stopPropagation(); if (onDelete) onDelete(a.id); }} className="text-gray-400 hover:text-red-600 transition-colors">Retirer</button>
                   </td>
                 </tr>
