@@ -332,28 +332,21 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       {statutToDisplay === 'Discussion commune' && (
                         <div className="w-full">
                           {isAnalyzingSingle ? (
-                            <span className="text-[11px] text-amber-400 inline-flex items-center gap-1 mt-1">
+                            <span className="text-[11px] text-amber-400 mt-1 inline-flex items-center gap-1">
                               ⏳ Analyse en cours...
                             </span>
                           ) : isConflitDecrypte ? (
-                            <div className="flex flex-col items-start w-full">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (onSelect) onSelect(a.id)
-                                }}
-                                className="text-[11px] text-emerald-400 hover:text-emerald-300 hover:underline mt-1 inline-flex items-center gap-1 cursor-pointer transition-colors"
-                                title="Ouvrir la fiche détaillée de l'amendement pour consulter l'analyse complète"
-                              >
-                                ✓ Conflit décrypté
-                              </button>
-                              {(a.justification || a.resultat_ia?.justification) && (
-                                <div className="text-[11px] text-purple-200 bg-purple-950/50 border border-purple-800/40 rounded p-1.5 mt-1.5 max-w-xs break-words leading-relaxed text-left">
-                                  💡 <span className="font-medium text-purple-300">Analyse IA :</span> {a.justification || a.resultat_ia?.justification}
-                                </div>
-                              )}
-                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (onSelect) onSelect(a.id)
+                              }}
+                              className="text-[11px] px-2.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1 border border-purple-500/40 bg-purple-950/40 text-purple-300 hover:bg-purple-900/60 hover:border-purple-400 hover:text-purple-100 transition-all cursor-pointer mt-1"
+                              title="Voir l'explication du conflit dans la fiche"
+                            >
+                              ✓ Conflit décrypté (IA)
+                            </button>
                           ) : (
                             <button
                               type="button"
@@ -364,7 +357,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                               className="text-[11px] text-blue-400 hover:text-blue-300 hover:underline mt-1 inline-flex items-center gap-1 cursor-pointer transition-colors"
                               title="Expliquer la concurrence de fond avec l'IA"
                             >
-                              🔍 Décrypter le conflit
+                              🔍 Décrypter le conflit (IA)
                             </button>
                           )}
                         </div>

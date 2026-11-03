@@ -618,6 +618,8 @@ export default function App() {
               onClose={() => setSelectedId(null)}
               isLoading={isClassifying && selected && !selected.resultat_ia}
               aiSettings={aiSettings}
+              onAnalyzeSingle={handleAnalyzeSingle}
+              analyzingUids={analyzingUids}
             />
           </div>
 

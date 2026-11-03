@@ -26,7 +26,14 @@ export function formatCleanArticleHeading(article) {
 
 export const formatArticleTitle = formatCleanArticleHeading
 
-export default function AmendmentDetail({ amendment, onClose, isLoading, aiSettings }) {
+export default function AmendmentDetail({
+  amendment,
+  onClose,
+  isLoading,
+  aiSettings,
+  onAnalyzeSingle,
+  analyzingUids,
+}) {
   const [euCompliance, setEuCompliance] = useState(amendment?.eu_compliance || null)
 
   useEffect(() => {
@@ -72,6 +79,16 @@ export default function AmendmentDetail({ amendment, onClose, isLoading, aiSetti
 
   const a = amendment
   const res = a.resultat_ia
+  const statut = res?.statut || a.statut || ''
+  const isDiscussionCommune = statut === 'Discussion commune' || statut === 'Incompatible'
+  const isConflitDecrypte = Boolean(a.explication_ia || res?.explication_ia)
+  const texteExplicationIA = a.explication_ia || res?.explication_ia || (isConflitDecrypte ? (a.justification || res?.justification) : null)
+  const isAnalyzingThis = Boolean(
+    analyzingUids && (
+      (typeof analyzingUids.has === 'function' && (analyzingUids.has(a.id) || analyzingUids.has(a.uid))) ||
+      (Array.isArray(analyzingUids) && (analyzingUids.includes(a.id) || analyzingUids.includes(a.uid)))
+    )
+  )
 
   return (
     <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 flex flex-col h-full">
@@ -199,8 +216,38 @@ export default function AmendmentDetail({ amendment, onClose, isLoading, aiSetti
           </div>
         </div>
 
-        {/* ── Résumé IA à la demande (1 à 2 phrases neutres) ── */}
-        <ResumeIA key={a.id ?? a.uid} amendment={a} aiSettings={aiSettings} />
+        {/* ── Décryptage IA (pour discussion commune) ou Résumé IA classique ── */}
+        {isDiscussionCommune ? (
+          <section className="rounded-lg bg-slate-50 dark:bg-purple-950/20 border border-purple-300 dark:border-purple-800/50 p-4">
+            <h4 className="font-display text-sm uppercase tracking-wide text-purple-900 dark:text-purple-300 font-semibold flex items-center gap-1.5">
+              <span>🤖</span> Décryptage du conflit (IA locale)
+            </h4>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Traité par votre IA locale : le texte ne quitte pas votre poste.
+            </p>
+
+            {isAnalyzingThis ? (
+              <div className="flex items-center gap-2 mt-3 text-xs text-amber-400">
+                <span className="inline-block animate-spin">⏳</span>
+                <span>Analyse sémantique du conflit en cours par l'IA...</span>
+              </div>
+            ) : isConflitDecrypte && texteExplicationIA ? (
+              <div className="mt-3 bg-purple-950/30 border border-purple-800/40 rounded-lg p-3 text-sm text-purple-200 leading-relaxed whitespace-pre-line">
+                {texteExplicationIA}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onAnalyzeSingle && onAnalyzeSingle(a.uid || a.id)}
+                className="mt-3 text-xs font-medium px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors cursor-pointer"
+              >
+                ⚡ Décrypter ce conflit par IA
+              </button>
+            )}
+          </section>
+        ) : (
+          <ResumeIA key={a.id ?? a.uid} amendment={a} aiSettings={aiSettings} />
+        )}
 
         {/* ── Conformité européenne (surtransposition) — panneau dépliable ── */}
         <EUCompliancePanel result={euCompliance || a.eu_compliance} />
@@ -210,16 +257,16 @@ export default function AmendmentDetail({ amendment, onClose, isLoading, aiSetti
           <h4 className="font-display text-sm uppercase tracking-wide text-slate-900 dark:text-plume mb-2">
             Résultat du classement
           </h4>
-          {res ? (
+          {res || a.statut ? (
             <div className="space-y-3 text-sm">
               <div className="flex items-center gap-2 flex-wrap">
-                {res.rang != null && (
-                  <span className="font-semibold text-slate-900 dark:text-plume">Rang {res.rang}</span>
+                {(res?.rang != null || a.rang != null) && (
+                  <span className="font-semibold text-slate-900 dark:text-plume">Rang {res?.rang ?? a.rang}</span>
                 )}
-                <GroupeBadge statut={res.statut} groupe={res.groupe} type={res.groupe?.type} />
+                <GroupeBadge statut={res?.statut || a.statut} groupe={res?.groupe || a.groupe} type={res?.groupe?.type || a.groupe?.type} />
 
                 {/* ── 💡 Tooltip Chain of Thought ── */}
-                {res.analyse_intention && (
+                {res?.analyse_intention && (
                   <div className="group relative inline-flex">
                     <span className="cursor-help text-base" title={res.analyse_intention}>💡</span>
                     <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 bg-slate-900 text-white text-xs rounded-lg shadow-xl p-3 leading-relaxed">
@@ -239,7 +286,16 @@ export default function AmendmentDetail({ amendment, onClose, isLoading, aiSetti
                   </div>
                 )}
               </div>
-              <p className="text-ink-700 dark:text-ink-300">{res.justification || a.justification}</p>
+              {isDiscussionCommune ? (
+                <p className="text-ink-700 dark:text-ink-300 text-xs">
+                  {a.justification_mecanique ||
+                    ((a.cible_numero || res?.cible_numero)
+                      ? `Discussion commune sur cette division avec l'amendement n° ${a.cible_numero || res?.cible_numero}.`
+                      : "Amendement en discussion commune.")}
+                </p>
+              ) : (
+                <p className="text-ink-700 dark:text-ink-300">{res?.justification || a.justification}</p>
+              )}
             </div>
           ) : (
             <p className="text-sm text-ink-500 dark:text-ink-400 italic">
