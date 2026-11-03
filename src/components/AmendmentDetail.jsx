@@ -239,7 +239,7 @@ export default function AmendmentDetail({ amendment, onClose, isLoading, aiSetti
                   </div>
                 )}
               </div>
-              <p className="text-ink-700 dark:text-ink-300">{res.justification}</p>
+              <p className="text-ink-700 dark:text-ink-300">{res.justification || a.justification}</p>
             </div>
           ) : (
             <p className="text-sm text-ink-500 dark:text-ink-400 italic">

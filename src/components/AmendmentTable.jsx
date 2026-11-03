@@ -222,7 +222,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[140px] min-w-[140px]">Point d'impact</th>
               <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[200px] min-w-[200px] max-w-[200px]">Commission / Thèmes</th>
               <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-auto min-w-[200px]">Extrait du dispositif</th>
-              <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[150px] min-w-[150px]">Statut</th>
+              <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[220px] min-w-[200px]">Statut</th>
               <th className="px-3 py-3 text-right text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[80px] min-w-[80px]">Actions</th>
             </tr>
           </thead>
@@ -306,7 +306,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                     />
                   </td>
                   <td className="px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-auto min-w-[200px] align-middle whitespace-normal break-words leading-snug"><ExtraitDispositif text={a.dispositif} /></td>
-                  <td className="px-3 py-3.5 text-sm w-[150px] min-w-[150px] align-middle">
+                  <td className="px-3 py-3.5 text-sm w-[220px] min-w-[200px] align-middle">
                     <div className="flex flex-col items-start gap-1.5 py-1">
                       <div className="inline-flex items-center gap-1.5">
                         <GroupeBadge statut={statutToDisplay} groupe={groupeStatut} isPending={isPending} />
@@ -330,15 +330,30 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
 
                       {/* Déclencheur contextuel pour expliciter la concurrence légistique */}
                       {statutToDisplay === 'Discussion commune' && (
-                        <div>
+                        <div className="w-full">
                           {isAnalyzingSingle ? (
-                            <span className="text-[11px] text-amber-400 inline-flex items-center gap-1">
+                            <span className="text-[11px] text-amber-400 inline-flex items-center gap-1 mt-1">
                               ⏳ Analyse en cours...
                             </span>
                           ) : isConflitDecrypte ? (
-                            <span className="text-[11px] text-emerald-400 inline-flex items-center gap-1">
-                              ✓ Conflit décrypté
-                            </span>
+                            <div className="flex flex-col items-start w-full">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (onSelect) onSelect(a.id)
+                                }}
+                                className="text-[11px] text-emerald-400 hover:text-emerald-300 hover:underline mt-1 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                                title="Ouvrir la fiche détaillée de l'amendement pour consulter l'analyse complète"
+                              >
+                                ✓ Conflit décrypté
+                              </button>
+                              {(a.justification || a.resultat_ia?.justification) && (
+                                <div className="text-[11px] text-purple-200 bg-purple-950/50 border border-purple-800/40 rounded p-1.5 mt-1.5 max-w-xs break-words leading-relaxed text-left">
+                                  💡 <span className="font-medium text-purple-300">Analyse IA :</span> {a.justification || a.resultat_ia?.justification}
+                                </div>
+                              )}
+                            </div>
                           ) : (
                             <button
                               type="button"
