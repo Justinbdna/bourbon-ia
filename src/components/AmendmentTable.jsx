@@ -299,7 +299,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   </td>
                   <td className="px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-auto min-w-[200px] align-top whitespace-normal break-words leading-snug"><ExtraitDispositif text={a.dispositif} /></td>
                   <td className="px-3 py-3.5 text-sm w-[150px] min-w-[150px] align-top">
-                    <div className="flex flex-col items-start gap-1 py-1">
+                    <div className="flex flex-col items-start gap-1.5 py-1">
                       <div className="flex items-center gap-1">
                         <GroupeBadge statut={statutToDisplay} groupe={groupeStatut} isPending={isPending} />
                         {/* 💡 Tooltip Chain of Thought (inline) */}
@@ -338,7 +338,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       {a.alerte_recevabilite_art40 && (
                         <div className="group relative inline-flex">
                           <span
-                            className="text-[11px] px-2 py-0.5 rounded font-medium inline-flex items-center gap-1 border border-red-500/40 bg-red-950/40 text-red-300 whitespace-nowrap cursor-help"
+                            className="text-[11px] px-2.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1.5 border border-red-500/40 bg-red-950/40 text-red-300 whitespace-nowrap cursor-help"
                             title={a.motif_art40 || "Risque d'irrecevabilité financière au titre de l'Article 40 de la Constitution : perte de recettes ou charge publique détectée sans gage valide."}
                           >
                             ⚠️ Art. 40 (sans gage)
@@ -353,7 +353,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       {a.alerte_non_normatif && (
                         <div className="group relative inline-flex">
                           <span
-                            className="inline-flex items-center gap-1 rounded font-medium text-[11px] px-2 py-0.5 border border-sky-300 bg-sky-100 text-sky-800 dark:border-sky-500/40 dark:bg-sky-950/40 dark:text-sky-300 whitespace-nowrap cursor-help"
+                            className="text-[11px] px-2.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1.5 border border-sky-300 bg-sky-100 text-sky-800 dark:border-sky-500/40 dark:bg-sky-950/40 dark:text-sky-300 whitespace-nowrap cursor-help"
                             title={a.motif_non_normatif || "Dispositif à faible portée normative (risque de censure pour défaut de normativité, Art. 6 DDHC)."}
                           >
                             ℹ️ Portée faible
