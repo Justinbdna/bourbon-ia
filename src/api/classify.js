@@ -10,6 +10,133 @@ export class ClassifyError extends Error {
   }
 }
 
+export const LOCAL_PROMPT_SYSTEM = `Tu es le greffier légistique de l'Assemblée nationale.
+Compare l'amendement candidat avec les amendements déjà déposés sur l'article.
+Réponds STRICTEMENT par un unique objet JSON sur une seule ligne.
+Gabarit obligatoire : {"statut":"Isolé"|"Identique"|"Discussion commune","confiance":0.9,"cible":null|"NUMERO","justification":"1 phrase max"}
+Ne génère aucun texte avant ou après. N'écris pas d'autres objets.`
+
+export const LOCAL_ONE_SHOT_MESSAGES = [
+  {
+    role: 'user',
+    content: "Amendement A (Article 3) : Supprimer l'alinéa 1.",
+  },
+  {
+    role: 'assistant',
+    content: '{"statut":"Isolé","confiance":0.95,"cible":null,"justification":"Suppression sans autre amendement concurrent sur cet alinéa."}',
+  },
+]
+
+export const LOCAL_STOP_SEQUENCES = ['\n\n', '}\n', '\n{', '```']
+
+export const STATUTS_VALIDES = ['Isolé', 'Identique', 'Discussion commune']
+
+/**
+ * Parseur JSON chirurgical résilient aux bavardages multi-lignes et balises Markdown de Mistral.
+ * Extrait le premier bloc JSON valide { ... }, le parse et applique un repli vers "Isolé"
+ * si le statut est manquant ou non conforme.
+ */
+export function safeParseJson(rawText) {
+  if (!rawText || typeof rawText !== 'string') {
+    return {
+      statut: 'Isolé',
+      confiance: 0.0,
+      cible: null,
+      justification: 'Repli technique : réponse vide ou absente du modèle.',
+    }
+  }
+
+  // Nettoyage des éventuels blocs <think> et codeblocks
+  const sansThink = rawText.replace(/<think>[\s\S]*?<\/think>/gi, ' ').replace(/```[a-z]*|```/gi, ' ')
+  const match = sansThink.match(/\{[\s\S]*?\}/)
+
+  if (!match) {
+    return {
+      statut: 'Isolé',
+      confiance: 0.0,
+      cible: null,
+      justification: 'Repli technique : aucun objet JSON détecté dans la réponse.',
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(match[0])
+    let statut = parsed.statut
+    const rawConfiance = parsed.confiance ?? parsed.niveau_confiance
+    const confiance = typeof rawConfiance === 'number' ? rawConfiance : 0.9
+    let cible = parsed.cible || parsed.id_discussion_cible || null
+    let justification = parsed.justification || parsed.analyse_intention || parsed.analyse_politique || ''
+
+    if (!STATUTS_VALIDES.includes(statut)) {
+      if (typeof statut === 'string') {
+        const lower = statut.toLowerCase()
+        if (lower.includes('identique')) statut = 'Identique'
+        else if (lower.includes('discussion') || lower.includes('commune') || lower.includes('similaire')) statut = 'Discussion commune'
+        else statut = 'Isolé'
+      } else {
+        statut = 'Isolé'
+      }
+      if (!justification) {
+        justification = 'Amendement analysé comme isolé sans concurrence directe.'
+      }
+    }
+
+    if (statut === 'Isolé') {
+      cible = null
+    }
+
+    return {
+      statut,
+      confiance: Math.min(1.0, Math.max(0.0, Number(confiance) || 0.9)),
+      cible: cible ? String(cible) : null,
+      justification: justification || 'Classification sémantique enregistrée.',
+    }
+  } catch (err) {
+    return {
+      statut: 'Isolé',
+      confiance: 0.0,
+      cible: null,
+      justification: `Repli technique : erreur d'analyse JSON (${err.message}).`,
+    }
+  }
+}
+
+/**
+ * Construit un payload directif et ultra-court pour l'inférence locale (LM Studio / Apple Silicon).
+ */
+export function buildLocalChatPayload(amendement, candidats = [], options = {}) {
+  const { model = 'local-model', temperature = 0.1 } = options
+  const article = amendement.article_vise || amendement.article || 'Article'
+  const disp = (amendement.dispositif_raw || amendement.dispositif || '').slice(0, 300)
+  const expose = (amendement.expose_sommaire || amendement.exposeSommaire || '').slice(0, 180)
+
+  let userMsg = `Amendement candidat (${article}) : ${disp}`
+  if (expose) userMsg += ` | Exposé : ${expose}`
+
+  if (candidats.length > 0) {
+    userMsg += '\nAmendements concurrents déjà déposés :'
+    candidats.slice(0, 5).forEach((c, idx) => {
+      const cId = c.id || c.uid || c.id_discussion || `CAND-${idx + 1}`
+      const cDisp = (c.dispositif || c.dispositif_raw || '').slice(0, 200)
+      userMsg += `\n- [${cId}] : ${cDisp}`
+    })
+  } else {
+    userMsg += '\nAucun autre amendement concurrent sur cette division.'
+  }
+
+  return {
+    model,
+    messages: [
+      { role: 'system', content: LOCAL_PROMPT_SYSTEM },
+      ...LOCAL_ONE_SHOT_MESSAGES,
+      { role: 'user', content: userMsg },
+    ],
+    temperature,
+    max_tokens: 150,
+    stop: LOCAL_STOP_SEQUENCES,
+  }
+}
+
 export async function normalizeAmendments(amendements) {
   const response = await fetch(`${API_BASE_URL}/api/normalize`, {
     method: 'POST',
@@ -142,11 +269,15 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
 
   console.log("[Bourbon.ia] Transmission clé IA :", settings?.apiKey ? "Clé personnalisée injectée" : "Clé serveur par défaut")
 
+  const llmConf = reglagesLLM(settings)
+  const isLocal = llmConf.provider === 'local' || llmConf.provider === 'lmstudio'
+
   const payload = {
     amendements,
-    ...reglagesLLM(settings),
+    ...llmConf,
     temperature: 0.1,
-    max_tokens: 350,
+    max_tokens: isLocal ? 150 : 350,
+    ...(isLocal ? { stop: LOCAL_STOP_SEQUENCES } : {}),
   }
 
   // 1. Tri mécanique immédiat (sans LLM)
@@ -166,7 +297,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
   // Met à jour l'UI instantanément avec le tri mécanique
   onMechanical(mecaniques)
 
-  // 2. Boucle LLM Séquentielle (Frontend Orchestrator)
+  // 2. Traitement LLM (Frontend Orchestrator)
   // Les amendements marqués _skipLLM (identiques ou isolés mécaniquement) ne sollicitent pas le LLM
   const aTraiter = mecaniques.filter(a => a.statut_mecanique === 'NOUVEAU' && !a._skipLLM && !a.skip_llm)
   const nb_classes = mecaniques.length - aTraiter.length
@@ -175,125 +306,145 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
   onProgress(null, nb_classes, mecaniques.length, [])
 
   const resultatsGlobaux = [...mecaniques]
-
-  let currentIdx = 0
   const total = mecaniques.length
 
-  for (let i = 0; i < aTraiter.length; i++) {
-    const amd = aTraiter[i]
-    if (signal?.aborted) {
-      throw new DOMException('Aborted', 'AbortError')
-    }
+  // Débridage des performances pour LM Studio sur Apple Silicon :
+  // - Mode local : 0 ms de délai inter-requête et pool de 3 workers asynchrones simultanés
+  // - Mode Groq / distant : cadence protectrice 1 200 ms et 1 worker séquentiel (anti-429)
+  const CONCURRENCY = isLocal ? 3 : 1
+  const effectiveThrottleMs = isLocal ? 0 : throttleDelayMs
 
-    // Délai de lissage incompressible de 1 200 ms entre deux requêtes vers /api/v2/analyser-llm (rythme 8K TPM)
-    if (i > 0 && throttleDelayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, throttleDelayMs))
-    }
+  let completedCount = 0
+  let nextQueueIndex = 0
 
-    const singlePayload = {
-      ...payload,
-      target_uid: amd.id
-    }
+  async function worker() {
+    while (nextQueueIndex < aTraiter.length) {
+      if (signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError')
+      }
+      const itemIdx = nextQueueIndex++
+      const amd = aTraiter[itemIdx]
 
-    try {
-      let resSingle = await fetch(`${API_BASE_URL}/api/v2/analyser-llm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-        signal,
-        body: JSON.stringify(singlePayload),
-      })
+      // Cooldown protecteur : actif uniquement en mode distant (Groq) entre requêtes successives
+      if (!isLocal && effectiveThrottleMs > 0 && itemIdx > 0) {
+        await new Promise((resolve) => setTimeout(resolve, effectiveThrottleMs))
+      }
 
-      // Gestion Anti-429 & Backoff (1 tentative de retry après 6 secondes pour reconstituer la fenêtre de tokens Groq)
-      if (resSingle.status === 429) {
-        await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
-        if (signal?.aborted) {
-          throw new DOMException('Aborted', 'AbortError')
-        }
-        resSingle = await fetch(`${API_BASE_URL}/api/v2/analyser-llm`, {
+      if (signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError')
+      }
+
+      const singlePayload = {
+        ...payload,
+        target_uid: amd.id,
+      }
+
+      try {
+        let resSingle = await fetch(`${API_BASE_URL}/api/v2/analyser-llm`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
           signal,
           body: JSON.stringify(singlePayload),
         })
-      }
 
-      if (!resSingle.ok) {
-        const errText = await resSingle.text().catch(() => 'Erreur API unitaire')
-        if (resSingle.status === 401 || resSingle.status === 503) {
-          let detail = errText
-          try {
-            detail = JSON.parse(errText).detail || errText
-          } catch {
-            // garde errText
+        // Gestion Anti-429 & Backoff (1 tentative de retry après 6 secondes pour reconstituer la fenêtre de tokens Groq)
+        if (!isLocal && resSingle.status === 429) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
+          if (signal?.aborted) {
+            throw new DOMException('Aborted', 'AbortError')
           }
-          throw new ClassifyError(
-            `${detail}. Ouvrez ⚙️ Réglages IA → 🔑 Clé API pour saisir votre clé Groq valide (gsk_...), ou mettez à jour GROQ_API_KEY dans Vercel puis redéployez.`,
-            resSingle.status
-          )
+          resSingle = await fetch(`${API_BASE_URL}/api/v2/analyser-llm`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+            signal,
+            body: JSON.stringify(singlePayload),
+          })
         }
-        if (resSingle.status === 429) {
-          // Second échec 429 consécutif : marquer en attente sans bloquer le reste de l'ordonnancement
-          currentIdx++
-          const indexObj = resultatsGlobaux.findIndex(r => r.id === amd.id)
-          if (indexObj !== -1) {
-            const waitingRes = {
-              id: amd.id,
-              statut: 'Isolé',
-              analyse_intention: '⏳ En attente (Quota IA temporairement atteint — HTTP 429).',
-              analyse_politique: 'Mise en attente automatique suite au plafond de requêtes par minute.',
-              justification: 'Quota de tokens par minute atteint (HTTP 429).',
-              alerte_couleur: 'orange',
-              niveau_confiance: 0.0,
+
+        if (!resSingle.ok) {
+          const errText = await resSingle.text().catch(() => 'Erreur API unitaire')
+          if (resSingle.status === 401 || resSingle.status === 503) {
+            let detail = errText
+            try {
+              detail = JSON.parse(errText).detail || errText
+            } catch {
+              // garde errText
             }
-            resultatsGlobaux[indexObj] = {
-              ...resultatsGlobaux[indexObj],
-              resultat_ia: waitingRes
-            }
-            onProgress(waitingRes, nb_classes + currentIdx, total, resultatsGlobaux)
+            throw new ClassifyError(
+              `${detail}. Ouvrez ⚙️ Réglages IA → 🔑 Clé API pour saisir votre clé Groq valide (gsk_...), ou mettez à jour GROQ_API_KEY dans Vercel puis redéployez.`,
+              resSingle.status
+            )
           }
-          continue
+          if (resSingle.status === 429) {
+            // Second échec 429 consécutif : marquer en attente sans bloquer le reste de l'ordonnancement
+            completedCount++
+            const indexObj = resultatsGlobaux.findIndex(r => r.id === amd.id)
+            if (indexObj !== -1) {
+              const waitingRes = {
+                id: amd.id,
+                statut: 'Isolé',
+                analyse_intention: '⏳ En attente (Quota IA temporairement atteint — HTTP 429).',
+                analyse_politique: 'Mise en attente automatique suite au plafond de requêtes par minute.',
+                justification: 'Quota de tokens par minute atteint (HTTP 429).',
+                alerte_couleur: 'orange',
+                niveau_confiance: 0.0,
+              }
+              resultatsGlobaux[indexObj] = {
+                ...resultatsGlobaux[indexObj],
+                resultat_ia: waitingRes,
+              }
+              onProgress(waitingRes, nb_classes + completedCount, total, [...resultatsGlobaux])
+            }
+            continue
+          }
+          throw new Error(errText)
         }
-        throw new Error(errText)
-      }
 
-      const res = await resSingle.json()
+        const res = await resSingle.json()
 
-      // Mettre à jour le tableau global
-      const indexObj = resultatsGlobaux.findIndex(r => r.id === amd.id)
-      if (indexObj !== -1) {
-        resultatsGlobaux[indexObj] = res
-      }
-
-      currentIdx++
-
-      // Remonter la progression au composant React
-      if (res.resultat_ia) {
-        onProgress(res.resultat_ia, nb_classes + currentIdx, total, resultatsGlobaux)
-      }
-
-    } catch (err) {
-      if (err.name === 'AbortError' || err.name === 'ClassifyError') throw err
-      console.error(`Erreur LLM sur ${amd.id}:`, err)
-
-      currentIdx++
-      const indexObj = resultatsGlobaux.findIndex(r => r.id === amd.id)
-      if (indexObj !== -1) {
-        const errorRes = {
-          id: amd.id,
-          statut: 'Erreur IA',
-          analyse_intention: '⚠️ Impossible de joindre l\'IA ou erreur lors de l\'analyse.',
-          analyse_politique: 'Analyse sémantique indisponible.',
-          justification: err.message || 'Échec de traitement.',
-          alerte_couleur: 'rouge',
-          niveau_confiance: 0.0,
+        // Mettre à jour le tableau global
+        const indexObj = resultatsGlobaux.findIndex(r => r.id === amd.id)
+        if (indexObj !== -1) {
+          resultatsGlobaux[indexObj] = res
         }
-        resultatsGlobaux[indexObj] = {
-          ...resultatsGlobaux[indexObj],
-          resultat_ia: errorRes
+
+        completedCount++
+
+        // Remonter la progression au composant React au fil de l'eau
+        if (res.resultat_ia) {
+          onProgress(res.resultat_ia, nb_classes + completedCount, total, [...resultatsGlobaux])
         }
-        onProgress(errorRes, nb_classes + currentIdx, total, resultatsGlobaux)
+
+      } catch (err) {
+        if (err.name === 'AbortError' || err.name === 'ClassifyError') throw err
+        console.error(`Erreur LLM sur ${amd.id}:`, err)
+
+        completedCount++
+        const indexObj = resultatsGlobaux.findIndex(r => r.id === amd.id)
+        if (indexObj !== -1) {
+          const errorRes = {
+            id: amd.id,
+            statut: 'Erreur IA',
+            analyse_intention: '⚠️ Impossible de joindre l\'IA ou erreur lors de l\'analyse.',
+            analyse_politique: 'Analyse sémantique indisponible.',
+            justification: err.message || 'Échec de traitement.',
+            alerte_couleur: 'rouge',
+            niveau_confiance: 0.0,
+          }
+          resultatsGlobaux[indexObj] = {
+            ...resultatsGlobaux[indexObj],
+            resultat_ia: errorRes,
+          }
+          onProgress(errorRes, nb_classes + completedCount, total, [...resultatsGlobaux])
+        }
       }
     }
+  }
+
+  const workerCount = Math.min(CONCURRENCY, aTraiter.length)
+  if (workerCount > 0) {
+    const workers = Array.from({ length: workerCount }, () => worker())
+    await Promise.all(workers)
   }
 
   return resultatsGlobaux

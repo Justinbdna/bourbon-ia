@@ -98,3 +98,55 @@ def test_evaluate_similitude_auto_complete_cible_si_omise(monkeypatch):
     assert resultat.statut == "Discussion commune"
     assert resultat.id_discussion_cible == "AMDT-2"
 
+
+def test_extraire_json_isole_premier_bloc_contre_bavardage_mistral():
+    from api.llm_semantic_engine import _extraire_json
+
+    # Cas Mistral bavard : premier bloc JSON valide suivi d'un second bloc ou texte
+    reponse_bavarde = (
+        '{"statut":"Isolé","confiance":0.95,"cible":null,"justification":"Dispositif indépendant."}\n\n'
+        'Explications supplémentaires de Mistral :\n'
+        '{"autre_objet":"inutile"}'
+    )
+    extrait = _extraire_json(reponse_bavarde)
+    donnees = json.loads(extrait)
+    assert donnees["statut"] == "Isolé"
+    assert donnees["confiance"] == 0.95
+    assert "Dispositif indépendant" in donnees["justification"]
+
+
+def test_evaluate_similitude_mode_local_turbo(monkeypatch):
+    from api.llm_semantic_engine import LOCAL_STOP_SEQUENCES
+
+    captured_kwargs = {}
+
+    class FauxClientCapture:
+        def __init__(self, **_):
+            self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=self._create))
+
+        def _create(self, **kwargs):
+            nonlocal captured_kwargs
+            captured_kwargs = kwargs
+            contenu = '{"statut":"Isolé","confiance":0.95,"cible":null,"justification":"Dispositif indépendant."}'
+            message = types.SimpleNamespace(content=contenu)
+            return types.SimpleNamespace(choices=[types.SimpleNamespace(message=message)])
+
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=FauxClientCapture))
+    monkeypatch.delenv("VERCEL", raising=False)
+
+    resultat = evaluate_similitude(
+        AMENDEMENT,
+        CANDIDATS,
+        llm_endpoint="http://localhost:1234/v1",
+        provider="local",
+        max_tokens=350,
+    )
+
+    assert resultat.statut == "Isolé"
+    assert captured_kwargs.get("max_tokens") == 150
+    assert captured_kwargs.get("stop") == LOCAL_STOP_SEQUENCES
+    messages = captured_kwargs.get("messages", [])
+    assert len(messages) >= 3
+    assert "greffier légistique" in messages[0]["content"]
+
+

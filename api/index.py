@@ -488,6 +488,7 @@ class V2AnalyzeRequest(BaseModel):
     provider: str = "local"  # "local" | "groq" (clé utilisateur) | "groq_auto" (clé serveur)
     temperature: float = 0.1
     max_tokens: int = 350
+    stop: Optional[list[str]] = Field(default=None, description="Séquences d'arrêt optionnelles pour couper court au bavardage.")
     textes_reference: dict[str, str] = Field(default_factory=dict, description="Texte de loi initial par article (ex: {'Article 1er': '...'})")
 
 class V2AnalyzeSingleRequest(V2AnalyzeRequest):
@@ -1086,13 +1087,16 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                         try:
                             endpoint_llm, cle_llm, source_cle, modele_llm = _parametres_llm(payload)
                             valid_endpoint = validate_endpoint_url(endpoint_llm)
+                            effective_max_tok = 150 if payload.provider in ("local", "lmstudio") else min(payload.max_tokens or 350, 350)
                             resultat = await asyncio.to_thread(
                                 evaluate_similitude,
                                 amend_dict, candidats,
                                 llm_endpoint=valid_endpoint,
+                                provider=payload.provider,
                                 model=modele_llm, api_key=cle_llm,
                                 key_source=source_cle,
-                                timeout=120.0, max_tokens=min(payload.max_tokens or 350, 350), temperature=payload.temperature,
+                                timeout=120.0, max_tokens=effective_max_tok, temperature=payload.temperature,
+                                stop=payload.stop,
                                 texte_loi_reference=amend.texte_loi_reference,
                             )
                             llm_data = resultat.model_dump()
@@ -1276,13 +1280,16 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                                 detail="La clé Groq de la démo n'est pas encore configurée sur le serveur (GROQ_API_KEY).",
                             )
 
+                    effective_max_tok = 150 if payload.provider in ("local", "lmstudio") else min(payload.max_tokens or 350, 350)
                     resultat = await asyncio.to_thread(
                         evaluate_similitude,
                         amend_dict, candidats,
                         llm_endpoint=valid_endpoint,
+                        provider=payload.provider,
                         model=modele_llm, api_key=cle_llm,
                         key_source=source_cle,
-                        timeout=120.0, max_tokens=min(payload.max_tokens or 350, 350), temperature=payload.temperature,
+                        timeout=120.0, max_tokens=effective_max_tok, temperature=payload.temperature,
+                        stop=payload.stop,
                         texte_loi_reference=target.texte_loi_reference,
                     )
 

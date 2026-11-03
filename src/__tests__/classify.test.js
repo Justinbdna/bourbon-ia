@@ -4,6 +4,11 @@ import {
   classifyAmendmentsV2,
   analyzeSurtransposition,
   resumerAmendement,
+  safeParseJson,
+  buildLocalChatPayload,
+  LOCAL_PROMPT_SYSTEM,
+  LOCAL_ONE_SHOT_MESSAGES,
+  LOCAL_STOP_SEQUENCES,
   ClassifyError,
 } from '../api/classify'
 
@@ -222,5 +227,120 @@ describe('classify.js — Pipeline Orchestrateur Frontend V2', () => {
     })
 
     await expect(resumerAmendement({ id: 'AM-2' }, {})).rejects.toThrow('Clé API invalide')
+  })
+
+  describe('Chantier Local Turbo — Fonctions et Résilience JSON', () => {
+    it('safeParseJson extrait correctement un JSON compact sur une seule ligne', () => {
+      const raw = '{"statut":"Isolé","confiance":0.95,"cible":null,"justification":"Dispositif indépendant."}'
+      const res = safeParseJson(raw)
+      expect(res).toEqual({
+        statut: 'Isolé',
+        confiance: 0.95,
+        cible: null,
+        justification: 'Dispositif indépendant.',
+      })
+    })
+
+    it('safeParseJson résiste aux bavardages multi-lignes et balises Markdown de Mistral', () => {
+      const raw = '```json\n{"statut":"Discussion commune","confiance":0.9,"cible":"CD68","justification":"Réécriture concurrente."}\n```\nVoici quelques remarques supplémentaires...'
+      const res = safeParseJson(raw)
+      expect(res.statut).toBe('Discussion commune')
+      expect(res.confiance).toBe(0.9)
+      expect(res.cible).toBe('CD68')
+      expect(res.justification).toContain('Réécriture concurrente.')
+    })
+
+    it('safeParseJson replie proprement vers "Isolé" en cas de statut non conforme ou absent', () => {
+      const raw = '{"statut":"Inconnu","confiance":0.7}'
+      const res = safeParseJson(raw)
+      expect(res.statut).toBe('Isolé')
+      expect(res.cible).toBeNull()
+      expect(res.justification).toBeDefined()
+    })
+
+    it('safeParseJson gère les textes vides ou corrompus sans lancer d\'exception', () => {
+      const vide = safeParseJson('')
+      expect(vide.statut).toBe('Isolé')
+      expect(vide.confiance).toBe(0.0)
+
+      const invalide = safeParseJson('Pas de JSON du tout ici !')
+      expect(invalide.statut).toBe('Isolé')
+      expect(invalide.confiance).toBe(0.0)
+    })
+
+    it('buildLocalChatPayload fabrique un prompt greffier compact avec stop sequences et max_tokens 150', () => {
+      const amendement = {
+        id: 'AM-1',
+        article: 'Article 3',
+        dispositif: 'Supprimer cet article.',
+        expose_sommaire: 'Exposé des motifs.',
+      }
+      const payload = buildLocalChatPayload(amendement, [{ id: 'AM-2', dispositif: 'Autre texte' }])
+
+      expect(payload.max_tokens).toBe(150)
+      expect(payload.stop).toEqual(LOCAL_STOP_SEQUENCES)
+      expect(payload.messages[0].content).toBe(LOCAL_PROMPT_SYSTEM)
+      expect(payload.messages.slice(1, 3)).toEqual(LOCAL_ONE_SHOT_MESSAGES)
+      expect(payload.messages[3].content).toContain('Amendement candidat (Article 3)')
+      expect(payload.messages[3].content).toContain('[AM-2]')
+    })
+
+    it('classifyAmendmentsV2 en mode local traite avec concurrence x3 et 0 ms de délai', async () => {
+      const mechanicalData = [
+        { id: 'AM-1', statut_mecanique: 'NOUVEAU', _skipLLM: false },
+        { id: 'AM-2', statut_mecanique: 'NOUVEAU', _skipLLM: false },
+        { id: 'AM-3', statut_mecanique: 'NOUVEAU', _skipLLM: false },
+      ]
+
+      let maxConcurrentCalls = 0
+      let activeCalls = 0
+      const capturedPayloads = []
+
+      globalThis.fetch = vi.fn().mockImplementation(async (url, init) => {
+        if (url.includes('/api/v2/mecanique')) {
+          return {
+            ok: true,
+            json: async () => mechanicalData,
+          }
+        }
+        if (url.includes('/api/v2/analyser-llm')) {
+          activeCalls++
+          maxConcurrentCalls = Math.max(maxConcurrentCalls, activeCalls)
+          capturedPayloads.push(JSON.parse(init.body))
+
+          // Léger délai asynchrone pour vérifier la concurrence
+          await new Promise((r) => setTimeout(r, 20))
+          activeCalls--
+
+          const targetUid = JSON.parse(init.body).target_uid
+          return {
+            ok: true,
+            json: async () => ({
+              id: targetUid,
+              resultat_ia: {
+                id: targetUid,
+                statut: 'Isolé',
+                confiance: 0.9,
+              },
+            }),
+          }
+        }
+        return Promise.reject(new Error(`Unexpected URL: ${url}`))
+      })
+
+      const onProgress = vi.fn()
+      const results = await classifyAmendmentsV2(mechanicalData, {
+        aiSettings: { provider: 'local' },
+        onProgress,
+      })
+
+      expect(results.length).toBe(3)
+      // La concurrence x3 s'exécute bien en parallèle
+      expect(maxConcurrentCalls).toBeGreaterThanOrEqual(2)
+      // Vérifier que le payload envoyé contient max_tokens 150 et stop sequences
+      expect(capturedPayloads[0].max_tokens).toBe(150)
+      expect(capturedPayloads[0].stop).toEqual(LOCAL_STOP_SEQUENCES)
+      expect(onProgress).toHaveBeenCalled()
+    })
   })
 })

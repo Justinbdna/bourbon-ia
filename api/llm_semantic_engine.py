@@ -129,19 +129,24 @@ def _call_chat_completion_with_fallback(
     messages: list[dict[str, str]],
     temperature: float,
     max_tokens: int,
+    stop: Optional[list[str]] = None,
 ) -> Any:
     """
     Exécute client.chat.completions.create avec repli automatique de modèle sur Groq
     si le modèle demandé renvoie 404 model_not_found / décommissionné ou 429 rate_limit_exceeded.
     Donne la priorité aux modèles légers à quota TPM élevé (llama-3.1-8b-instant, openai/gpt-oss-20b).
     """
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if stop:
+        kwargs["stop"] = stop
+
     try:
-        return client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        return client.chat.completions.create(**kwargs)
     except Exception as first_exc:
         exc_msg = str(first_exc).lower()
         exc_type = type(first_exc).__name__
@@ -161,12 +166,8 @@ def _call_chat_completion_with_fallback(
             if fallback_model == model:
                 continue
             try:
-                return client.chat.completions.create(
-                    model=fallback_model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
+                kwargs["model"] = fallback_model
+                return client.chat.completions.create(**kwargs)
             except Exception as fb_exc:
                 fb_msg = str(fb_exc).lower()
                 fb_type = type(fb_exc).__name__.lower()
@@ -353,6 +354,27 @@ SYSTEM_PROMPT: str = (
     "Réponds STRICTEMENT en JSON minifié : "
     '{"statut":"...","confiance":0.9,"justification":"1 phrase max"}'
 )
+
+LOCAL_SYSTEM_PROMPT: str = (
+    "Tu es le greffier légistique de l'Assemblée nationale.\n"
+    "Compare l'amendement candidat avec les amendements déjà déposés sur l'article.\n"
+    "Réponds STRICTEMENT par un unique objet JSON sur une seule ligne.\n"
+    'Gabarit obligatoire : {"statut":"Isolé"|"Identique"|"Discussion commune","confiance":0.9,"cible":null|"NUMERO","justification":"1 phrase max"}\n'
+    "Ne génère aucun texte avant ou après. N'écris pas d'autres objets."
+)
+
+LOCAL_ONE_SHOT_MESSAGES: list[dict[str, str]] = [
+    {
+        "role": "user",
+        "content": "Amendement A (Article 3) : Supprimer l'alinéa 1.",
+    },
+    {
+        "role": "assistant",
+        "content": '{"statut":"Isolé","confiance":0.95,"cible":null,"justification":"Suppression sans autre amendement concurrent sur cet alinéa."}',
+    },
+]
+
+LOCAL_STOP_SEQUENCES: list[str] = ["\n\n", "}\n", "\n{", "```"]
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -577,18 +599,28 @@ def _reparer_json(texte: str) -> str:
 def _extraire_json(contenu: str) -> str:
     """
     Isole l'objet JSON d'une réponse de modèle, y compris quand celui-ci
-    « pense à voix haute ».
+    « pense à voix haute » ou produit du bavardage multi-lignes.
 
-    Stratégie : on retire les blocs `<think>` et les clôtures Markdown, puis on
-    scanne les accolades en suivant l'état des chaînes de caractères, et on
-    retient le DERNIER objet complet et équilibré.
+    Stratégie : on retire les blocs `<think>` et les clôtures Markdown,
+    puis on extrait en priorité le PREMIER bloc JSON complet et équilibré
+    pour couper court à toute tentative d'hallucination ou répétition de blocs.
     """
     if not contenu:
         raise ValueError("Réponse vide du modèle.")
 
     texte = re.sub(r"<think>.*?</think>", " ", contenu, flags=re.DOTALL | re.IGNORECASE)
     texte = re.sub(r"<think>.*$", " ", texte, flags=re.DOTALL | re.IGNORECASE)  # bloc non fermé
-    texte = re.sub(r"```[a-zA-Z]*", " ", texte).replace("```", " ")
+    texte = re.sub(r"```[a-zA-Z]*", " ", texte).replace("```", " ").strip()
+
+    # Détection rapide d'un premier bloc JSON compact sans imbrication
+    match_direct = re.search(r"\{[^{}]*\}", texte)
+    if match_direct:
+        candidat = match_direct.group(0)
+        try:
+            json.loads(candidat)
+            return candidat
+        except Exception:
+            pass
 
     objets: list[str] = []
     profondeur = 0
@@ -618,7 +650,14 @@ def _extraire_json(contenu: str) -> str:
                 debut = None
 
     if objets:
-        return objets[-1]
+        # En priorité le premier objet JSON complet valide
+        for obj in objets:
+            try:
+                json.loads(obj)
+                return obj
+            except Exception:
+                continue
+        return objets[0]
 
     # Si aucun objet équilibré strict n'a été trouvé, tenter la réparation résiliente
     premier_idx = texte.find("{")
@@ -662,12 +701,14 @@ def evaluate_similitude(
     contexte: Any = None,
     llm_endpoint: Optional[str] = None,
     *,
+    provider: Optional[str] = None,
     model: str = DEFAULT_MODEL,
     api_key: str = "local-key",
     key_source: str = "payload",
     timeout: float = DEFAULT_TIMEOUT,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     temperature: float = DEFAULT_TEMPERATURE,
+    stop: Optional[list[str]] = None,
     texte_loi_reference: Optional[str] = None,
 ) -> LLMClassificationResponse:
     """
@@ -687,12 +728,27 @@ def evaluate_similitude(
         from openai import OpenAI
 
         effective_endpoint = validate_endpoint_url(llm_endpoint)
-        is_groq = "api.groq.com" in effective_endpoint
-        effective_max_tokens = min(max_tokens, 350)
+        is_groq = "api.groq.com" in effective_endpoint or provider in ("groq", "groq_auto")
+        is_local = _is_local_endpoint(effective_endpoint) or provider in ("local", "lmstudio")
 
-        if is_groq:
-            if not model or model in ("local-model", "default", "llama3-8b-8192", "llama3-70b-8192", "llama-3.3-70b-versatile", ""):
-                model = GROQ_DEFAULT_MODEL
+        if is_local:
+            effective_max_tokens = min(max_tokens or 150, 150)
+            messages = [
+                {"role": "system", "content": LOCAL_SYSTEM_PROMPT},
+                *LOCAL_ONE_SHOT_MESSAGES,
+                {"role": "user", "content": prompt_utilisateur},
+            ]
+            effective_stop = stop if stop is not None else LOCAL_STOP_SEQUENCES
+        else:
+            effective_max_tokens = min(max_tokens or 350, 350)
+            if is_groq:
+                if not model or model in ("local-model", "default", "llama3-8b-8192", "llama3-70b-8192", "llama-3.3-70b-versatile", ""):
+                    model = GROQ_DEFAULT_MODEL
+            messages = [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt_utilisateur},
+            ]
+            effective_stop = stop
 
         clean_key = str(api_key).strip() if api_key else ""
         default_headers = None
@@ -712,12 +768,10 @@ def evaluate_similitude(
             client,
             is_groq=is_groq,
             model=model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt_utilisateur},
-            ],
+            messages=messages,
             temperature=temperature,
             max_tokens=effective_max_tokens,
+            stop=effective_stop,
         )
         contenu = (reponse.choices[0].message.content or "").strip()
 
