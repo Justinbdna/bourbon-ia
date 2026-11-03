@@ -4,7 +4,7 @@ import AmendmentTable from './components/AmendmentTable'
 import AmendmentDetail from './components/AmendmentDetail'
 import LawParticipants from './components/LawParticipants'
 import ClassifyButton from './components/ClassifyButton'
-import { classifyAmendmentsV2, classifyMechanicalOnly, analyzeSingleAmendment, normalizeAmendments } from './api/classify'
+import { classifyMechanically, explainConflictsWithAI, analyzeSingleAmendment, normalizeAmendments } from './api/classify'
 import ThemeToggle from './components/ThemeToggle'
 import AISettingsModal from './components/AISettingsModal'
 import ConsentModal from './components/ConsentModal'
@@ -38,6 +38,7 @@ export default function App() {
   const [warnings, setWarnings] = useState([])
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [progressInfo, setProgressInfo] = useState(null)
+  const [lastMechanicalSummary, setLastMechanicalSummary] = useState(null)
   const [showCloudWarning, setShowCloudWarning] = useState(false)
 
   // Consentement RGPD (sessionStorage = volatile)
@@ -252,30 +253,24 @@ export default function App() {
     const controller = new AbortController()
     abortControllerRef.current = controller
 
-    startTimeRef.current = Date.now()
+    const t0 = Date.now()
+    startTimeRef.current = t0
     setProgressInfo({ current: 0, total: amendments.length, elapsed: 0 })
 
-    if (timerRef.current) clearInterval(timerRef.current)
-    timerRef.current = setInterval(() => {
-      if (startTimeRef.current) {
-        const tempsEcoule = Math.floor((Date.now() - startTimeRef.current) / 1000)
-        setProgressInfo(prev => prev ? { ...prev, elapsed: tempsEcoule } : null)
-      }
-    }, 500)
-
-    startKeepAlive(() => {
-      if (startTimeRef.current) {
-        const tempsEcoule = Math.floor((Date.now() - startTimeRef.current) / 1000)
-        setProgressInfo(prev => prev ? { ...prev, elapsed: tempsEcoule } : null)
-      }
-    })
-
     try {
-      const mecResults = await classifyMechanicalOnly(amendments, {
-        aiSettings,
+      const mecResults = await classifyMechanically(amendments, {
         signal: controller.signal,
       })
+      const elapsedMs = Date.now() - t0
+      const rawSec = (elapsedMs / 1000).toFixed(1)
+      const displaySec = rawSec === '0.0' ? '0.1' : rawSec
+
       setAmendments(mecResults)
+      setLastMechanicalSummary({
+        elapsedSec: displaySec,
+        dureeMs: mecResults._meta?.duree_ms ?? elapsedMs,
+        statistiques: mecResults._meta?.statistiques || null,
+      })
       await persistEncryptedSession(mecResults)
     } catch (err) {
       if (err.name === 'AbortError') {
@@ -285,8 +280,6 @@ export default function App() {
         setClassifyError(err.message || 'Erreur inconnue lors du classement mécanique.')
       }
     } finally {
-      stopKeepAlive()
-      if (timerRef.current) clearInterval(timerRef.current)
       startTimeRef.current = null
       abortControllerRef.current = null
       setIsClassifying(false)
@@ -300,7 +293,30 @@ export default function App() {
     try {
       const resIa = await analyzeSingleAmendment(targetUid, amendments, aiSettings)
       setAmendments(prev => {
-        const next = prev.map(a => (a.id === targetUid || a.uid === targetUid) ? { ...a, resultat_ia: resIa } : a)
+        const next = prev.map(a => {
+          if (a.id !== targetUid && a.uid !== targetUid) return a
+          const newJustif = resIa?.justification || resIa?.analyse_intention || a.justification
+          const preservedStatut = a.resultat_ia?.statut || a.statut || resIa?.statut
+          const preservedGid = a.groupe_conflit_id ?? a.resultat_ia?.groupe_conflit_id ?? resIa?.groupe_conflit_id
+          const preservedCible = a.cible_numero ?? a.resultat_ia?.cible_numero ?? resIa?.cible_numero
+          const preservedGroupe = a.resultat_ia?.groupe || resIa?.groupe
+          return {
+            ...a,
+            statut: preservedStatut,
+            groupe_conflit_id: preservedGid,
+            cible_numero: preservedCible,
+            justification: newJustif,
+            resultat_ia: {
+              ...a.resultat_ia,
+              ...resIa,
+              statut: preservedStatut,
+              groupe_conflit_id: preservedGid,
+              cible_numero: preservedCible,
+              groupe: preservedGroupe,
+              justification: newJustif,
+            },
+          }
+        })
         persistEncryptedSession(next)
         return next
       })
@@ -330,18 +346,16 @@ export default function App() {
     setWarnings([])
     abortRef.current = false
 
-    // Nettoyer les anciens résultats avant de démarrer
-    setAmendments(prev => prev.map(a => {
-      const copy = { ...a }
-      delete copy.resultat_ia
-      return copy
-    }))
-
     const controller = new AbortController()
     abortControllerRef.current = controller
 
+    const nbConflictsInitial = amendments.filter(
+      (a) => (a.resultat_ia?.statut || a.statut) === 'Discussion commune'
+    ).length
+    const totalToExplain = nbConflictsInitial > 0 ? nbConflictsInitial : amendments.length
+
     startTimeRef.current = Date.now()
-    setProgressInfo({ current: 0, total: amendments.length, elapsed: 0 })
+    setProgressInfo({ current: 0, total: totalToExplain, elapsed: 0 })
 
     if (timerRef.current) clearInterval(timerRef.current)
     timerRef.current = setInterval(() => {
@@ -351,7 +365,7 @@ export default function App() {
       }
     }, 500)
 
-    // Neutralisation de l'App Nap et de la mise en veille d'arrière-plan de Safari
+    // Neutralisation de l'App Nap et de la mise en veille d'arrière-plan de Safari (uniquement pendant l'IA)
     startKeepAlive(() => {
       if (startTimeRef.current) {
         const tempsEcoule = Math.floor((Date.now() - startTimeRef.current) / 1000)
@@ -360,43 +374,43 @@ export default function App() {
     })
 
     try {
-      setCurrentAnalyzing({ uid: '', numero: '...', index: 0, total: amendments.length })
-      const v2Results = await classifyAmendmentsV2(amendments, {
+      setCurrentAnalyzing({ uid: '', numero: '...', index: 0, total: totalToExplain })
+      const enrichedResults = await explainConflictsWithAI(amendments, {
         aiSettings,
         signal: controller.signal,
         onMechanical: (mecResults) => {
-          // Met à jour l'état avec le tri mécanique pur immédiatement
           setAmendments(mecResults)
         },
         onProgress: (partialResult, idx, total, snapshot) => {
           if (partialResult) {
-            setCurrentAnalyzing({ 
-              uid: partialResult.id, 
+            setCurrentAnalyzing({
+              uid: partialResult.id,
               numero: partialResult.id?.split('-').pop() || '?',
-              index: idx, 
-              total 
+              index: idx,
+              total,
             })
           }
           const tempsEcoule = startTimeRef.current ? Math.floor((Date.now() - startTimeRef.current) / 1000) : 0
           setProgressInfo(prev => prev ? { ...prev, current: idx, total, elapsed: tempsEcoule } : null)
-          // Sauvegarde uniquement par paliers de 25 amendements ou à 100 %
-          if (Array.isArray(snapshot) && snapshot.length > 0 && idx > 0 && (idx % 25 === 0 || idx === total)) {
-            persistEncryptedSession(snapshot)
+          if (Array.isArray(snapshot) && snapshot.length > 0) {
+            setAmendments(snapshot)
+            if (idx > 0 && (idx % 25 === 0 || idx === total)) {
+              persistEncryptedSession(snapshot)
+            }
           }
         },
       })
 
-      // Le V2 retourne les amendements COMPLETS (pas juste resultat_ia)
-      setAmendments(v2Results)
-      await persistEncryptedSession(v2Results)
+      setAmendments(enrichedResults)
+      await persistEncryptedSession(enrichedResults)
       setCurrentAnalyzing(null)
 
     } catch (err) {
       if (err.name === 'AbortError') {
-        setWarnings(prev => [...prev, "Classement annulé par l'utilisateur."])
+        setWarnings(prev => [...prev, "Explication IA annulée par l'utilisateur."])
       } else {
-        console.error('Erreur classement V2:', err)
-        setClassifyError(err.message || 'Erreur inconnue lors du classement.')
+        console.error('Erreur explication IA:', err)
+        setClassifyError(err.message || "Erreur inconnue lors de l'explication des conflits.")
       }
     } finally {
       stopKeepAlive()
@@ -554,6 +568,7 @@ export default function App() {
           onLlmClick={handleClassify}
           onStop={handleStopClassify}
           progressInfo={progressInfo}
+          mechanicalSummary={lastMechanicalSummary}
         />
 
         {/* ── État d'analyse en cours (V2) ── */}

@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   normalizeAmendments,
   classifyAmendmentsV2,
+  classifyMechanically,
+  explainConflictsWithAI,
+  analyzeSingleAmendment,
+  mergeAiExplanationIntoAmendment,
   analyzeSurtransposition,
   resumerAmendement,
   safeParseJson,
@@ -400,6 +404,192 @@ describe('classify.js — Pipeline Orchestrateur Frontend V2', () => {
       expect(results.length).toBe(2)
       // Le second amendement a bien été traité malgré l'erreur sur le premier
       expect(results[1].resultat_ia.statut).toBe('Discussion commune')
+    })
+  })
+
+  describe('Architecture Hybride — classifyMechanically & explainConflictsWithAI', () => {
+    it('classifyMechanically interroge POST /api/v2/classer-regles et fusionne statut, groupe_conflit_id et cible_numero', async () => {
+      const localAmendments = [
+        { id: 'AM-1', numero: '1', article: 'Article PREMIER', dispositif: 'Supprimer cet article.', commission: 'Affaires culturelles' },
+        { id: 'AM-2', numero: '2', article: 'Article PREMIER', dispositif: 'Supprimer cet article.', commission: 'Affaires culturelles' },
+      ]
+
+      const serverResponse = {
+        statut: 'success',
+        total: 2,
+        duree_ms: 12,
+        statistiques: { identiques: 2, discussions_communes: 0, isoles: 0 },
+        amendements: [
+          {
+            id: 'AM-1',
+            numero: '1',
+            statut: 'Identique',
+            confiance: 1.0,
+            groupe_conflit_id: 'id_art_1er_abcd1234',
+            cible_numero: '2',
+            justification: 'Amendement identique au n° 2.',
+          },
+          {
+            id: 'AM-2',
+            numero: '2',
+            statut: 'Identique',
+            confiance: 1.0,
+            groupe_conflit_id: 'id_art_1er_abcd1234',
+            cible_numero: '1',
+            justification: 'Identique à l\'amendement n° 1.',
+          },
+        ],
+      }
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => serverResponse,
+      })
+
+      const res = await classifyMechanically(localAmendments)
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v2/classer-regles'),
+        expect.objectContaining({ method: 'POST' })
+      )
+      expect(res.length).toBe(2)
+      expect(res[0].statut).toBe('Identique')
+      expect(res[0].groupe_conflit_id).toBe('id_art_1er_abcd1234')
+      expect(res[0].cible_numero).toBe('2')
+      expect(res[0].commission).toBe('Affaires culturelles')
+      expect(res._meta.duree_ms).toBe(12)
+    })
+
+    it('explainConflictsWithAI ne recalcule PAS les statuts et cible uniquement les Discussions communes', async () => {
+      const classifiedAmendments = [
+        {
+          id: 'AM-ID',
+          numero: '10',
+          article: 'Article 1er',
+          statut: 'Identique',
+          groupe_conflit_id: 'id_art_1er_111',
+          cible_numero: '11',
+          justification: 'Identique au n° 11.',
+          resultat_ia: {
+            id: 'AM-ID',
+            statut: 'Identique',
+            groupe_conflit_id: 'id_art_1er_111',
+            cible_numero: '11',
+            groupe: { type: 'identiques', groupe_id: 'id_art_1er_111' },
+            justification: 'Identique au n° 11.',
+          },
+        },
+        {
+          id: 'AM-DC',
+          numero: '20',
+          article: 'Article 3 BIS',
+          statut: 'Discussion commune',
+          groupe_conflit_id: 'dc_art_3_bis_p_20',
+          cible_numero: '21',
+          justification: 'Justification mécanique initiale.',
+          resultat_ia: {
+            id: 'AM-DC',
+            statut: 'Discussion commune',
+            groupe_conflit_id: 'dc_art_3_bis_p_20',
+            cible_numero: '21',
+            groupe: { type: 'discussion_commune', groupe_id: 'dc_art_3_bis_p_20' },
+            justification: 'Justification mécanique initiale.',
+          },
+        },
+      ]
+
+      let llmCalls = 0
+      globalThis.fetch = vi.fn().mockImplementation(async (url) => {
+        if (url.includes('/api/v2/analyser-llm')) {
+          llmCalls++
+          return {
+            ok: true,
+            json: async () => ({
+              id: 'AM-DC',
+              resultat_ia: {
+                // Même si le LLM suggère à tort "Isolé", le statut et le groupe déterministes doivent être préservés
+                statut: 'Isolé',
+                justification: 'Synthèse politique IA : opposition entre exonération totale et plafonnement.',
+                analyse_intention: 'Synthèse politique IA : opposition entre exonération totale et plafonnement.',
+              },
+            }),
+          }
+        }
+        throw new Error(`Unexpected URL: ${url}`)
+      })
+
+      const enriched = await explainConflictsWithAI(classifiedAmendments, {
+        aiSettings: { provider: 'local' },
+      })
+
+      // Seul l'amendement en Discussion commune a sollicité l'IA
+      expect(llmCalls).toBe(1)
+      // Le statut et le groupe déterministes sont strictement préservés
+      expect(enriched[1].statut).toBe('Discussion commune')
+      expect(enriched[1].groupe_conflit_id).toBe('dc_art_3_bis_p_20')
+      expect(enriched[1].cible_numero).toBe('21')
+      expect(enriched[1].resultat_ia.groupe.groupe_id).toBe('dc_art_3_bis_p_20')
+      // La justification a bien été enrichie par l'IA
+      expect(enriched[1].justification).toContain('Synthèse politique IA')
+      expect(enriched[1].resultat_ia.explication_ia).toBe(true)
+    })
+
+    it('mergeAiExplanationIntoAmendment préserve rigoureusement le statut et le groupe déterministes', () => {
+      const orig = {
+        id: 'AM-50',
+        statut: 'Discussion commune',
+        groupe_conflit_id: 'dc_art_12_p_50',
+        cible_numero: '52',
+        justification: 'Collision alinéa 3.',
+      }
+      const merged = mergeAiExplanationIntoAmendment(orig, {
+        resultat_ia: {
+          statut: 'Isolé',
+          justification: 'Concurrence entre deux seuils budgétaires sur l\'alinéa 3.',
+        },
+      })
+      expect(merged.statut).toBe('Discussion commune')
+      expect(merged.groupe_conflit_id).toBe('dc_art_12_p_50')
+      expect(merged.cible_numero).toBe('52')
+      expect(merged.justification).toContain('Concurrence entre deux seuils')
+    })
+
+    it('analyzeSingleAmendment cible le cluster de l\'amendement et préserve son statut déterministe', async () => {
+      const amendments = [
+        {
+          id: 'AM-10',
+          numero: '10',
+          article: 'Article 3 BIS',
+          statut: 'Discussion commune',
+          groupe_conflit_id: 'dc_art_3_bis_p_10',
+          cible_numero: '11',
+          justification: 'Collision initiale.',
+        },
+        {
+          id: 'AM-11',
+          numero: '11',
+          article: 'Article 3 BIS',
+          statut: 'Discussion commune',
+          groupe_conflit_id: 'dc_art_3_bis_p_10',
+          cible_numero: '10',
+          justification: 'Collision initiale.',
+        },
+      ]
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: 'AM-10',
+          resultat_ia: {
+            statut: 'Isolé',
+            justification: 'Explication unitaire par IA du conflit sur l\'article 3 BIS.',
+          },
+        }),
+      })
+
+      const resIa = await analyzeSingleAmendment('AM-10', amendments, { provider: 'local' })
+      expect(resIa.statut).toBe('Discussion commune')
+      expect(resIa.groupe_conflit_id).toBe('dc_art_3_bis_p_10')
+      expect(resIa.justification).toContain('Explication unitaire par IA')
     })
   })
 })

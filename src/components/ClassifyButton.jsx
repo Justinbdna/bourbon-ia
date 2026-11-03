@@ -7,6 +7,7 @@ export default function ClassifyButton({
   onLlmClick,
   onStop,
   progressInfo,
+  mechanicalSummary,
 }) {
   return (
     <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 p-5">
@@ -64,6 +65,21 @@ export default function ClassifyButton({
           )}
         </div>
       </div>
+
+      {mechanicalSummary && !loading && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-md px-3 py-1.5">
+          <span className="font-semibold">
+            ⚡ Classement déterministe exécuté en {mechanicalSummary.elapsedSec} s
+          </span>
+          {mechanicalSummary.statistiques && (
+            <span className="text-slate-600 dark:text-slate-300">
+              — {mechanicalSummary.statistiques.identiques ?? 0} Identiques ·{' '}
+              {mechanicalSummary.statistiques.discussions_communes ?? 0} Discussions communes ·{' '}
+              {mechanicalSummary.statistiques.isoles ?? 0} Isolés
+            </span>
+          )}
+        </div>
+      )}
 
       {error && (
         <p className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
