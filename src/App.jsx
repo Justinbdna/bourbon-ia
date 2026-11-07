@@ -3,15 +3,12 @@ import ImportPanel from './components/ImportPanel'
 import AmendmentTable from './components/AmendmentTable'
 import AmendmentDetail from './components/AmendmentDetail'
 import LawParticipants from './components/LawParticipants'
-import ErrorBoundary from './components/ErrorBoundary'
 import ClassifyButton from './components/ClassifyButton'
-import { classifyMechanically, explainConflictsWithAI, analyzeSingleAmendment, normalizeAmendments } from './api/classify'
+import { classifyAmendmentsV2, normalizeAmendments } from './api/classify'
 import ThemeToggle from './components/ThemeToggle'
 import AISettingsModal from './components/AISettingsModal'
 import ConsentModal from './components/ConsentModal'
 import { encrypt, decrypt } from './utils/crypto'
-import { compareArticles } from './utils/sanitize'
-import { startKeepAlive, stopKeepAlive } from './utils/keepAliveWorker'
 
 const STORAGE_KEY = 'bourbon_session_amendments'
 
@@ -31,18 +28,14 @@ function fournisseurIAParDefaut() {
 export default function App() {
   const [hasEntered, setHasEntered] = useState(false)
   const [amendments, setAmendments] = useState([])
-  const [sourceLabel, setSourceLabel] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
   const [isClassifying, setIsClassifying] = useState(false)
-  const [currentAnalyzing, setCurrentAnalyzing] = useState(null)
   const [classifyError, setClassifyError] = useState(null)
   const [warnings, setWarnings] = useState([])
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isReasoningMode, setIsReasoningMode] = useState(false)
   const [progressInfo, setProgressInfo] = useState(null)
-  const [lastMechanicalSummary, setLastMechanicalSummary] = useState(null)
-  const [analyzingUids, setAnalyzingUids] = useState(() => new Set())
   const [showCloudWarning, setShowCloudWarning] = useState(false)
-  const [focusConflictTrigger, setFocusConflictTrigger] = useState(0)
 
   // Consentement RGPD (sessionStorage = volatile)
   const [consentAsked, setConsentAsked] = useState(() => sessionStorage.getItem('bourbon_consent') !== null)
@@ -52,7 +45,6 @@ export default function App() {
   const abortRef = useRef(false)
   const abortControllerRef = useRef(null)
   const timerRef = useRef(null)
-  const startTimeRef = useRef(null)
 
   const [aiSettings, setAiSettings] = useState({ provider: fournisseurIAParDefaut(), apiKey: '', localUrl: 'http://localhost:1234/v1' })
 
@@ -80,12 +72,6 @@ export default function App() {
           const json = await decrypt(cipher)
           const parsed = JSON.parse(json)
           if (parsed && typeof parsed === 'object') {
-            const isRemoteHttps = !HOTES_LOCAUX.includes(window.location.hostname) && window.location.protocol === 'https:'
-            if (isRemoteHttps && parsed.provider === 'local' && /^http:\/\/(localhost|127\.0\.0\.1)/i.test(parsed.localUrl || 'http://localhost:1234/v1')) {
-              parsed.provider = parsed.apiKey ? 'groq' : 'groq_auto'
-            } else if (parsed.apiKey && parsed.provider === 'groq_auto') {
-              parsed.provider = 'groq'
-            }
             setAiSettings(parsed)
           }
         } catch (e) {
@@ -106,7 +92,7 @@ export default function App() {
         const json = await decrypt(stored)
         const parsed = JSON.parse(json)
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setAmendments([...parsed].sort(compareArticles))
+          setAmendments(parsed)
         }
       } catch (e) {
         console.warn('Impossible de restaurer la session chiffrée (clé expirée ou données corrompues).', e)
@@ -116,32 +102,22 @@ export default function App() {
     restore()
   }, [consentGiven])
 
-  // Helper d'écriture sécurisée dans localStorage (tolérant à QuotaExceededError)
-  async function persistEncryptedSession(dataToSave) {
-    if (!consentGiven || !Array.isArray(dataToSave) || dataToSave.length === 0) return
-    try {
-      const cipher = await encrypt(JSON.stringify(dataToSave))
-      try {
-        localStorage.setItem(STORAGE_KEY, cipher)
-      } catch (storageErr) {
-        console.warn('Quota localStorage dépassé ou écriture refusée (auto-save ignoré) :', storageErr)
-      }
-    } catch (e) {
-      console.warn('Échec de l\'auto-save chiffré.', e)
-    }
-  }
-
-  // ─── Auto-save chiffré (debounced 3s, neutralisé pendant la boucle unitaire) ───
+  // ─── Auto-save chiffré (debounce 3s pour éviter la saturation CPU pendant la classification) ───
   useEffect(() => {
-    if (!consentGiven || amendments.length === 0 || isClassifying) return
+    if (!consentGiven || amendments.length === 0) return
     let cancelled = false
     const debounceTimer = setTimeout(async () => {
-      if (!cancelled) {
-        await persistEncryptedSession(amendments)
+      try {
+        const cipher = await encrypt(JSON.stringify(amendments))
+        if (!cancelled) {
+          localStorage.setItem(STORAGE_KEY, cipher)
+        }
+      } catch (e) {
+        console.warn('Échec de l\'auto-save chiffré.', e)
       }
     }, 3000)
     return () => { cancelled = true; clearTimeout(debounceTimer) }
-  }, [amendments, consentGiven, isClassifying])
+  }, [amendments, consentGiven])
 
   // ─── Nettoyage au démontage (anti memory leak) ───
   useEffect(() => {
@@ -149,7 +125,6 @@ export default function App() {
       abortRef.current = true
       if (abortControllerRef.current) abortControllerRef.current.abort()
       if (timerRef.current) clearInterval(timerRef.current)
-      stopKeepAlive()
     }
   }, [])
 
@@ -192,7 +167,7 @@ export default function App() {
     }
   }
 
-  const selected = amendments.find((a) => a.id === selectedId || a.uid === selectedId) || null
+  const selected = amendments.find((a) => a.id === selectedId) || null
 
   // Dossier législatif du lot courant : on prend la première référence trouvée.
   // Un lot d'amendements porte en pratique sur un seul texte ; l'amendement
@@ -209,8 +184,7 @@ export default function App() {
 
   async function handleImport(list, label) {
     try {
-      const normalized = await normalizeAmendments(list)
-      const cleanList = Array.isArray(normalized) ? [...normalized].sort(compareArticles) : []
+      const cleanList = await normalizeAmendments(list)
       // Données de test des badges de conformité UE — DÉVELOPPEMENT UNIQUEMENT.
       // `import.meta.env.DEV` vaut false au build : rien n'est servi en production.
       if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('demoUE')) {
@@ -228,153 +202,17 @@ export default function App() {
   }
 
   async function handleLoadSample() {
-    // Chargement à la demande depuis public/sample-amendments.json :
-    // n'alourdit jamais le bundle JS compilé par Vite.
-    try {
-      const response = await fetch('/sample-amendments.json')
-      if (!response.ok) {
-        throw new Error(`Impossible de charger le jeu d'exemple (HTTP ${response.status})`)
-      }
-      const sampleAmendments = await response.json()
-      await handleImport(sampleAmendments, "Jeu de données d'exemple")
-    } catch (err) {
-      setClassifyError(err.message)
-    }
+    // Import dynamique : le jeu d'exemple (341 amendements réels, ~900 Ko)
+    // devient un chunk séparé, téléchargé uniquement si l'utilisateur le
+    // demande. Sans cela il alourdissait le bundle initial de tous les
+    // visiteurs, y compris ceux qui importent leur propre fichier.
+    const { default: sampleAmendments } = await import('./data/sampleAmendments.json')
+    handleImport(sampleAmendments, "Jeu de données d'exemple")
   }
 
   function handleStopClassify() {
     abortRef.current = true
     if (abortControllerRef.current) abortControllerRef.current.abort()
-  }
-
-  async function handleMechanicalClassify() {
-    setIsClassifying(true)
-    setClassifyError(null)
-    setWarnings([])
-    abortRef.current = false
-
-    const controller = new AbortController()
-    abortControllerRef.current = controller
-
-    const t0 = Date.now()
-    startTimeRef.current = t0
-    setProgressInfo({ current: 0, total: amendments.length, elapsed: 0 })
-
-    try {
-      const mecResults = await classifyMechanically(amendments, {
-        signal: controller.signal,
-      })
-      const elapsedMs = Date.now() - t0
-      const rawSec = (elapsedMs / 1000).toFixed(1)
-      const displaySec = rawSec === '0.0' ? '0.1' : rawSec
-
-      setAmendments(mecResults)
-      setLastMechanicalSummary({
-        elapsedSec: displaySec,
-        dureeMs: mecResults._meta?.duree_ms ?? elapsedMs,
-        statistiques: mecResults._meta?.statistiques || null,
-      })
-      await persistEncryptedSession(mecResults)
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        setWarnings(prev => [...prev, "Classement mécanique annulé."])
-      } else {
-        console.error('Erreur classement mécanique:', err)
-        setClassifyError(err.message || 'Erreur inconnue lors du classement mécanique.')
-      }
-    } finally {
-      startTimeRef.current = null
-      abortControllerRef.current = null
-      setIsClassifying(false)
-      setProgressInfo(null)
-    }
-  }
-
-  async function handleAnalyzeSingle(targetUid) {
-    if (!targetUid) return
-    const target = amendments.find((a) => a.id === targetUid || a.uid === targetUid)
-    const uid = target?.uid || target?.id || targetUid
-    if (target && selectedId !== target.id) {
-      setSelectedId(target.id)
-    }
-    setClassifyError(null)
-    setAnalyzingUids((prev) => new Set(prev).add(uid).add(targetUid))
-    try {
-      const resIa = await analyzeSingleAmendment(uid, amendments, aiSettings)
-      setAmendments((prev) => {
-        const next = prev.map((a) => {
-          if (a.id !== targetUid && a.uid !== targetUid && a.id !== uid && a.uid !== uid) return a
-          const newJustif = resIa?.justification || resIa?.analyse_intention || a.justification
-          const preservedStatut = a.resultat_ia?.statut || a.statut || resIa?.statut
-          const preservedGid = a.groupe_conflit_id ?? a.resultat_ia?.groupe_conflit_id ?? resIa?.groupe_conflit_id
-          const preservedCible = a.cible_numero ?? a.resultat_ia?.cible_numero ?? resIa?.cible_numero
-          const preservedGroupe = a.resultat_ia?.groupe || resIa?.groupe
-          return {
-            ...a,
-            statut: preservedStatut,
-            groupe_conflit_id: preservedGid,
-            cible_numero: preservedCible,
-            justification: newJustif,
-            explication_ia: true,
-            resultat_ia: {
-              ...a.resultat_ia,
-              ...resIa,
-              statut: preservedStatut,
-              groupe_conflit_id: preservedGid,
-              cible_numero: preservedCible,
-              groupe: preservedGroupe,
-              justification: newJustif,
-              explication_ia: true,
-            },
-          }
-        })
-        persistEncryptedSession(next)
-        return next
-      })
-    } catch (err) {
-      console.error(`Erreur analyse unitaire sur ${targetUid}:`, err)
-      setClassifyError(err.message || `Impossible d'analyser l'amendement ${targetUid}.`)
-    } finally {
-      setAnalyzingUids((prev) => {
-        const next = new Set(prev)
-        next.delete(uid)
-        next.delete(targetUid)
-        return next
-      })
-    }
-  }
-
-  function handleFocusConflict(amendment) {
-    if (!amendment) return
-    const targetUid = amendment.uid || amendment.id
-    setSelectedId(amendment.id)
-    setFocusConflictTrigger((prev) => prev + 1)
-
-    // Si le conflit n'a pas encore été décrypté par l'IA, déclencher l'analyse unitaire
-    const isAlreadyDecrypted = Boolean(
-      amendment.explication_ia || amendment.resultat_ia?.explication_ia
-    )
-    if (!isAlreadyDecrypted && targetUid) {
-      handleAnalyzeSingle(targetUid)
-    }
-
-    // Double requestAnimationFrame + court setTimeout pour garantir le rendu complet du DOM par React
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          const targetElement =
-            document.getElementById('decryptage-conflit-card') ||
-            document.getElementById('amendment-detail-container')
-          if (targetElement) {
-            targetElement.scrollIntoView({
-              behavior: 'smooth',
-              block: 'center', // Centre parfaitement l'encart dans la fenêtre
-              inline: 'nearest',
-            })
-          }
-        }, 60)
-      })
-    })
   }
 
   async function handleClassify() {
@@ -397,76 +235,58 @@ export default function App() {
     setWarnings([])
     abortRef.current = false
 
+    // Nettoyer les anciens résultats avant de démarrer
+    setAmendments(prev => prev.map(a => {
+      const copy = { ...a }
+      delete copy.resultat_ia
+      return copy
+    }))
+
     const controller = new AbortController()
     abortControllerRef.current = controller
 
-    const nbConflictsInitial = amendments.filter(
-      (a) => (a.resultat_ia?.statut || a.statut) === 'Discussion commune'
-    ).length
-    const totalToExplain = nbConflictsInitial > 0 ? nbConflictsInitial : amendments.length
-
-    startTimeRef.current = Date.now()
-    setProgressInfo({ current: 0, total: totalToExplain, elapsed: 0 })
+    setProgressInfo({ current: 0, total: amendments.length, elapsed: 0 })
 
     if (timerRef.current) clearInterval(timerRef.current)
     timerRef.current = setInterval(() => {
-      if (startTimeRef.current) {
-        const tempsEcoule = Math.floor((Date.now() - startTimeRef.current) / 1000)
-        setProgressInfo(prev => prev ? { ...prev, elapsed: tempsEcoule } : null)
-      }
-    }, 500)
-
-    // Neutralisation de l'App Nap et de la mise en veille d'arrière-plan de Safari (uniquement pendant l'IA)
-    startKeepAlive(() => {
-      if (startTimeRef.current) {
-        const tempsEcoule = Math.floor((Date.now() - startTimeRef.current) / 1000)
-        setProgressInfo(prev => prev ? { ...prev, elapsed: tempsEcoule } : null)
-      }
-    })
+      setProgressInfo(prev => prev ? { ...prev, elapsed: prev.elapsed + 1 } : null)
+    }, 1000)
 
     try {
-      setCurrentAnalyzing({ uid: '', numero: '...', index: 0, total: totalToExplain })
-      const enrichedResults = await explainConflictsWithAI(amendments, {
+      setCurrentAnalyzing({ uid: '', numero: '...', index: 0, total: amendments.length })
+      const v2Results = await classifyAmendmentsV2(amendments, {
         aiSettings,
         signal: controller.signal,
         onMechanical: (mecResults) => {
+          // Met à jour l'état avec le tri mécanique pur immédiatement
           setAmendments(mecResults)
         },
-        onProgress: (partialResult, idx, total, snapshot) => {
+        onProgress: (partialResult, idx, total) => {
           if (partialResult) {
-            setCurrentAnalyzing({
-              uid: partialResult.id,
+            setCurrentAnalyzing({ 
+              uid: partialResult.id, 
               numero: partialResult.id?.split('-').pop() || '?',
-              index: idx,
-              total,
+              index: idx, 
+              total 
             })
           }
-          const tempsEcoule = startTimeRef.current ? Math.floor((Date.now() - startTimeRef.current) / 1000) : 0
-          setProgressInfo(prev => prev ? { ...prev, current: idx, total, elapsed: tempsEcoule } : null)
-          if (Array.isArray(snapshot) && snapshot.length > 0) {
-            setAmendments(snapshot)
-            if (idx > 0 && (idx % 25 === 0 || idx === total)) {
-              persistEncryptedSession(snapshot)
-            }
-          }
+          setProgressInfo(prev => prev ? { ...prev, current: idx, total } : null)
         },
       })
 
-      setAmendments(enrichedResults)
-      await persistEncryptedSession(enrichedResults)
+      // Le V2 retourne les amendements COMPLETS (pas juste resultat_ia)
+      setAmendments(v2Results)
       setCurrentAnalyzing(null)
 
     } catch (err) {
       if (err.name === 'AbortError') {
-        setWarnings(prev => [...prev, "Explication IA annulée par l'utilisateur."])
+        setWarnings(prev => [...prev, "Classement annulé par l'utilisateur."])
       } else {
-        console.error('Erreur explication IA:', err)
-        setClassifyError(err.message || "Erreur inconnue lors de l'explication des conflits.")
+        console.error('Erreur classement V2:', err)
+        setClassifyError(err.message || 'Erreur inconnue lors du classement.')
       }
     } finally {
-      stopKeepAlive()
       if (timerRef.current) clearInterval(timerRef.current)
-      startTimeRef.current = null
       abortControllerRef.current = null
       setIsClassifying(false)
       setProgressInfo(null)
@@ -615,11 +435,11 @@ export default function App() {
           loading={isClassifying}
           error={classifyError}
           warnings={warnings}
-          onMechanicalClick={handleMechanicalClassify}
-          onLlmClick={handleClassify}
+          onClick={handleClassify}
           onStop={handleStopClassify}
+          isReasoningMode={isReasoningMode}
+          onToggleReasoning={setIsReasoningMode}
           progressInfo={progressInfo}
-          mechanicalSummary={lastMechanicalSummary}
         />
 
         {/* ── État d'analyse en cours (V2) ── */}
@@ -627,10 +447,7 @@ export default function App() {
           <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3 animate-pulse">
             <span className="text-lg">🧠</span>
             <p className="text-sm text-blue-800 dark:text-blue-300 font-medium">
-              Analyse IA en cours{sourceLabel ? ` (${sourceLabel})` : ''}
-              {currentAnalyzing && currentAnalyzing.total > 0
-                ? ` — ${currentAnalyzing.index}/${currentAnalyzing.total} (${currentAnalyzing.numero})`
-                : '...'}
+              Analyse IA en cours...
             </p>
           </div>
         )}
@@ -645,24 +462,16 @@ export default function App() {
               onDelete={handleDelete}
               onDeleteDoublons={handleDeleteDoublons}
               isClassifying={isClassifying}
-              analyzingUids={analyzingUids}
               onExportJson={handleExport}
-              onAnalyzeSingle={handleAnalyzeSingle}
-              onFocusConflict={handleFocusConflict}
             />
           </div>
           <div className="w-full">
-            <ErrorBoundary>
-              <AmendmentDetail
-                amendment={selected}
-                onClose={() => setSelectedId(null)}
-                isLoading={isClassifying && selected && !selected.resultat_ia}
-                aiSettings={aiSettings}
-                onAnalyzeSingle={handleAnalyzeSingle}
-                analyzingUids={analyzingUids}
-                shouldFocusConflict={focusConflictTrigger}
-              />
-            </ErrorBoundary>
+            <AmendmentDetail
+              amendment={selected}
+              onClose={() => setSelectedId(null)}
+              isLoading={isClassifying && selected && !selected.resultat_ia}
+              aiSettings={aiSettings}
+            />
           </div>
 
           {/* Participants du texte de loi : nom, prénom, groupe politique.
@@ -689,7 +498,7 @@ export default function App() {
 
       <footer className="max-w-[95%] mx-auto px-6 pb-8 text-center">
         <p className="text-sm text-neutre dark:text-ink-400 max-w-5xl mx-auto leading-relaxed">
-          💡 Note technique : Par défaut, cette démonstration publique utilise le mode Groq (GPT-OSS 20B) pour la fluidité web. L'application reste 100 % conçue pour une exécution souveraine, locale et hors-ligne (sélectionnable dans les ⚙️ Réglages IA).
+          💡 Note technique : Par défaut, cette démonstration publique utilise le mode Groq (Llama 3.3) pour la fluidité web. L'application reste 100 % conçue pour une exécution souveraine, locale et hors-ligne (sélectionnable dans les ⚙️ Réglages IA).
         </p>
       </footer>
 
@@ -762,7 +571,7 @@ export default function App() {
 
       <div className="absolute bottom-4 left-0 right-0 text-center text-xs text-slate-500 px-6 max-w-2xl mx-auto">
         <p>
-          💡 Note technique : Par défaut, cette démonstration publique utilise le mode Groq (GPT-OSS 20B) pour la fluidité web. L'application reste 100 % conçue pour une exécution souveraine, locale et hors-ligne (sélectionnable dans les ⚙️ Réglages IA).
+          💡 Note technique : Par défaut, cette démonstration publique utilise le mode Groq (Llama 3.3) pour la fluidité web. L'application reste 100 % conçue pour une exécution souveraine, locale et hors-ligne (sélectionnable dans les ⚙️ Réglages IA).
         </p>
       </div>
 

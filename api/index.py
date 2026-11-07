@@ -8,7 +8,7 @@ import html
 from typing import List, Dict, Any, Optional
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 from dotenv import load_dotenv
@@ -30,16 +30,7 @@ try:
         normalize_text,
         strip_html_for_display,
         detect_gage_financier,
-        get_article_sort_key,
     )
-    from api.legal_chapeau_parser import (
-        parse_chapeau,
-        calculer_priorite_derouleur,
-        auditer_recevabilite_art40,
-        detecter_dispositions_non_normatives,
-    )
-    from api.services.deterministic_classifier import classer_par_regles
-    from api.export_rtf import generer_prejaune_rtf
     from api.schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
     from api.llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
     from api.cache_manager import get_cached_classification, save_classification
@@ -53,16 +44,7 @@ except ModuleNotFoundError:
         normalize_text,
         strip_html_for_display,
         detect_gage_financier,
-        get_article_sort_key,
     )
-    from legal_chapeau_parser import (
-        parse_chapeau,
-        calculer_priorite_derouleur,
-        auditer_recevabilite_art40,
-        detecter_dispositions_non_normatives,
-    )
-    from services.deterministic_classifier import classer_par_regles
-    from export_rtf import generer_prejaune_rtf
     from schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
     from llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
     from cache_manager import get_cached_classification, save_classification
@@ -108,16 +90,6 @@ def clean_html_text(text: str) -> str:
     clean = re.sub(r"[ \t]+", " ", clean)
     clean = re.sub(r"\n\s*\n+", "\n\n", clean)
     return clean.strip()
-
-
-def _tronquer_expose_180(text: Optional[str]) -> str:
-    """Conserve strictement les 180 premiers caractères de l'exposé sommaire suivis de '...'."""
-    if not text:
-        return ""
-    clean = clean_html_text(text)
-    if len(clean) <= 180:
-        return clean
-    return clean[:180].rstrip() + "..."
 
 
 def extract_dispositif_raw(am: dict) -> str:
@@ -251,27 +223,11 @@ def _enrichir_a_import(resultat: dict, source: dict, signataires=None) -> dict:
             if resultat.get(champ):
                 resultat[champ] = strip_html_for_display(resultat[champ])
 
-        # ── Détection de gage financier et audit recevabilité Art. 40 ──
-        disp_texte = resultat.get("dispositif", "") or source.get("dispositif", "")
-        audit_40 = auditer_recevabilite_art40(disp_texte, source)
-        resultat["alerte_recevabilite_art40"] = audit_40["alerte_recevabilite_art40"]
-        resultat["motif_art40"] = audit_40["motif_art40"]
-        resultat["gage_detecte"] = audit_40["gage_detecte"]
-        resultat["est_gage"] = bool(audit_40["gage_detecte"]) or detect_gage_financier(
-            disp_texte,
+        # ── Détection de gage financier au titre de l'Art. 40 ──
+        resultat["est_gage"] = detect_gage_financier(
+            resultat.get("dispositif", "") or source.get("dispositif", ""),
             source,
         )
-
-        # ── Analyse syntaxique du chapeau et priorité au dérouleur ──
-        chapeau_info = parse_chapeau(disp_texte)
-        resultat["verbe_action"] = chapeau_info.verbe_action or None
-        resultat["cible_type"] = chapeau_info.cible_type or None
-        resultat["alinea_num"] = chapeau_info.alinea_num
-        resultat["rang_phrase"] = chapeau_info.rang_phrase
-        resultat["occurrence_mots"] = chapeau_info.occurrence_mots
-        resultat["priorite_derouleur"] = calculer_priorite_derouleur(resultat)[0]
-        resultat["alerte_non_normatif"] = bool(chapeau_info.alerte_non_normatif)
-        resultat["motif_non_normatif"] = chapeau_info.motif_non_normatif
 
         # ── Groupe politique (référentiel local des députés) ──
         if not resultat.get("groupe_politique"):
@@ -286,9 +242,6 @@ def _enrichir_a_import(resultat: dict, source: dict, signataires=None) -> dict:
                 groupe = resolu.get("groupe_principal", "") or ""
                 if groupe:
                     resultat["groupe_politique"] = groupe
-                    resultat["groupe"] = groupe
-        elif not resultat.get("groupe"):
-            resultat["groupe"] = resultat["groupe_politique"]
 
         # ── Commission + thèmes corrélés (uid d'organe embarqué dans l'uid) ──
         if not resultat.get("commission"):
@@ -335,8 +288,7 @@ def normaliser_amendement(data, index: int = 0) -> dict:
             raw_numero = am.get("identification", {}).get("numeroLong", "Inconnu")
             numero = safe_str(raw_numero, "Inconnu")
             
-            div = am.get("pointeurFragmentTexte", {}).get("division", {})
-            raw_article = div.get("articleDesignationCourte") or div.get("titre") or ""
+            raw_article = am.get("pointeurFragmentTexte", {}).get("division", {}).get("titre", "")
             article = format_article_title(safe_str(raw_article))
             
             auteur = ""
@@ -389,9 +341,6 @@ def normaliser_amendement(data, index: int = 0) -> dict:
         if not data.get("dispositif"):
             data["dispositif"] = extract_dispositif_raw(data)
             data["texte"] = data["dispositif"]
-        else:
-            data["dispositif"] = clean_html_text(data["dispositif"])
-            data["texte"] = data["dispositif"]
         if not data.get("expose_sommaire") and not data.get("exposeSommaire"):
             data["expose_sommaire"] = extract_expose_sommaire(data)
         if data.get("article"):
@@ -402,13 +351,9 @@ def normaliser_amendement(data, index: int = 0) -> dict:
         logging.error(f"Erreur de normalisation sur l'amendement {index}: {e}\n{traceback.format_exc()}")
         return {"id": f"amdt-err-{index}", "numero": "Erreur", "article": "", "auteurs": [], "point_impact": {"type": ""}, "dispositif": "", "texte": "", "auteur": ""}
 
-_LAST_SESSION_AMENDMENTS: list[dict] = []
-
-
 @app.post("/api/normalize")
 @app.post("/api/v2/normaliser")
 async def normalize_endpoint(payload: AnalyzeRequest):
-    global _LAST_SESSION_AMENDMENTS
     try:
         # Résolution automatique du dossier législatif de référence
         texte_ref_id = extract_texte_ref(payload.amendements)
@@ -424,8 +369,6 @@ async def normalize_endpoint(payload: AnalyzeRequest):
             except Exception as exc:
                 logging.warning(f"⚠️ Erreur normalisation amendement {i}: {exc}")
                 results.append({"id": f"amdt-err-{i}", "numero": "Erreur", "article": "", "auteurs": [], "point_impact": {"type": ""}, "dispositif": "", "texte": "", "auteur": ""})
-        results.sort(key=lambda r: get_article_sort_key(r))
-        _LAST_SESSION_AMENDMENTS = list(results)
         return results
     except Exception as e:
         import traceback
@@ -489,8 +432,7 @@ class V2AnalyzeRequest(BaseModel):
     api_key: str = "local-key"
     provider: str = "local"  # "local" | "groq" (clé utilisateur) | "groq_auto" (clé serveur)
     temperature: float = 0.1
-    max_tokens: int = 350
-    stop: Optional[list[str]] = Field(default=None, description="Séquences d'arrêt optionnelles pour couper court au bavardage.")
+    max_tokens: int = 1024
     textes_reference: dict[str, str] = Field(default_factory=dict, description="Texte de loi initial par article (ex: {'Article 1er': '...'})")
 
 class V2AnalyzeSingleRequest(V2AnalyzeRequest):
@@ -513,74 +455,23 @@ class ResumeRequest(BaseModel):
 
 
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1"
-GROQ_DEFAULT_MODEL = "openai/gpt-oss-20b"
-DEPRECATED_OR_DEFAULT_MODELS = {"", "default", "local-model", "llama3-8b-8192", "llama3-70b-8192", "llama-3.3-70b-versatile"}
 
 
-def _clean_api_key(raw: Optional[str]) -> str:
-    """Nettoie une clé API d'éventuels guillemets, retours chariot ou préfixes copiés par erreur."""
-    if raw is None:
-        return ""
-    s = str(raw).strip().strip("\"'` \t\r\n")
-    if s.lower().startswith("bearer "):
-        s = s[7:].strip().strip("\"'` \t\r\n")
-    if s.startswith("GROQ_API_KEY="):
-        s = s[len("GROQ_API_KEY="):].strip().strip("\"'` \t\r\n")
-    return s
-
-
-def _parametres_llm(payload: Any) -> tuple[str, str, str, str]:
+def _parametres_llm(payload: "V2AnalyzeRequest | ResumeRequest") -> tuple[str, str]:
     """
-    Renvoie (endpoint, clé API, source_clé, modèle) pour l'appel LLM.
-    source_clé vaut 'payload', 'env' ou 'default'.
+    Renvoie (endpoint, clé API) pour l'appel LLM.
 
-    Règles de priorité stricte :
-    1. Si payload.api_key est renseigné et non vide (hors placeholders 'local-key', 'cle-absente') :
-       priorité absolue -> api_key = payload.api_key.strip(), source_clé = 'payload'.
-    2. Sinon, si provider == 'groq_auto' ou si l'endpoint vise Groq :
-       repli sur la variable serveur os.environ.get('GROQ_API_KEY', '').strip(), source_clé = 'env'.
-    3. Sinon :
-       api_key = user_key or 'local-key', source_clé = 'payload' si user_key else 'default'.
+    Mode « groq_auto » (démo publique) : la clé est lue dans la variable
+    d'environnement GROQ_API_KEY du serveur — jamais dans le code ni envoyée
+    au navigateur. L'endpoint est alors FORCÉ sur Groq : un client ne doit pas
+    pouvoir faire envoyer la clé du serveur vers une autre adresse.
     """
-    provider = getattr(payload, "provider", None) or "groq_auto"
-    raw_key = getattr(payload, "api_key", None)
-    user_key = _clean_api_key(raw_key)
-
-    if provider == "groq_auto":
-        endpoint = GROQ_ENDPOINT
-    elif provider == "groq":
-        endpoint = getattr(payload, "llm_endpoint", None) or GROQ_ENDPOINT
-    else:
-        endpoint = getattr(payload, "llm_endpoint", None) or getattr(payload, "base_url", None) or "http://localhost:1234/v1"
-
-    is_groq = "api.groq.com" in endpoint or provider in ("groq", "groq_auto")
-
-    if user_key and user_key not in ("local-key", "cle-absente"):
-        api_key = user_key
-        key_source = "payload"
-    elif is_groq:
-        raw_env = os.getenv("GROQ_API_KEY") or os.getenv("VITE_GROQ_API_KEY") or os.getenv("GROQ_KEY") or ""
-        env_key = _clean_api_key(raw_env)
-        api_key = env_key
-        key_source = "env"
-        if not env_key:
+    if payload.provider == "groq_auto":
+        cle = os.getenv("GROQ_API_KEY", "")
+        if not cle:
             logging.warning("Mode groq_auto demandé mais GROQ_API_KEY absente de l'environnement serveur.")
-    else:
-        api_key = user_key or "local-key"
-        key_source = "payload" if user_key else "default"
-
-    raw_model = getattr(payload, "model", None)
-    model_str = str(raw_model).strip() if raw_model is not None else ""
-
-    if is_groq:
-        if not model_str or model_str in DEPRECATED_OR_DEFAULT_MODELS:
-            model = GROQ_DEFAULT_MODEL
-        else:
-            model = model_str
-    else:
-        model = model_str or "local-model"
-
-    return endpoint, api_key, key_source, model
+        return GROQ_ENDPOINT, cle or "cle-absente"
+    return payload.llm_endpoint or payload.base_url, payload.api_key
 
 
 def _inject_textes_reference(enriched_list: list[EnrichedAmendment], textes_ref: dict[str, str]):
@@ -703,9 +594,7 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
     elif isinstance(p_ref, str) and p_ref.strip() and p_ref.lower() not in ("none", "null", "false"):
         amendement_parent_ref = p_ref.strip()
 
-    audit_40 = auditer_recevabilite_art40(dispositif_raw, raw)
-    est_gage = bool(audit_40["gage_detecte"]) or detect_gage_financier(dispositif_raw, raw)
-    chapeau_info = parse_chapeau(dispositif_raw or "")
+    est_gage = detect_gage_financier(dispositif_raw, raw)
 
     return EnrichedAmendment(
         amendement_uid=str(uid),
@@ -727,16 +616,6 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
         est_rapporteur=is_rapporteur,
         amendement_parent_ref=amendement_parent_ref,
         est_gage=est_gage,
-        alerte_recevabilite_art40=audit_40["alerte_recevabilite_art40"],
-        motif_art40=audit_40["motif_art40"],
-        gage_detecte=audit_40["gage_detecte"],
-        verbe_action=chapeau_info.verbe_action or None,
-        cible_type=chapeau_info.cible_type or None,
-        alinea_num=chapeau_info.alinea_num,
-        rang_phrase=chapeau_info.rang_phrase,
-        occurrence_mots=chapeau_info.occurrence_mots,
-        alerte_non_normatif=bool(chapeau_info.alerte_non_normatif),
-        motif_non_normatif=chapeau_info.motif_non_normatif,
         # ── Commission + corrélation thématique (résolu hors-ligne) ──
         **_resoudre_commission(am, dispositif_raw, expose),
         raw_dict=raw,
@@ -790,19 +669,8 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         "isIdentical": amend.est_identique_officiel,
         "discussionId": amend.id_discussion_identique,
 
-        # ── Gage financier (Art. 40), audit de recevabilité et sous-amendements ──
+        # ── Gage financier (Art. 40) et sous-amendements ──
         "est_gage": amend.est_gage,
-        "alerte_recevabilite_art40": amend.alerte_recevabilite_art40,
-        "motif_art40": amend.motif_art40,
-        "gage_detecte": amend.gage_detecte,
-        "verbe_action": amend.verbe_action,
-        "cible_type": amend.cible_type,
-        "alinea_num": amend.alinea_num,
-        "rang_phrase": amend.rang_phrase,
-        "occurrence_mots": amend.occurrence_mots,
-        "priorite_derouleur": amend.priorite_derouleur,
-        "alerte_non_normatif": amend.alerte_non_normatif,
-        "motif_non_normatif": amend.motif_non_normatif,
         "amendement_parent_ref": amend.amendement_parent_ref,
         "amendementParentRef": amend.amendement_parent_ref,
 
@@ -876,30 +744,15 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
             "niveau_confiance": confiance,
         }
     elif not base.get("resultat_ia") and amend.statut_mecanique == StatutMecanique.NOUVEAU:
-        if amend.skip_llm:
-            is_identique_ref = bool(amend.groupe_identique_id or "identique" in (amend.justification_mecanique or "").lower())
-            statut_display = "Identique" if is_identique_ref else "Isolé"
-            couleur = "rouge" if is_identique_ref else "gris"
-            justif = amend.justification_mecanique or "Amendement classé par filtrage déterministe."
-            base["resultat_ia"] = {
-                "id": amend.amendement_uid,
-                "statut": statut_display,
-                "justification": justif,
-                "alerte_couleur": couleur,
-                "analyse_intention": f"Détecté mécaniquement : {justif}",
-                "analyse_politique": "Classification déterministe (100 % fiable, sans IA).",
-                "niveau_confiance": 1.0,
-            }
-        else:
-            base["resultat_ia"] = {
-                "id": amend.amendement_uid,
-                "statut": "Isolé",
-                "justification": "En attente d'analyse IA...",
-                "alerte_couleur": "gris",
-                "analyse_intention": "",
-                "analyse_politique": "",
-                "niveau_confiance": 0.0,
-            }
+        base["resultat_ia"] = {
+            "id": amend.amendement_uid,
+            "statut": "Isolé",
+            "justification": "En attente d'analyse IA...",
+            "alerte_couleur": "gris",
+            "analyse_intention": "",
+            "analyse_politique": "",
+            "niveau_confiance": 0.0,
+        }
 
     # ── Drapeaux de clustering et d'optimisation LLM ──
     base["_skipLLM"] = bool(amend.skip_llm or amend.statut_mecanique != StatutMecanique.NOUVEAU)
@@ -961,9 +814,7 @@ async def v2_mecanique(payload: V2AnalyzeRequest):
                 a.statut_mecanique = StatutMecanique.ISOLE_MECANIQUE
                 a.justification_mecanique = "Repli : tri mécanique non appliqué suite à une anomalie."
 
-        mapped_list = [_to_frontend(a) for a in enriched]
-        _LAST_SESSION_AMENDMENTS = list(mapped_list)
-        return mapped_list
+        return [_to_frontend(a) for a in enriched]
     except Exception as e:
         import traceback
         logging.error(f"❌ Crash v2_mecanique: {e}\n{traceback.format_exc()}")
@@ -1007,8 +858,8 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
         # ── Phase 2 : Tri déterministe (Identiques, Doublons, Hiérarchie AN) ──
         enriched = process_deterministic_sorting(enriched)
 
-        # ── Phase 3 : Filtre sémantique LLM (uniquement sur les NOUVEAUX non résolus mécaniquement) ──
-        nouveaux_count = sum(1 for a in enriched if a.statut_mecanique == StatutMecanique.NOUVEAU and not a.skip_llm)
+        # ── Phase 3 : Filtre sémantique LLM (uniquement sur les NOUVEAUX) ──
+        nouveaux_count = sum(1 for a in enriched if a.statut_mecanique == StatutMecanique.NOUVEAU)
         processed_llm = [0] # Liste pour mutabilité dans process_llm
         
         # Sémaphore pour limiter le nombre de requêtes simultanées
@@ -1016,7 +867,7 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
         
         async def process_llm(amend: EnrichedAmendment, rang: int) -> dict:
             llm_data = None
-            if amend.statut_mecanique == StatutMecanique.NOUVEAU and not amend.skip_llm:
+            if amend.statut_mecanique == StatutMecanique.NOUVEAU:
                 processed_llm[0] += 1
                 cached = get_cached_classification(amend.amendement_uid)
                 if cached:
@@ -1026,58 +877,61 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                 else:
                     logging.info(f"🧠 LLM START {amend.amendement_uid} ({processed_llm[0]}/{nouveaux_count})")
                     contexte_rag = ""
-                    # N'interroger Tricoteuses QUE si le corps du texte (dispositif/exposé) est totalement absent
-                    has_text = bool(
-                        (amend.dispositif_raw and amend.dispositif_raw.strip())
-                        or (amend.expose_sommaire and amend.expose_sommaire.strip())
-                    )
-                    if not has_text:
-                        try:
-                            from api.tricoteuses_client import fetch_amendements
-                            def fetch_rag():
-                                res = fetch_amendements(uid=amend.amendement_uid, timeout=1.9)
-                                if not res: return ""
-                                
-                                auteur_dict = res.get("auteur", {}) or {}
-                                nom = auteur_dict.get("nom", "")
-                                prenom = auteur_dict.get("prenom", "")
-                                groupe = (auteur_dict.get("groupePolitiqueRef") or {}).get("libelle", "Inconnu")
-                                nom_auteur = f"{prenom} {nom}".strip() or "Inconnu"
-                                
-                                dossier = res.get("dossierRef", {}) or {}
-                                statut_texte = dossier.get("titre", "Non renseigné")
-                                
-                                cosign = res.get("coSignataires", []) or []
-                                signataires = ", ".join([f"{s.get('prenom', '')} {s.get('nom', '')}".strip() for s in cosign]) if cosign else "Aucun"
-                                
-                                return (
-                                    f"\n## CONTEXTE POLITIQUE (RAG API)\n"
-                                    f"- Auteur : {nom_auteur} ({groupe})\n"
-                                    f"- Co-signataires : {signataires}\n"
-                                    f"- Statut du texte : {statut_texte}\n"
-                                )
+                    try:
+                        from api.tricoteuses_client import fetch_amendements
+                        def fetch_rag():
+                            res = fetch_amendements(uid=amend.amendement_uid, timeout=1.9)
+                            if not res: return ""
                             
-                            contexte_rag = await asyncio.to_thread(fetch_rag)
-                        except Exception as e:
-                            logging.warning(f"RAG echoué pour {amend.amendement_uid}: {e}")
+                            auteur_dict = res.get("auteur", {}) or {}
+                            nom = auteur_dict.get("nom", "")
+                            prenom = auteur_dict.get("prenom", "")
+                            groupe = (auteur_dict.get("groupePolitiqueRef") or {}).get("libelle", "Inconnu")
+                            nom_auteur = f"{prenom} {nom}".strip() or "Inconnu"
+                            
+                            dossier = res.get("dossierRef", {}) or {}
+                            statut_texte = dossier.get("titre", "Non renseigné")
+                            
+                            cosign = res.get("coSignataires", []) or []
+                            signataires = ", ".join([f"{s.get('prenom', '')} {s.get('nom', '')}".strip() for s in cosign]) if cosign else "Aucun"
+                            
+                            return (
+                                f"\n## CONTEXTE POLITIQUE (RAG API)\n"
+                                f"- Auteur : {nom_auteur} ({groupe})\n"
+                                f"- Co-signataires : {signataires}\n"
+                                f"- Statut du texte : {statut_texte}\n"
+                            )
+                        
+                        contexte_rag = await asyncio.to_thread(fetch_rag)
+                    except Exception as e:
+                        logging.warning(f"RAG echoué pour {amend.amendement_uid}: {e}")
 
                     amend_dict = {
                         "amendement": {
                             "uid": amend.amendement_uid,
-                            "divisionArticleDesignationCourte": amend.article_vise,
-                            "dispositif": clean_html_text(amend.dispositif_raw),
-                            "exposeSommaire": _tronquer_expose_180(amend.expose_sommaire),
+                            "numeroLong": amend.numero_long,
+                            "dispositif": amend.dispositif_raw,
+                            "exposeSommaire": amend.expose_sommaire,
+                            "divisionArticleDesignation": amend.article_vise,
                         },
+                        "auteur": {
+                            "nom": amend.auteur_nom,
+                            "prenom": amend.auteur_prenom,
+                            "trigramme": amend.auteur_trigramme,
+                            "groupePolitiqueRef": {"libelle": amend.groupe_politique},
+                        },
+                        "dossier": {"titre": amend.dossier_titre},
+                        "contexte_rag": contexte_rag,
                         "texte_loi_reference": amend.texte_loi_reference,
                     }
                     candidats = [
                         {
                             "id_discussion": a.amendement_uid,
                             "amendement": {
-                                "divisionArticleDesignationCourte": a.article_vise,
-                                "dispositif": clean_html_text(a.dispositif_raw),
-                                "exposeSommaire": _tronquer_expose_180(a.expose_sommaire),
+                                "divisionArticleDesignation": a.article_vise,
+                                "dispositif": a.dispositif_raw,
                             },
+                            "auteur": {"groupePolitiqueRef": {"libelle": a.groupe_politique}},
                         }
                         for a in enriched
                         if a.amendement_uid != amend.amendement_uid
@@ -1087,18 +941,14 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                     
                     async with semaphore:
                         try:
-                            endpoint_llm, cle_llm, source_cle, modele_llm = _parametres_llm(payload)
+                            endpoint_llm, cle_llm = _parametres_llm(payload)  # groq_auto : clé serveur
                             valid_endpoint = validate_endpoint_url(endpoint_llm)
-                            effective_max_tok = 250 if payload.provider in ("local", "lmstudio") else min(payload.max_tokens or 350, 350)
                             resultat = await asyncio.to_thread(
                                 evaluate_similitude,
                                 amend_dict, candidats,
                                 llm_endpoint=valid_endpoint,
-                                provider=payload.provider,
-                                model=modele_llm, api_key=cle_llm,
-                                key_source=source_cle,
-                                timeout=120.0, max_tokens=effective_max_tok, temperature=payload.temperature,
-                                stop=payload.stop,
+                                model=payload.model, api_key=cle_llm,
+                                timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
                                 texte_loi_reference=amend.texte_loi_reference,
                             )
                             llm_data = resultat.model_dump()
@@ -1127,7 +977,6 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
 
         elapsed = time.time() - start
         logging.info(f"✅ V2 Pipeline terminé en {elapsed:.1f}s — {len(resultats_finaux)} résultat(s)")
-        _LAST_SESSION_AMENDMENTS = list(resultats_finaux)
         return resultats_finaux
 
     except Exception as exc:
@@ -1185,83 +1034,86 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
         target_rang = next((i for i, a in enumerate(enriched, start=1) if a.amendement_uid == payload.target_uid), 1)
 
         llm_data = None
-        if target.statut_mecanique == StatutMecanique.NOUVEAU and not target.skip_llm:
+        if target.statut_mecanique == StatutMecanique.NOUVEAU:
             cached = get_cached_classification(target.amendement_uid)
             if cached:
                 cached["cached"] = True
                 llm_data = cached
             else:
                 contexte_rag = ""
-                # N'interroger Tricoteuses QUE si le corps du texte (dispositif/exposé) est totalement absent
-                has_text = bool(
-                    (target.dispositif_raw and target.dispositif_raw.strip())
-                    or (target.expose_sommaire and target.expose_sommaire.strip())
-                )
-                if not has_text:
-                    try:
-                        from api.tricoteuses_client import fetch_amendements, fetch_acteurs
-                        def fetch_rag():
-                            res = fetch_amendements(uid=target.amendement_uid, timeout=1.9)
-                            if not res: return "", "Inconnu", "", "Inconnu"
-                            
-                            amend_data = res.get("data", {})
-                            acteur_ref = amend_data.get("signataires", {}).get("auteur", {}).get("acteurRef")
-                            
-                            nom_auteur = "Inconnu"
-                            prenom_auteur = ""
-                            groupe = "Inconnu"
-                            
-                            if acteur_ref:
-                                try:
-                                    acteur_res = fetch_acteurs(uid=acteur_ref, timeout=1.5)
-                                    if acteur_res:
-                                        acteur_data = acteur_res.get("data", {})
-                                        ident = acteur_data.get("etatCivil", {}).get("ident", {})
-                                        nom_auteur = ident.get("nom", "Inconnu")
-                                        prenom_auteur = ident.get("prenom", "")
-                                        groupe = (acteur_data.get("groupePolitiqueRef") or acteur_data.get("groupe") or {}).get("libelle", "Inconnu")
-                                except Exception as e:
-                                    logging.warning(f"RAG fetch_acteurs echoué pour {acteur_ref}: {e}")
-                            
-                            nom_complet = f"{prenom_auteur} {nom_auteur}".strip() or "Inconnu"
-                            dossier = amend_data.get("dossierRef", {}) or {}
-                            statut_texte = dossier.get("titre", "Non renseigné")
-                            cosign = amend_data.get("signataires", {}).get("cosignataires", []) or []
-                            signataires = f"{len(cosign)} cosignataires" if cosign else "Aucun"
-                            
-                            contexte = (
-                                f"\n## CONTEXTE POLITIQUE (RAG API)\n"
-                                f"- Auteur : {nom_complet} ({groupe})\n"
-                                f"- Co-signataires : {signataires}\n"
-                                f"- Statut du texte : {statut_texte}\n"
-                            )
-                            return contexte, nom_auteur, prenom_auteur, groupe
-                            
-                        contexte_rag, req_nom, req_prenom, req_groupe = await asyncio.to_thread(fetch_rag)
-                        if req_nom != "Inconnu":
-                            target.auteur_nom = req_nom
-                            target.auteur_prenom = req_prenom
-                            target.groupe_politique = req_groupe
-                    except Exception as e:
-                        logging.warning(f"RAG global echoué pour {target.amendement_uid}: {e}")
+                try:
+                    from api.tricoteuses_client import fetch_amendements, fetch_acteurs
+                    def fetch_rag():
+                        res = fetch_amendements(uid=target.amendement_uid, timeout=1.9)
+                        if not res: return "", "Inconnu", "", "Inconnu"
+                        
+                        amend_data = res.get("data", {})
+                        acteur_ref = amend_data.get("signataires", {}).get("auteur", {}).get("acteurRef")
+                        
+                        nom_auteur = "Inconnu"
+                        prenom_auteur = ""
+                        groupe = "Inconnu"
+                        
+                        if acteur_ref:
+                            try:
+                                acteur_res = fetch_acteurs(uid=acteur_ref, timeout=1.5)
+                                if acteur_res:
+                                    acteur_data = acteur_res.get("data", {})
+                                    ident = acteur_data.get("etatCivil", {}).get("ident", {})
+                                    nom_auteur = ident.get("nom", "Inconnu")
+                                    prenom_auteur = ident.get("prenom", "")
+                                    groupe = (acteur_data.get("groupePolitiqueRef") or acteur_data.get("groupe") or {}).get("libelle", "Inconnu")
+                            except Exception as e:
+                                logging.warning(f"RAG fetch_acteurs echoué pour {acteur_ref}: {e}")
+                        
+                        nom_complet = f"{prenom_auteur} {nom_auteur}".strip() or "Inconnu"
+                        dossier = amend_data.get("dossierRef", {}) or {}
+                        statut_texte = dossier.get("titre", "Non renseigné")
+                        cosign = amend_data.get("signataires", {}).get("cosignataires", []) or []
+                        signataires = f"{len(cosign)} cosignataires" if cosign else "Aucun"
+                        
+                        contexte = (
+                            f"\n## CONTEXTE POLITIQUE (RAG API)\n"
+                            f"- Auteur : {nom_complet} ({groupe})\n"
+                            f"- Co-signataires : {signataires}\n"
+                            f"- Statut du texte : {statut_texte}\n"
+                        )
+                        return contexte, nom_auteur, prenom_auteur, groupe
+                        
+                    contexte_rag, req_nom, req_prenom, req_groupe = await asyncio.to_thread(fetch_rag)
+                    if req_nom != "Inconnu":
+                        target.auteur_nom = req_nom
+                        target.auteur_prenom = req_prenom
+                        target.groupe_politique = req_groupe
+                except Exception as e:
+                    logging.warning(f"RAG global echoué pour {target.amendement_uid}: {e}")
 
                 amend_dict = {
                     "amendement": {
                         "uid": target.amendement_uid,
-                        "divisionArticleDesignationCourte": target.article_vise,
-                        "dispositif": clean_html_text(target.dispositif_raw),
-                        "exposeSommaire": _tronquer_expose_180(target.expose_sommaire),
+                        "numeroLong": target.numero_long,
+                        "dispositif": target.dispositif_raw,
+                        "exposeSommaire": target.expose_sommaire,
+                        "divisionArticleDesignation": target.article_vise,
                     },
+                    "auteur": {
+                        "nom": target.auteur_nom,
+                        "prenom": target.auteur_prenom,
+                        "trigramme": target.auteur_trigramme,
+                        "groupePolitiqueRef": {"libelle": target.groupe_politique},
+                    },
+                    "dossier": {"titre": target.dossier_titre},
+                    "contexte_rag": contexte_rag,
                     "texte_loi_reference": target.texte_loi_reference,
                 }
                 candidats = [
                     {
                         "id_discussion": a.amendement_uid,
                         "amendement": {
-                            "divisionArticleDesignationCourte": a.article_vise,
-                            "dispositif": clean_html_text(a.dispositif_raw),
-                            "exposeSommaire": _tronquer_expose_180(a.expose_sommaire),
+                            "divisionArticleDesignation": a.article_vise,
+                            "dispositif": a.dispositif_raw,
                         },
+                        "auteur": {"groupePolitiqueRef": {"libelle": a.groupe_politique}},
                     }
                     for a in enriched
                     if a.amendement_uid != target.amendement_uid
@@ -1270,61 +1122,25 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                 ]
                 
                 try:
-                    endpoint_llm, cle_llm, source_cle, modele_llm = _parametres_llm(payload)
+                    endpoint_llm, cle_llm = _parametres_llm(payload)  # groq_auto : clé serveur
                     valid_endpoint = validate_endpoint_url(endpoint_llm)
-
-                    if "api.groq.com" in valid_endpoint and not cle_llm:
-                        if source_cle == "payload":
-                            raise HTTPException(status_code=401, detail="Clé API Groq personnelle invalide ou expirée")
-                        else:
-                            raise HTTPException(
-                                status_code=503,
-                                detail="La clé Groq de la démo n'est pas encore configurée sur le serveur (GROQ_API_KEY).",
-                            )
-
-                    effective_max_tok = 250 if payload.provider in ("local", "lmstudio") else min(payload.max_tokens or 350, 350)
                     resultat = await asyncio.to_thread(
                         evaluate_similitude,
                         amend_dict, candidats,
                         llm_endpoint=valid_endpoint,
-                        provider=payload.provider,
-                        model=modele_llm, api_key=cle_llm,
-                        key_source=source_cle,
-                        timeout=120.0, max_tokens=effective_max_tok, temperature=payload.temperature,
-                        stop=payload.stop,
+                        model=payload.model, api_key=cle_llm,
+                        timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
                         texte_loi_reference=target.texte_loi_reference,
                     )
-
-                    if "Clé API Groq personnelle invalide ou expirée" in resultat.analyse_intention:
-                        raise HTTPException(status_code=401, detail="Clé API Groq personnelle invalide ou expirée")
-                    elif "Clé API Groq Vercel du projet invalide" in resultat.analyse_intention:
-                        raise HTTPException(status_code=401, detail="Clé API Groq Vercel du projet invalide")
-                    elif "RateLimitError" in resultat.analyse_intention or "429" in resultat.analyse_intention:
-                        raise HTTPException(status_code=429, detail="Limite de requêtes Groq atteinte (HTTP 429)")
-
                     llm_data = resultat.model_dump()
                     save_classification(target.amendement_uid, llm_data)
-                except HTTPException:
-                    raise
                 except Exception as exc:
                     clean_exc = sanitize_log_message(str(exc), cle_llm)
                     logging.error(f"❌ LLM FAIL {target.amendement_uid} : {clean_exc}")
                     exc_str = clean_exc
                     exc_name = type(exc).__name__
-                    if (
-                        "AuthenticationError" in exc_name
-                        or "PermissionDeniedError" in exc_name
-                        or "401" in exc_str
-                        or "403" in exc_str
-                        or "Invalid API Key" in exc_str
-                        or "invalid_api_key" in exc_str
-                    ):
-                        auth_msg = (
-                            "Clé API Groq personnelle invalide ou expirée"
-                            if source_cle == "payload"
-                            else "Clé API Groq Vercel du projet invalide"
-                        )
-                        raise HTTPException(status_code=401, detail=auth_msg)
+                    if "AuthenticationError" in exc_name or "401" in exc_str or "Invalid API Key" in exc_str or "invalid_api_key" in exc_str:
+                        error_msg = "⚠️ Clé API invalide ou expirée. Veuillez vérifier et mettre à jour votre clé dans les Réglages IA."
                     else:
                         error_msg = "⚠️ Impossible de joindre l'IA (Serveur local ou tunnel Ngrok hors-ligne). Vérifiez vos réglages IA."
 
@@ -1376,15 +1192,12 @@ async def v2_resumer(payload: ResumeRequest):
     fiche de détail. Même choix d'IA que le classement (locale, clé
     utilisateur ou « Groq (Démo) » avec la clé du serveur).
     """
-    endpoint_llm, cle_llm, source_cle, modele_llm = _parametres_llm(payload)
-    if "api.groq.com" in endpoint_llm and not cle_llm:
-        if source_cle == "payload":
-            raise HTTPException(status_code=401, detail="Clé API Groq personnelle invalide ou expirée")
-        else:
-            raise HTTPException(
-                status_code=503,
-                detail="La clé Groq de la démo n'est pas encore configurée sur le serveur (GROQ_API_KEY).",
-            )
+    if payload.provider == "groq_auto" and not os.getenv("GROQ_API_KEY"):
+        raise HTTPException(
+            status_code=503,
+            detail="La clé Groq de la démo n'est pas encore configurée sur le serveur (GROQ_API_KEY).",
+        )
+    endpoint_llm, cle_llm = _parametres_llm(payload)
     try:
         resume = await asyncio.to_thread(
             resumer_amendement,
@@ -1393,25 +1206,12 @@ async def v2_resumer(payload: ResumeRequest):
             payload.article,
             payload.texte_loi_reference,
             endpoint_llm,
-            model=modele_llm,
+            model=payload.model,
             api_key=cle_llm,
-            key_source=source_cle,
         )
     except RuntimeError as exc:
         message = sanitize_log_message(str(exc), cle_llm)
         logging.warning(f"⚠️ Résumé impossible ({payload.amendement_uid}) : {message}")
-        if (
-            "Clé API Groq" in message
-            or "401" in message
-            or "403" in message
-            or "invalide" in message.lower()
-        ):
-            auth_msg = (
-                "Clé API Groq personnelle invalide ou expirée"
-                if source_cle == "payload"
-                else "Clé API Groq Vercel du projet invalide"
-            )
-            raise HTTPException(status_code=401, detail=auth_msg)
         raise HTTPException(status_code=502, detail=message)
     return {"amendement_uid": payload.amendement_uid, "resume": resume}
 
@@ -1483,137 +1283,5 @@ async def v2_surtransposition(payload: SurtranspositionRequest):
         raise
     except Exception as exc:
         clean_msg = sanitize_log_message(str(exc))
-        logging.warning(f"⚠️ Repli gracieux surtransposition : {clean_msg}")
-        return {
-            "amendement_uid": payload.amendement_uid,
-            "status": "STRICT_TRANSPOSITION",
-            "confidence": 0.5,
-            "delta_summary": "Aucune exigence excédant le socle réglementaire européen détectée (mode heuristique).",
-            "matched_sources": [],
-            "target_article": payload.article_vise,
-            "analysis_mode": "HEURISTIC_FALLBACK",
-        }
-
-
-# ══════════════════════════════════════════════════════════════════════════
-# ROUTE V2 — Export Préjaune Parlementaire (RTF officiel de séance)
-# ══════════════════════════════════════════════════════════════════════════
-
-_DEFAULT_PREJAUNE_AMENDMENTS: list[dict] = [
-    {
-        "id": "AM-101",
-        "numero": "101",
-        "article": "Article 1er",
-        "auteurs": ["M. Jean-Luc Dupont"],
-        "groupe_politique": "EPR",
-        "dispositif": "Supprimer cet article.",
-        "expose_sommaire": "Amendement de suppression globale de l'article 1er.",
-    },
-    {
-        "id": "AM-102",
-        "numero": "102",
-        "article": "Article 1er",
-        "auteurs": ["Mme Marie Martin"],
-        "groupe_politique": "LFI-NFP",
-        "dispositif": "Supprimer cet article.",
-        "expose_sommaire": "Amendement identique de suppression de l'article 1er.",
-    },
-    {
-        "id": "AM-103",
-        "numero": "103",
-        "article": "Article 1er",
-        "auteurs": ["M. Pierre Durand"],
-        "groupe_politique": "DR",
-        "dispositif": "À l'alinéa 3, substituer au montant : « 10 000 € » le montant : « 25 000 € ».",
-        "expose_sommaire": "Relèvement du plafond prévu à l'alinéa 3.",
-    },
-]
-
-
-@app.get("/api/v2/export-prejaune")
-@app.post("/api/v2/export-prejaune")
-async def v2_export_prejaune(request: Request):
-    """
-    Génère et renvoie le fichier RTF officiel de dérouleur de séance (`prejaune_seance.rtf`)
-    avec le type MIME `application/rtf`, ordonné selon `ordonner_au_derouleur` et normalisé
-    selon la Charte orthotypographique du Journal officiel (DILA).
-    """
-    amendements_cibles: list[Any] = []
-    titre_texte: Optional[str] = request.query_params.get("titre")
-
-    # 1. Vérifier si un corps JSON est transmis (en POST ou en GET avec body)
-    try:
-        raw_body = await request.body()
-        if raw_body and raw_body.strip():
-            parsed_body = json.loads(raw_body.decode("utf-8"))
-            if isinstance(parsed_body, list):
-                amendements_cibles = parsed_body
-            elif isinstance(parsed_body, dict):
-                amendements_cibles = parsed_body.get("amendements") or []
-                titre_texte = titre_texte or parsed_body.get("titre")
-    except Exception:
-        pass
-
-    # 2. Sinon, vérifier le paramètre de requête `amendements` (JSON encodé en query string)
-    if not amendements_cibles and request.query_params.get("amendements"):
-        try:
-            q_parsed = json.loads(request.query_params["amendements"])
-            if isinstance(q_parsed, list):
-                amendements_cibles = q_parsed
-        except Exception:
-            pass
-
-    # 3. Sinon, utiliser la dernière session d'amendements normalisés/analysés ou le jeu de repli
-    if not amendements_cibles:
-        amendements_cibles = _LAST_SESSION_AMENDMENTS if _LAST_SESSION_AMENDMENTS else _DEFAULT_PREJAUNE_AMENDMENTS
-
-    rtf_content = generer_prejaune_rtf(amendements_cibles, titre_texte=titre_texte)
-    return Response(
-        content=rtf_content,
-        media_type="application/rtf",
-        headers={
-            "Content-Disposition": 'attachment; filename="prejaune_seance.rtf"',
-        },
-    )
-
-
-# ══════════════════════════════════════════════════════════════════════════
-# ROUTE V2 — Moteur Déterministe Légistique Pur (POST /api/v2/classer-regles)
-# ══════════════════════════════════════════════════════════════════════════
-
-class ClasserReglesRequest(BaseModel):
-    model_config = ConfigDict(extra="allow")
-    amendements: List[Dict[str, Any]] = Field(default_factory=list, max_length=2000)
-
-
-@app.post("/api/v2/classer-regles")
-async def v2_classer_regles(request: Request):
-    """
-    Moteur déterministe légistique ultra-rapide (< 200 ms pour 341 amendements),
-    100 % reproductible et sans appel LLM.
-    Qualifie les Identiques ([Id.]), Discussions communes ([Dc.]) et Isolés,
-    assigne les groupe_conflit_id / cible_numero et préserve les alertes Art. 40 et non-normatives.
-    """
-    global _LAST_SESSION_AMENDMENTS
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Corps JSON invalide.")
-
-    if isinstance(body, list):
-        raw_amendements = body
-    elif isinstance(body, dict):
-        raw_amendements = body.get("amendements")
-        if not isinstance(raw_amendements, list):
-            raise HTTPException(status_code=422, detail="Le champ 'amendements' doit être une liste.")
-    else:
-        raise HTTPException(status_code=422, detail="Payload JSON attendu : {'amendements': [...]} ou liste.")
-
-    if len(raw_amendements) > 2000:
-        raise HTTPException(status_code=422, detail="Nombre maximal d'amendements dépassé (max 2000).")
-
-    result = classer_par_regles(raw_amendements)
-    _LAST_SESSION_AMENDMENTS = result.get("amendements", [])
-    return result
-
-
+        logging.error(f"❌ Erreur surtransposition : {clean_msg}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erreur d'analyse de surtransposition : {clean_msg}")

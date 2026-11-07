@@ -2,10 +2,10 @@ import { useState, useMemo } from 'react'
 import ImpactBadge from './ImpactBadge'
 import GroupeBadge from './GroupeBadge'
 import CommissionKeywords from './amendment/CommissionKeywords'
-import PoliticalGroupTag, { resolvePoliticalGroup } from './amendment/PoliticalGroupTag'
+import PoliticalGroupTag from './amendment/PoliticalGroupTag'
 import AmendmentSearchBar from './amendment/AmendmentSearchBar'
 import { downloadRtf } from '../utils/exportRtf'
-import { stripHtmlTags } from '../utils/sanitize'
+import { stripHtmlForDisplay } from '../utils/sanitize'
 
 const PAGE_SIZE = 50
 
@@ -14,7 +14,7 @@ const PAGE_SIZE = 50
 const EXTRAIT_MAX = 250
 
 function cleanText(text) {
-  return stripHtmlTags(String(text ?? '')).replace(/\s+/g, ' ').trim()
+  return stripHtmlForDisplay(String(text ?? '')).replace(/\s+/g, ' ').trim()
 }
 
 function ExtraitDispositif({ text }) {
@@ -59,7 +59,7 @@ function estDoublon(a) {
   return a.statut_mecanique === 'DOUBLON_MECANIQUE' || a.resultat_ia?.statut === 'Doublon'
 }
 
-export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, analyzingUids, onExportJson, onAnalyzeSingle, onFocusConflict }) {
+export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, onExportJson }) {
   const [currentPage, setCurrentPage] = useState(0)
   const [filtre, setFiltre] = useState({ motCle: '', auteur: '' })
   const [masquerEcartes, setMasquerEcartes] = useState(false)
@@ -215,15 +215,15 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-100 dark:bg-[#1A1B22] border-b border-gray-200 dark:border-gray-800">
             <tr>
-              <th className="px-2 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[80px] min-w-[80px] max-w-[80px] sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-0">Art.</th>
-              <th className="px-2 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[75px] min-w-[75px] max-w-[75px] sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-[80px]">N°</th>
-              <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[180px] min-w-[180px] max-w-[180px] sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-[155px] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">Auteur(s)</th>
-              <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[90px] min-w-[90px]">Groupe</th>
-              <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[140px] min-w-[140px]">Point d'impact</th>
-              <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[200px] min-w-[200px] max-w-[200px]">Commission / Thèmes</th>
-              <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-auto min-w-[200px]">Extrait du dispositif</th>
-              <th className="px-3 py-3 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[220px] min-w-[200px]">Statut</th>
-              <th className="px-3 py-3 text-right text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[80px] min-w-[80px]">Actions</th>
+              <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20 min-w-20 max-w-20 sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-0">Art.</th>
+              <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20 min-w-20 max-w-20 sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-20">N°</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[220px] min-w-[220px] max-w-[220px] sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-40 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">Auteur(s)</th>
+              <th className="px-3 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-36 min-w-36">Groupe</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-44 min-w-44">Point d'impact</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[320px] min-w-[320px] max-w-[320px]">Commission / Thèmes</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-full min-w-[280px]">Extrait du dispositif</th>
+              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider whitespace-nowrap">Statut</th>
+              <th className="px-4 py-4 text-right text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-[#0B0C10] divide-y divide-gray-200 dark:divide-gray-800">
@@ -235,13 +235,8 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               </tr>
             )}
             {pageItems.map(({ a, idx }) => {
-              const statut = a.resultat_ia?.statut || a.statut
-              const groupeStatut = a.resultat_ia?.groupe
-              const groupePolitique = resolvePoliticalGroup(
-                a.groupe_politique || (typeof a.groupe === 'string' ? a.groupe : ''),
-                a.groupe_politique_ref || a.groupRef,
-                a.auteurs
-              )
+              const statut = a.statut || a.resultat_ia?.statut
+              const groupe = a.groupe || a.resultat_ia?.groupe
               const isSelected = a.id === selectedId
               
               const isPending = isClassifying && !a.resultat_ia && !a.statut;
@@ -253,14 +248,6 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               }
               auteursText = auteursText || '—'
 
-              const isAnalyzingSingle = Boolean(
-                analyzingUids && (
-                  (typeof analyzingUids.has === 'function' && (analyzingUids.has(a.id) || analyzingUids.has(a.uid))) ||
-                  (Array.isArray(analyzingUids) && (analyzingUids.includes(a.id) || analyzingUids.includes(a.uid)))
-                )
-              )
-              const isConflitDecrypte = Boolean(a.explication_ia || a.resultat_ia?.explication_ia)
-
               return (
                 <tr 
                   key={a.id ?? `fallback-${idx}`}
@@ -268,25 +255,19 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   onDragStart={(e) => handleDragStart(e, idx)}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => handleDrop(e, idx)}
-                  onClick={() => {
-                    if (onSelect) onSelect(a.id)
-                    setTimeout(() => {
-                      const el = document.getElementById('ia-analysis-block') || document.getElementById('amendment-detail-section')
-                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-                    }, 50)
-                  }}
+                  onClick={() => onSelect && onSelect(a.id)}
                   className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22] border-l-4 border-l-[#D91227]' : 'dark:bg-[#0B0C10] hover:bg-slate-50 dark:hover:bg-gray-900/50'}`}
                 >
-                  <td className={`px-2 py-3.5 w-[80px] min-w-[80px] max-w-[80px] text-sm text-slate-800 dark:text-slate-200 truncate sticky left-0 z-10 align-middle ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.article}>{String(a.article || "—").replace(/^Article\s+/i, "")}</td>
-                  <td className={`px-2 py-3.5 w-[75px] min-w-[75px] max-w-[75px] text-xs text-slate-800 dark:text-slate-200 truncate sticky left-[80px] z-10 align-middle ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.numero}>{a.numero}</td>
-                  <td className={`px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-[180px] min-w-[180px] max-w-[180px] align-middle sticky left-[155px] z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`}>
+                  <td className={`px-2 py-4 w-20 min-w-20 max-w-20 text-sm text-slate-800 dark:text-slate-200 truncate sticky left-0 z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.article}>{String(a.article || "—").replace(/^Article\s+/i, "")}</td>
+                  <td className={`px-1 py-4 w-20 min-w-20 max-w-20 text-xs text-slate-800 dark:text-slate-200 truncate sticky left-20 z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.numero}>{a.numero}</td>
+                  <td className={`px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-[220px] min-w-[220px] max-w-[220px] align-top sticky left-40 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`}>
                     <span className="break-words leading-snug" title={auteursText}>{auteursText}</span>
                   </td>
-                  <td className="px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-[90px] min-w-[90px] align-middle">
-                    {groupePolitique ? (
-                      <div className="flex items-center">
+                  <td className="px-3 py-4 text-sm text-slate-800 dark:text-slate-200 w-36 min-w-36 align-top">
+                    {(a.groupe_politique || a.groupe_politique_ref || a.groupRef) ? (
+                      <div className="flex items-start">
                         <PoliticalGroupTag
-                          group={groupePolitique}
+                          group={a.groupe_politique}
                           groupRef={a.groupe_politique_ref || a.groupRef}
                         />
                       </div>
@@ -294,7 +275,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       <span className="text-xs text-slate-400">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-[140px] min-w-[140px] align-middle">
+                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-44 min-w-44 align-top">
                     <ImpactBadge
                       type={
                         typeof a.point_impact === 'string'
@@ -303,7 +284,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       }
                     />
                   </td>
-                  <td className="px-3 py-3.5 text-sm w-[200px] min-w-[200px] max-w-[200px] align-middle">
+                  <td className="px-4 py-4 text-sm w-[320px] min-w-[320px] max-w-[320px] align-top">
                     <CommissionKeywords
                       commission={a.commission}
                       commissionLibelle={a.commission_libelle}
@@ -311,118 +292,29 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       horsChamp={a.commission_hors_champ}
                     />
                   </td>
-                  <td className="px-3 py-3.5 text-sm text-slate-800 dark:text-slate-200 w-auto min-w-[200px] align-middle whitespace-normal break-words leading-snug"><ExtraitDispositif text={a.dispositif} /></td>
-                  <td className="px-3 py-3.5 text-sm w-[220px] min-w-[200px] align-middle">
-                    <div className="flex flex-col items-start gap-1.5 py-1">
-                      <div className="inline-flex items-center gap-1.5">
-                        <GroupeBadge statut={statutToDisplay} groupe={groupeStatut} isPending={isPending} />
-                        {/* 💡 Tooltip Chain of Thought (inline) */}
-                        {a.resultat_ia?.analyse_intention && (
-                          <div className="group relative inline-flex items-center">
-                            <span className="cursor-help text-xs leading-none" title={a.resultat_ia.analyse_intention}>💡</span>
-                            <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bottom-full right-0 mb-2 w-64 whitespace-normal bg-slate-900 text-white text-xs rounded-lg shadow-xl p-2.5 leading-relaxed">
-                              <p className="font-semibold text-amber-300 mb-1">
-                                {(statutToDisplay === 'Identique' || a.resultat_ia.analyse_intention?.startsWith('Détecté mécaniquement')) ? '⚙️ Tri Mécanique' : '🧠 Raisonnement IA'}
-                              </p>
-                              <p>{a.resultat_ia.analyse_intention}</p>
-                              {a.resultat_ia.niveau_confiance != null && (
-                                <p className="text-slate-400 mt-1">Confiance : {(a.resultat_ia.niveau_confiance * 100).toFixed(0)}%</p>
-                              )}
-                              <div className="absolute top-full right-4 -mt-[1px] border-4 border-transparent border-t-slate-900" />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Déclencheur contextuel pour expliciter la concurrence légistique */}
-                      {statutToDisplay === 'Discussion commune' && (
-                        <div className="w-full">
-                          {isAnalyzingSingle ? (
-                            <span className="text-[11px] px-2.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1.5 border border-amber-500/40 bg-amber-950/40 text-amber-300 mt-1 animate-pulse">
-                              ⏳ Analyse en cours...
-                            </span>
-                          ) : isConflitDecrypte ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                if (onFocusConflict) {
-                                  onFocusConflict(a)
-                                } else {
-                                  if (onSelect) onSelect(a.id)
-                                  requestAnimationFrame(() => {
-                                    setTimeout(() => {
-                                      const el = document.getElementById('decryptage-conflit-card') || document.getElementById('amendment-detail-container')
-                                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
-                                    }, 60)
-                                  })
-                                }
-                              }}
-                              className="text-[11px] px-2.5 py-1 rounded-full font-semibold inline-flex items-center gap-1.5 border border-purple-500/50 bg-purple-950/50 text-purple-200 hover:bg-purple-800 hover:border-purple-300 hover:text-white transition-all duration-150 cursor-pointer mt-1 shadow-sm hover:shadow-purple-500/30 hover:scale-[1.03] active:scale-[0.97]"
-                              title="Voir l'explication du conflit dans la fiche"
-                            >
-                              ✓ Conflit décrypté (IA)
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                if (onFocusConflict) {
-                                  onFocusConflict(a)
-                                } else {
-                                  if (onSelect) onSelect(a.id)
-                                  if (onAnalyzeSingle) onAnalyzeSingle(a.uid || a.id)
-                                  requestAnimationFrame(() => {
-                                    setTimeout(() => {
-                                      const el = document.getElementById('decryptage-conflit-card') || document.getElementById('amendment-detail-container')
-                                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
-                                    }, 60)
-                                  })
-                                }
-                              }}
-                              className="text-[11px] px-2.5 py-1 rounded-full font-semibold inline-flex items-center gap-1.5 border border-blue-500/50 bg-blue-950/40 text-blue-300 hover:bg-blue-600 hover:border-blue-300 hover:text-white transition-all duration-150 cursor-pointer mt-1 shadow-sm hover:shadow-blue-500/30 hover:scale-[1.03] active:scale-[0.97]"
-                              title="Expliquer la concurrence de fond avec l'IA"
-                            >
-                              🔍 Décrypter le conflit (IA)
-                            </button>
-                          )}
-                        </div>
-                      )}
-
-                      {a.alerte_recevabilite_art40 && (
+                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full min-w-[280px] align-top whitespace-normal break-words leading-snug"><ExtraitDispositif text={a.dispositif} /></td>
+                  <td className="px-4 py-4 text-sm whitespace-nowrap align-top">
+                    <div className="flex items-center gap-1">
+                      <GroupeBadge statut={statutToDisplay} groupe={groupe} isPending={isPending} />
+                      {/* 💡 Tooltip Chain of Thought (inline) */}
+                      {a.resultat_ia?.analyse_intention && (
                         <div className="group relative inline-flex">
-                          <span
-                            className="text-[11px] px-2.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1.5 border border-red-500/40 bg-red-950/40 text-red-300 whitespace-nowrap cursor-help"
-                            title={a.motif_art40 || "Risque d'irrecevabilité financière au titre de l'Article 40 de la Constitution : perte de recettes ou charge publique détectée sans gage valide."}
-                          >
-                            ⚠️ Art. 40 (sans gage)
-                          </span>
-                          <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bottom-full right-0 mb-2 w-72 whitespace-normal bg-slate-900 text-white text-xs rounded-lg shadow-xl p-2.5 leading-relaxed">
-                            <p className="font-semibold text-rose-300 mb-1">⚖️ Audit Constitutionnel — Article 40</p>
-                            <p>{a.motif_art40 || "Perte de recettes publiques ou création de charge détectée sans formule de gage financier valide (Tabac, Alcool, DGF ou Sécurité sociale)."}</p>
-                            <div className="absolute top-full right-4 -mt-[1px] border-4 border-transparent border-t-slate-900" />
-                          </div>
-                        </div>
-                      )}
-                      {a.alerte_non_normatif && (
-                        <div className="group relative inline-flex">
-                          <span
-                            className="text-[11px] px-2.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1.5 border border-sky-300 bg-sky-100 text-sky-800 dark:border-sky-500/40 dark:bg-sky-950/40 dark:text-sky-300 whitespace-nowrap cursor-help"
-                            title={a.motif_non_normatif || "Dispositif à faible portée normative (risque de censure pour défaut de normativité, Art. 6 DDHC)."}
-                          >
-                            ℹ️ Portée faible
-                          </span>
-                          <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bottom-full right-0 mb-2 w-72 whitespace-normal bg-slate-900 text-white text-xs rounded-lg shadow-xl p-2.5 leading-relaxed">
-                            <p className="font-semibold text-sky-300 mb-1">ℹ️ Légistique — Portée normative (Art. 6 DDHC)</p>
-                            <p>{a.motif_non_normatif || "Dispositif à faible portée normative (risque de censure pour défaut de normativité, Art. 6 DDHC)."}</p>
+                          <span className="cursor-help text-sm" title={a.resultat_ia.analyse_intention}>💡</span>
+                          <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bottom-full right-0 mb-2 w-64 bg-slate-900 text-white text-xs rounded-lg shadow-xl p-2.5 leading-relaxed">
+                            <p className="font-semibold text-amber-300 mb-1">
+                              {(statutToDisplay === 'Identique' || a.resultat_ia.analyse_intention?.startsWith('Détecté mécaniquement')) ? '⚙️ Tri Mécanique' : '🧠 Raisonnement IA'}
+                            </p>
+                            <p>{a.resultat_ia.analyse_intention}</p>
+                            {a.resultat_ia.niveau_confiance != null && (
+                              <p className="text-slate-400 mt-1">Confiance : {(a.resultat_ia.niveau_confiance * 100).toFixed(0)}%</p>
+                            )}
                             <div className="absolute top-full right-4 -mt-[1px] border-4 border-transparent border-t-slate-900" />
                           </div>
                         </div>
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-3.5 w-[80px] min-w-[80px] text-right text-sm font-medium align-middle">
+                  <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button onClick={(e) => { e.stopPropagation(); if (onDelete) onDelete(a.id); }} className="text-gray-400 hover:text-red-600 transition-colors">Retirer</button>
                   </td>
                 </tr>

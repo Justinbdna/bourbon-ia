@@ -16,16 +16,15 @@ const STYLES = {
   article_entier: 'bg-slate-100 text-slate-700 ring-slate-300 dark:bg-slate-900/60 dark:ring-slate-700/50 dark:text-slate-300',
 }
 
-export default function ImpactBadge({ type, className = '' }) {
+export default function ImpactBadge({ type }) {
   if (!type) return <span className="text-ink-500 text-xs">—</span>
 
   const label = LABELS[type] || type
-  const style = STYLES[type] || 'bg-slate-100 text-slate-700 ring-slate-300 dark:bg-slate-900/60 dark:ring-slate-700/50 dark:text-slate-300'
+  const style = STYLES[type] || 'bg-ink-100 text-ink-700 ring-ink-300'
 
   return (
     <span
-      title={label}
-      className={`max-w-[130px] truncate whitespace-nowrap overflow-hidden inline-block rounded-full text-xs font-medium ring-1 ring-inset px-2.5 py-0.5 align-middle ${style} ${className}`}
+      className={`inline-flex items-center rounded-full px-3 py-1 whitespace-normal break-words text-left text-xs font-medium ring-1 ring-inset ${style}`}
     >
       {label}
     </span>

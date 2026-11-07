@@ -17,10 +17,7 @@ from typing import Any, Dict, List, Literal, Optional
 import requests
 from pydantic import BaseModel, Field, ValidationError
 
-try:
-    from api.services.legal_ingestion.vector_indexer import LegalVectorIndexer
-except ModuleNotFoundError:
-    from services.legal_ingestion.vector_indexer import LegalVectorIndexer
+from api.services.legal_ingestion.vector_indexer import LegalVectorIndexer
 
 logger = logging.getLogger("bourbon.surtransposition")
 

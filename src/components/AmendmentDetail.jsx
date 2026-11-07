@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import ScrollableText from './ScrollableText'
 import ImpactBadge from './ImpactBadge'
 import GroupeBadge from './GroupeBadge'
@@ -8,16 +8,16 @@ import LegislativeContext from './amendment/LegislativeContext'
 import IdentiqueAlert from './amendment/IdentiqueAlert'
 import SkeletonLoader from './amendment/SkeletonLoader'
 import EUCompliancePanel from './amendment/EUCompliancePanel'
+import ResumeIA from './amendment/ResumeIA'
 import { analyzeSurtransposition } from '../api/classify'
-import { stripHtmlTags } from '../utils/sanitize'
 
 export function formatCleanArticleHeading(article) {
   if (!article) return 'Article —'
   const str = String(article).trim()
   // Dédupliquer les répétitions éventuelles ("Article Article PREMIER" -> "Article PREMIER")
-  const clean = str.replace(/^(article\s+|art\.\s*)+/gi, 'Article ')
-  // Si la chaîne commence déjà par Article, Art., Avant, Après, Titre ou Intitulé, ne pas préfixer à nouveau
-  if (/^(article|art\.|avant\b|apr[eè]s\b|titre\b|intitul[eé]\b)/i.test(clean)) {
+  let clean = str.replace(/^(article\s+|art\.\s*)+/gi, 'Article ')
+  // Vérifie si la chaîne commence déjà par article, art., après l'article ou avant l'article
+  if (/^(article|art\.|apr[eè]s\s+l['’]article|avant\s+l['’]article|apr[eè]s\s+l['’]art\.|avant\s+l['’]art\.)/i.test(clean)) {
     return clean
   }
   return `Article ${clean}`
@@ -25,18 +25,8 @@ export function formatCleanArticleHeading(article) {
 
 export const formatArticleTitle = formatCleanArticleHeading
 
-export default function AmendmentDetail({
-  amendment,
-  onClose,
-  isLoading,
-  aiSettings: _aiSettings,
-  onAnalyzeSingle,
-  analyzingUids,
-  shouldFocusConflict,
-}) {
-  const decryptageCardRef = useRef(null)
+export default function AmendmentDetail({ amendment, onClose, isLoading, aiSettings }) {
   const [euCompliance, setEuCompliance] = useState(amendment?.eu_compliance || null)
-  const [isHighlighted, setIsHighlighted] = useState(false)
 
   useEffect(() => {
     let isCurrent = true
@@ -60,40 +50,6 @@ export default function AmendmentDetail({
     }
   }, [amendment])
 
-  // Défilement centré et feedback lumineux dès que le focus conflit est demandé
-  useEffect(() => {
-    if (shouldFocusConflict) {
-      setIsHighlighted(true)
-      const highlightTimer = setTimeout(() => {
-        setIsHighlighted(false)
-      }, 1500)
-
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          const el = decryptageCardRef.current || document.getElementById('decryptage-conflit-card')
-          if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
-          }
-        }, 60)
-      })
-
-      return () => clearTimeout(highlightTimer)
-    }
-  }, [shouldFocusConflict])
-
-  // Défilement automatique doux vers la fiche dès qu'un amendement est sélectionné
-  useEffect(() => {
-    if (amendment && !shouldFocusConflict) {
-      const timer = setTimeout(() => {
-        const el = document.getElementById('amendment-detail-container') || decryptageCardRef.current
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-        }
-      }, 60)
-      return () => clearTimeout(timer)
-    }
-  }, [amendment?.id, amendment?.uid, shouldFocusConflict])
-
   // ── Safe Rendering : Skeleton si en cours de chargement ──
   if (isLoading) {
     return (
@@ -114,42 +70,10 @@ export default function AmendmentDetail({
   }
 
   const a = amendment
-  const res = a?.resultat_ia
-  const statut = res?.statut || a?.statut || ''
-  const isDiscussionCommune = statut === 'Discussion commune' || statut === 'Incompatible'
-  const isAnalyzed = Boolean(a?.explication_ia || res?.explication_ia)
-  const isAnalyzing = Boolean(
-    a && analyzingUids && (
-      (typeof analyzingUids.has === 'function' && (analyzingUids.has(a.id) || analyzingUids.has(a.uid))) ||
-      (Array.isArray(analyzingUids) && (analyzingUids.includes(a.id) || analyzingUids.includes(a.uid)))
-    )
-  )
-
-  const texteIA =
-    (typeof a?.justification === 'string' && a.justification.trim() ? a.justification.trim() : null) ||
-    (typeof res?.justification === 'string' && res.justification.trim() ? res.justification.trim() : null) ||
-    (typeof res?.analyse_intention === 'string' && res.analyse_intention.trim() ? res.analyse_intention.trim() : null)
-
-  const cibleNumero = a?.cible_numero || res?.cible_numero
-
-  const handleTriggerAnalysis = () => {
-    if (onAnalyzeSingle && a) {
-      onAnalyzeSingle(a.uid || a.id)
-    }
-    setIsHighlighted(true)
-    setTimeout(() => setIsHighlighted(false), 1500)
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        const el = decryptageCardRef.current || document.getElementById('decryptage-conflit-card')
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
-        }
-      }, 50)
-    })
-  }
+  const res = a.resultat_ia
 
   return (
-    <div id="amendment-detail-container" className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 flex flex-col h-full">
+    <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 flex flex-col h-full">
       <div className="border-b border-ink-100 dark:border-ink-700 px-5 py-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-wide text-ink-500 dark:text-ink-400">
@@ -162,40 +86,9 @@ export default function AmendmentDetail({
               {a.rectification ? ` ${a.rectification}` : ''}
             </span>
             {a.est_gage && (
-              <span
-                className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 px-2.5 py-0.5 text-xs font-semibold font-sans"
-                title={a.gage_detecte ? `Gage constitutionnel détecté : ${a.gage_detecte}` : "Amendement gagé au titre de l'Article 40 de la Constitution"}
-              >
-                💰 Gagé (Art. 40){a.gage_detecte ? ` · ${a.gage_detecte}` : ''}
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 px-2.5 py-0.5 text-xs font-semibold">
+                💰 Gagé (Art. 40)
               </span>
-            )}
-            {a.alerte_recevabilite_art40 && (
-              <div className="group relative inline-flex font-sans">
-                <span
-                  className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-200 border border-rose-300 dark:border-rose-700 px-2.5 py-0.5 text-xs font-semibold cursor-help"
-                  title={a.motif_art40 || "Risque d'irrecevabilité financière au titre de l'Article 40 de la Constitution : perte de recettes ou charge publique détectée sans gage valide."}
-                >
-                  ⚠️ Risque Irrecevabilité Art. 40 (Absence de gage financier)
-                </span>
-                <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 top-full left-0 mt-2 w-80 whitespace-normal bg-slate-900 text-white text-xs rounded-lg shadow-xl p-3 leading-relaxed">
-                  <p className="font-semibold text-rose-300 mb-1">⚖️ Audit Constitutionnel — Article 40</p>
-                  <p>{a.motif_art40 || "Perte de recettes publiques ou création de charge détectée sans formule de gage financier valide (Tabac, Alcool, DGF ou Sécurité sociale)."}</p>
-                </div>
-              </div>
-            )}
-            {a.alerte_non_normatif && (
-              <div className="group relative inline-flex font-sans">
-                <span
-                  className="inline-flex items-center gap-1 rounded-full bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-200 border border-sky-300 dark:border-sky-700 px-2.5 py-0.5 text-xs font-medium cursor-help"
-                  title={a.motif_non_normatif || "Dispositif à faible portée normative (risque de censure pour défaut de normativité, Art. 6 DDHC)."}
-                >
-                  ℹ️ Portée normative faible
-                </span>
-                <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 top-full left-0 mt-2 w-80 whitespace-normal bg-slate-900 text-white text-xs rounded-lg shadow-xl p-3 leading-relaxed">
-                  <p className="font-semibold text-sky-300 mb-1">ℹ️ Légistique — Portée normative (Art. 6 DDHC)</p>
-                  <p>{a.motif_non_normatif || "Dispositif à faible portée normative (risque de censure pour défaut de normativité, Art. 6 DDHC)."}</p>
-                </div>
-              </div>
             )}
           </h3>
         </div>
@@ -224,10 +117,10 @@ export default function AmendmentDetail({
           />
         )}
 
-        <div className="flex flex-wrap items-center gap-4 py-2 text-sm text-slate-300">
+        <div className="flex flex-wrap gap-4 text-sm">
           {/* ── Auteur enrichi ── */}
           <div>
-            <span className="text-xs text-slate-400 block mb-0.5">Auteur(s)</span>
+            <p className="text-ink-500 dark:text-ink-400 text-xs mb-1">Auteur(s)</p>
             {a.auteur_nom && a.auteur_nom !== "Inconnu" ? (
               <AuthorBadge data={{
                 auteur_nom: a.auteur_nom,
@@ -235,112 +128,53 @@ export default function AmendmentDetail({
                 auteur_trigramme: a.auteur_trigramme
               }} />
             ) : (
-              <div className="inline-flex items-center px-2.5 py-1 text-xs font-medium bg-gray-100 text-slate-900 dark:bg-[#1A1B22] dark:text-white border border-gray-300 dark:border-gray-700 rounded-md">
-                <span>
+              <div className="max-h-24 overflow-y-auto text-sm bg-gray-100 text-slate-900 dark:bg-[#1A1B22] dark:text-white border border-gray-300 dark:border-gray-700 p-2 rounded mt-1">
+                <p className="font-medium">
                   {a.rapporteur ? 'Rapporteur — ' : ''}
                   {(a.auteurs || []).join(', ') || '—'}
-                </span>
+                </p>
               </div>
             )}
           </div>
 
           {/* ── Groupe politique ── */}
           <div>
-            <span className="text-xs text-slate-400 block mb-0.5">Groupe</span>
-            <div className="flex items-center">
-              <PoliticalGroupTag
-                group={a.groupe_politique || (typeof a.groupe === 'string' ? a.groupe : '')}
-                groupRef={a.groupRef ?? a.groupe_politique_ref}
-                auteurs={a.auteurs}
-                className="px-2.5 py-1 text-xs"
-              />
-            </div>
+            <p className="text-ink-500 dark:text-ink-400 text-xs mb-1">Groupe</p>
+            <PoliticalGroupTag
+              group={a.groupe_politique}
+              groupRef={a.groupRef ?? a.groupe_politique_ref}
+            />
           </div>
 
-          {/* ── Date de dépôt ── */}
           <div>
-            <span className="text-xs text-slate-400 block mb-0.5">Date de dépôt</span>
-            <span className="inline-flex items-center px-1 py-1 text-xs font-medium text-slate-900 dark:text-slate-100">
-              {a.date_depot || '—'}
-            </span>
+            <p className="text-ink-500 dark:text-ink-400 text-xs">Date de dépôt</p>
+            <p className="text-ink-900 dark:text-plume font-medium">{a.date_depot || '—'}</p>
           </div>
-
-          {/* ── Point d'impact ── */}
           <div>
-            <span className="text-xs text-slate-400 block mb-0.5">Point d'impact</span>
-            <div className="flex items-center">
-              <ImpactBadge type={a.point_impact?.type} className="px-2.5 py-1 text-xs" />
-            </div>
+            <p className="text-ink-500 dark:text-ink-400 text-xs">Point d'impact</p>
+            <ImpactBadge type={a.point_impact?.type} />
           </div>
         </div>
 
-        {/* ── Bloc IA unifié en tête de volet ── */}
-        <section
-          id="decryptage-conflit-card"
-          ref={decryptageCardRef}
-          className={`scroll-mt-24 rounded-lg bg-slate-50 dark:bg-purple-950/20 border transition-all duration-700 p-4 ${
-            isHighlighted
-              ? 'ring-2 ring-purple-400 ring-offset-2 ring-offset-slate-900 border-purple-400 shadow-xl shadow-purple-950/60 scale-[1.01]'
-              : 'border-purple-300 dark:border-purple-800/50 shadow-sm'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <h4 className="font-display text-sm uppercase tracking-wide text-purple-900 dark:text-purple-300 font-semibold flex items-center gap-1.5">
-              <span>{isDiscussionCommune ? '🤖' : '✨'}</span>
-              {isDiscussionCommune
-                ? 'DÉCRYPTAGE DU CONFLIT (IA LOCALE)'
-                : 'ANALYSE LÉGISTIQUE (IA LOCALE)'}
-            </h4>
-          </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Traité par votre IA locale : le texte ne quitte pas votre poste.
-          </p>
-
-          {isAnalyzing ? (
-            <div className="text-xs text-amber-300 flex items-center gap-2 mt-3 font-medium">
-              <span className="inline-block animate-spin">⏳</span>
-              <span>Analyse sémantique en cours par l'IA...</span>
-            </div>
-          ) : isAnalyzed && texteIA ? (
-            <div className="mt-3 bg-purple-950/30 border border-purple-800/40 rounded-lg p-3">
-              <p className="text-sm text-purple-100 leading-relaxed whitespace-pre-line">{texteIA}</p>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={handleTriggerAnalysis}
-              className="mt-3 text-xs font-medium px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white transition-colors cursor-pointer"
-            >
-              {isDiscussionCommune
-                ? '⚡ Décrypter ce conflit par IA'
-                : '⚡ Analyser l\'amendement par IA'}
-            </button>
-          )}
-        </section>
+        {/* ── Résumé IA à la demande (1 à 2 phrases neutres) ── */}
+        <ResumeIA key={a.id ?? a.uid} amendment={a} aiSettings={aiSettings} />
 
         {/* ── Conformité européenne (surtransposition) — panneau dépliable ── */}
         <EUCompliancePanel result={euCompliance || a.eu_compliance} />
 
-        {/* ── Résultat du classement (Mécanique / Déterministe) ── */}
+        {/* ── Résultat IA (avec Chain of Thought) ── */}
         <section className="rounded-md bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-3.5">
           <h4 className="font-display text-sm uppercase tracking-wide text-slate-900 dark:text-plume mb-2">
             Résultat du classement
           </h4>
-          {res || a.statut ? (
+          {res ? (
             <div className="space-y-3 text-sm">
               <div className="flex items-center gap-2 flex-wrap">
-                {(res?.rang != null || a.rang != null) && (
-                  <span className="font-semibold text-slate-900 dark:text-plume">Rang {res?.rang ?? a.rang}</span>
-                )}
-                <GroupeBadge statut={statut} groupe={res?.groupe || a.groupe} type={res?.groupe?.type || a.groupe?.type} />
-                {cibleNumero && (
-                  <span className="text-xs text-slate-400 font-mono">
-                    Cible : n° {cibleNumero}
-                  </span>
-                )}
+                <span className="font-semibold text-slate-900 dark:text-plume">Rang {res.rang}</span>
+                <GroupeBadge type={res.groupe?.type} />
 
                 {/* ── 💡 Tooltip Chain of Thought ── */}
-                {res?.analyse_intention && (
+                {res.analyse_intention && (
                   <div className="group relative inline-flex">
                     <span className="cursor-help text-base" title={res.analyse_intention}>💡</span>
                     <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 bg-slate-900 text-white text-xs rounded-lg shadow-xl p-3 leading-relaxed">
@@ -360,14 +194,7 @@ export default function AmendmentDetail({
                   </div>
                 )}
               </div>
-              <p className="text-ink-700 dark:text-ink-300 text-xs">
-                {a.justification_mecanique ||
-                  (cibleNumero
-                    ? `Discussion commune sur cette division avec l'amendement n° ${cibleNumero}.`
-                    : statut === 'Identique'
-                    ? "Amendement détecté rigoureusement identique."
-                    : "Amendement isolé sur cette division.")}
-              </p>
+              <p className="text-ink-700 dark:text-ink-300">{res.justification}</p>
             </div>
           ) : (
             <p className="text-sm text-ink-500 dark:text-ink-400 italic">
@@ -389,14 +216,14 @@ export default function AmendmentDetail({
           <h4 className="font-display text-sm uppercase tracking-wide text-slate-900 dark:text-plume mb-2">
             Dispositif
           </h4>
-          <ScrollableText text={stripHtmlTags(a.dispositif)} />
+          <ScrollableText text={a.dispositif} />
         </section>
 
         <section className="bg-gray-50 dark:bg-surface border border-ink-200 dark:border-ink-700 rounded-md p-4">
           <h4 className="font-display text-sm uppercase tracking-wide text-slate-900 dark:text-plume mb-2">
             Exposé sommaire
           </h4>
-          <ScrollableText text={stripHtmlTags(a.expose_sommaire || a.exposeSommaire)} />
+          <ScrollableText text={a.expose_sommaire} />
         </section>
       </div>
     </div>
