@@ -478,6 +478,19 @@ def _cle_groq_serveur() -> str:
     return _nettoyer_cle_api(os.getenv("GROQ_API_KEY") or os.getenv("VITE_GROQ_API_KEY") or os.getenv("GROQ_KEY"))
 
 
+# Modèle de la démo publique (groq_auto). llama-3.3-70b-versatile renvoie une
+# erreur 404 (NotFoundError) avec la clé du projet : modèle retenu par Justin
+# (346b252). GROQ_MODEL permet d'en changer sans toucher au code.
+GROQ_DEMO_MODEL_DEFAUT = "openai/gpt-oss-20b"
+
+
+def _modele_llm(payload: "V2AnalyzeRequest | ResumeRequest") -> str:
+    """Modèle effectivement appelé : imposé par le serveur en mode groq_auto."""
+    if payload.provider == "groq_auto":
+        return os.getenv("GROQ_MODEL", "").strip() or GROQ_DEMO_MODEL_DEFAUT
+    return payload.model
+
+
 def _parametres_llm(payload: "V2AnalyzeRequest | ResumeRequest") -> tuple[str, str]:
     """
     Renvoie (endpoint, clé API) pour l'appel LLM.
@@ -968,7 +981,7 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                                 evaluate_similitude,
                                 amend_dict, candidats,
                                 llm_endpoint=valid_endpoint,
-                                model=payload.model, api_key=cle_llm,
+                                model=_modele_llm(payload), api_key=cle_llm,
                                 timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
                                 texte_loi_reference=amend.texte_loi_reference,
                             )
@@ -1149,7 +1162,7 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                         evaluate_similitude,
                         amend_dict, candidats,
                         llm_endpoint=valid_endpoint,
-                        model=payload.model, api_key=cle_llm,
+                        model=_modele_llm(payload), api_key=cle_llm,
                         timeout=120.0, max_tokens=payload.max_tokens, temperature=payload.temperature,
                         texte_loi_reference=target.texte_loi_reference,
                     )
@@ -1227,7 +1240,7 @@ async def v2_resumer(payload: ResumeRequest):
             payload.article,
             payload.texte_loi_reference,
             endpoint_llm,
-            model=payload.model,
+            model=_modele_llm(payload),
             api_key=cle_llm,
         )
     except RuntimeError as exc:

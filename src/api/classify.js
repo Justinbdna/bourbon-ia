@@ -54,7 +54,7 @@ function reglagesLLM(aiSettings = {}) {
   const provider = aiSettings.provider || 'local'
   const localUrl = (aiSettings.localUrl || 'http://localhost:1234/v1').trim().replace(/\/+$/, '')
   return {
-    model: provider === 'local' ? (aiSettings.localModel || 'local-model') : (aiSettings.groqModel || 'llama-3.3-70b-versatile'),
+    model: provider === 'local' ? (aiSettings.localModel || 'local-model') : (aiSettings.groqModel || 'openai/gpt-oss-20b'),
     provider,
     llm_endpoint: provider === 'local' ? localUrl : 'https://api.groq.com/openai/v1',
     api_key: aiSettings.apiKey || 'local-key',

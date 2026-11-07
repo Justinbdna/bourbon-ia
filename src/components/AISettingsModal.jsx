@@ -96,7 +96,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
       if (provider === 'groq_auto') {
         if (isMounted) {
           // Modèle réellement utilisé en mode démo (cf. src/api/classify.js)
-          setModelsList([{ id: 'llama-3.3-70b-versatile' }])
+          setModelsList([{ id: 'openai/gpt-oss-20b' }])
           setIsFetchingModels(false)
         }
         return

@@ -36,6 +36,8 @@ def _faux_openai(monkeypatch, reponse="Supprime l'article 3 bis. L'auteur vise �
 
         def _create(self, **kwargs):
             appels[-1]["messages"] = kwargs["messages"]
+            appels[-1]["model"] = kwargs.get("model")
+            appels[-1]["extra_body"] = kwargs.get("extra_body")
             if erreur:
                 raise erreur
             message = types.SimpleNamespace(content=reponse)
@@ -119,4 +121,29 @@ def test_cle_serveur_nettoyee_et_noms_alternatifs(monkeypatch):
 
     assert r.status_code == 200
     assert appels[0]["api_key"] == "cle-serveur-factice"
+
+
+def test_groq_demo_impose_le_modele_serveur(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "cle-serveur-factice")
+    monkeypatch.delenv("GROQ_MODEL", raising=False)
+    appels = _faux_openai(monkeypatch)
+
+    # Le navigateur demande un modèle retiré : le serveur impose celui de la démo
+    r = client.post("/api/v2/resumer", json={**PAYLOAD, "provider": "groq_auto", "model": "llama-3.3-70b-versatile"})
+
+    assert r.status_code == 200
+    assert appels[0]["model"] == "openai/gpt-oss-20b"
+    assert appels[0]["extra_body"] == {"reasoning_effort": "low"}
+
+
+def test_mode_local_garde_le_modele_choisi(monkeypatch):
+    monkeypatch.delenv("VERCEL", raising=False)
+    appels = _faux_openai(monkeypatch)
+
+    r = client.post("/api/v2/resumer", json={**PAYLOAD, "provider": "local", "model": "mistral-7b",
+                                             "llm_endpoint": "http://localhost:1234/v1"})
+
+    assert r.status_code == 200
+    assert appels[0]["model"] == "mistral-7b"
+    assert appels[0]["extra_body"] is None
 

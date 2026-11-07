@@ -592,6 +592,7 @@ def evaluate_similitude(
             ],
             temperature=temperature,
             max_tokens=max_tokens,
+            **_options_modele(model),
         )
         contenu = (reponse.choices[0].message.content or "").strip()
 
@@ -652,6 +653,17 @@ def evaluate_similitude(
 # ══════════════════════════════════════════════════════════════════════════
 # 6 bis. RÉSUMÉ D'UN AMENDEMENT (à la demande, depuis la fiche de détail)
 # ══════════════════════════════════════════════════════════════════════════
+def _options_modele(model: str) -> dict[str, Any]:
+    """
+    Options propres aux modèles « à raisonnement » de Groq (openai/gpt-oss-*) :
+    leurs jetons de réflexion comptent dans max_tokens. Effort « low » pour
+    garder la place de la réponse et une latence acceptable.
+    """
+    if str(model).startswith("openai/gpt-oss"):
+        return {"extra_body": {"reasoning_effort": "low"}}
+    return {}
+
+
 MAX_RESUME_CHARS: int = 600
 MAX_TEXTE_LOI_CHARS: int = 1500
 
@@ -705,7 +717,9 @@ def resumer_amendement(
                 {"role": "user", "content": "\n\n".join(parties)},
             ],
             temperature=0.1,
-            max_tokens=200,
+            # Marge pour les jetons de réflexion des modèles gpt-oss
+            max_tokens=700 if _options_modele(model) else 200,
+            **_options_modele(model),
         )
         resume = (reponse.choices[0].message.content or "").strip().strip('"«» ')
     except ImportError as exc:
