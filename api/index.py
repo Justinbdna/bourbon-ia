@@ -457,6 +457,27 @@ class ResumeRequest(BaseModel):
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1"
 
 
+def _nettoyer_cle_api(brute: Optional[str]) -> str:
+    """
+    Retire ce qu'un copier-coller ajoute souvent autour d'une clé (guillemets,
+    espaces, retour à la ligne, « Bearer », « GROQ_API_KEY= ») — repris de la
+    version de Justin (db1ccd9), qui faisait fonctionner la clé Vercel actuelle.
+    """
+    if brute is None:
+        return ""
+    s = str(brute).strip().strip("\"'` \t\r\n")
+    if s.lower().startswith("bearer "):
+        s = s[7:].strip().strip("\"'` \t\r\n")
+    if s.startswith("GROQ_API_KEY="):
+        s = s[len("GROQ_API_KEY="):].strip().strip("\"'` \t\r\n")
+    return s
+
+
+def _cle_groq_serveur() -> str:
+    """Clé Groq de la démo : GROQ_API_KEY (ou VITE_GROQ_API_KEY / GROQ_KEY), nettoyée."""
+    return _nettoyer_cle_api(os.getenv("GROQ_API_KEY") or os.getenv("VITE_GROQ_API_KEY") or os.getenv("GROQ_KEY"))
+
+
 def _parametres_llm(payload: "V2AnalyzeRequest | ResumeRequest") -> tuple[str, str]:
     """
     Renvoie (endpoint, clé API) pour l'appel LLM.
@@ -467,11 +488,11 @@ def _parametres_llm(payload: "V2AnalyzeRequest | ResumeRequest") -> tuple[str, s
     pouvoir faire envoyer la clé du serveur vers une autre adresse.
     """
     if payload.provider == "groq_auto":
-        cle = os.getenv("GROQ_API_KEY", "")
+        cle = _cle_groq_serveur()
         if not cle:
             logging.warning("Mode groq_auto demandé mais GROQ_API_KEY absente de l'environnement serveur.")
         return GROQ_ENDPOINT, cle or "cle-absente"
-    return payload.llm_endpoint or payload.base_url, payload.api_key
+    return payload.llm_endpoint or payload.base_url, _nettoyer_cle_api(payload.api_key) or payload.api_key
 
 
 def _inject_textes_reference(enriched_list: list[EnrichedAmendment], textes_ref: dict[str, str]):
@@ -1192,7 +1213,7 @@ async def v2_resumer(payload: ResumeRequest):
     fiche de détail. Même choix d'IA que le classement (locale, clé
     utilisateur ou « Groq (Démo) » avec la clé du serveur).
     """
-    if payload.provider == "groq_auto" and not os.getenv("GROQ_API_KEY"):
+    if payload.provider == "groq_auto" and not _cle_groq_serveur():
         raise HTTPException(
             status_code=503,
             detail="La clé Groq de la démo n'est pas encore configurée sur le serveur (GROQ_API_KEY).",

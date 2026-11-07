@@ -107,3 +107,16 @@ def test_groq_demo_sans_cle_serveur_message_explicite(monkeypatch):
     assert r.status_code == 503
     assert "GROQ_API_KEY" in r.json()["detail"]
     assert appels == []
+
+
+def test_cle_serveur_nettoyee_et_noms_alternatifs(monkeypatch):
+    # Clé collée avec guillemets et retour à la ligne, sous un nom alternatif
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setenv("GROQ_KEY", '  "cle-serveur-factice"\n')
+    appels = _faux_openai(monkeypatch)
+
+    r = client.post("/api/v2/resumer", json={**PAYLOAD, "provider": "groq_auto"})
+
+    assert r.status_code == 200
+    assert appels[0]["api_key"] == "cle-serveur-factice"
+
