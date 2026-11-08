@@ -39,14 +39,14 @@ MAX_AMENDEMENTS = 2000
 # Étapes de lecture à l'Assemblée (codeEtape), dans l'ordre de la procédure.
 ETAPES_AN: dict[str, str] = {
     "AN1-COM": "1re lecture — Commission",
-    "AN1-DEBATS": "1re lecture — Séance publique",
+    "AN1-DEBATS": "1re lecture — Séance plénière",
     "AN2-COM": "2e lecture — Commission",
-    "AN2-DEBATS": "2e lecture — Séance publique",
+    "AN2-DEBATS": "2e lecture — Séance plénière",
     "ANNLEC-COM": "Nouvelle lecture — Commission",
-    "ANNLEC-DEBATS": "Nouvelle lecture — Séance publique",
+    "ANNLEC-DEBATS": "Nouvelle lecture — Séance plénière",
     "ANLUNI-COM": "Lecture unique — Commission",
-    "ANLUNI-DEBATS": "Lecture unique — Séance publique",
-    "CMP-DEBATS": "Commission mixte paritaire — Séance publique",
+    "ANLUNI-DEBATS": "Lecture unique — Séance plénière",
+    "CMP-DEBATS": "Commission mixte paritaire — Séance plénière",
 }
 
 _DOSSIER_UID_RE = re.compile(r"^DLR5L\d{2}N\d+$")
@@ -130,8 +130,12 @@ def lister_liasses(dossier_uid: str) -> list[dict[str, Any]]:
 # ──────────────────────────────────────────────────────────────────────────
 # 3. Amendements d'une liasse, au format brut de l'Assemblée
 # ──────────────────────────────────────────────────────────────────────────
-def tricoteuses_vers_format_an(a: dict[str, Any]) -> dict[str, Any]:
-    """Convertit un amendement de l'API Tricoteuses au format JSON brut de l'Assemblée."""
+def tricoteuses_vers_format_an(a: dict[str, Any], commission_fond: str = "") -> dict[str, Any]:
+    """
+    Convertit un amendement de l'API Tricoteuses au format JSON brut de l'Assemblée.
+    `commission_fond` (commission saisie au fond du dossier) donne leurs thèmes
+    aux amendements de séance publique (cf. commissions_resolver).
+    """
     document = a.get("documentRef") or {}
     groupe = a.get("groupePolitiqueRef") or {}
     # En liste, l'API laisse `acteurRefUid` vide et ne renseigne que l'objet `acteurRef`.
@@ -173,7 +177,17 @@ def tricoteuses_vers_format_an(a: dict[str, Any]) -> dict[str, Any]:
         "estIdentique": bool(a.get("estIdentique")),
         "amendementParentRef": a.get("amendementParentRefUid") or None,
         "triAmendement": a.get("triAmendement") or "",
+        "commissionFondRef": commission_fond,
     }
+
+
+def _commission_fond(dossier_uid: str) -> str:
+    """Commission saisie au fond à l'Assemblée ; "" si l'information manque."""
+    try:
+        dossier = _appel(f"/v2/dossiers/{dossier_uid}", {}).get("data") or {}
+    except ImportIndisponible:
+        return ""  # secondaire : les thèmes de séance restent vides
+    return str(dossier.get("commissionANRefUid") or "") if isinstance(dossier, dict) else ""
 
 
 def amendements_de_liasse(dossier_uid: str, etape: str) -> dict[str, Any]:
@@ -199,8 +213,9 @@ def amendements_de_liasse(dossier_uid: str, etape: str) -> dict[str, Any]:
                 bruts.extend(reponse.get("data") or [])
 
     bruts = [a for a in bruts if isinstance(a, dict)][:MAX_AMENDEMENTS]
+    commission_fond = _commission_fond(dossier_uid) if etape.endswith("-DEBATS") else ""
     return {
-        "amendements": [tricoteuses_vers_format_an(a) for a in bruts],
+        "amendements": [tricoteuses_vers_format_an(a, commission_fond) for a in bruts],
         "total": total,
         "tronque": total > len(bruts),
     }

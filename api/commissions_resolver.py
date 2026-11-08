@@ -48,6 +48,11 @@ logger = logging.getLogger("bourbon.commissions")
 CURRENT_DIR = Path(__file__).resolve().parent
 DATA_PATH = CURRENT_DIR / "data" / "commissions.json"
 
+# Organe des amendements de séance plénière (l'hémicycle) : sans périmètre
+# thématique propre. Ses thèmes sont ceux de la commission saisie au fond du
+# texte, quand l'amendement la porte (`commissionFondRef`, cf. import_dossier).
+ORGANE_SEANCE = "PO838901"
+
 # Longueur minimale d'un radical pour autoriser la correspondance par préfixe.
 # En dessous, on génère trop de faux positifs (« eau » matcherait « beaucoup »).
 _MIN_RADICAL = 5
@@ -293,6 +298,15 @@ def resoudre_commission_et_mots_cles(
             return vide
 
         fiche = get_commission_info(organe_uid, autoriser_reseau=autoriser_reseau)
+        fond_uid = str(amendement.get("commissionFondRef") or "")
+        if organe_uid == ORGANE_SEANCE and fond_uid:
+            fond = get_commission_info(fond_uid, autoriser_reseau=autoriser_reseau)
+            if fond.get("libelle"):
+                fiche = {
+                    "libelle": f"Séance plénière — texte de la {fond['libelle'][0].lower()}{fond['libelle'][1:]}",
+                    "abrege": f"Séance plénière · {fond.get('abrege') or fond['libelle']}",
+                    "mots_cles": fond.get("mots_cles") or [],
+                }
         mots_reference = fiche.get("mots_cles") or []
 
         textes = (

@@ -74,6 +74,19 @@ def test_conversion_au_format_an_puis_normalisation():
     assert norm["dispositif"] == "Supprimer cet article."
 
 
+def test_seance_pleniere_prend_les_themes_de_la_commission_au_fond():
+    seance = dict(AMENDEMENT_TRICOTEUSES, uid="AMANR5L17PO838901BTC2233P0D1N000159",
+                  exposeSommaireHtml="<p>Cet amendement protège le sport et les jeux olympiques.</p>")
+
+    avec_fond = normaliser_amendement(import_dossier.tricoteuses_vers_format_an(seance, "PO419604"))
+    sans_fond = normaliser_amendement(import_dossier.tricoteuses_vers_format_an(seance))
+
+    assert avec_fond["commission"] == "Séance plénière · Affaires culturelles et éducation"
+    assert "sport" in avec_fond["commission_mots_cles"]
+    assert sans_fond["commission"] == "Séance plénière"
+    assert sans_fond["commission_mots_cles"] == []
+
+
 def test_liasses_ne_garde_que_les_etapes_avec_amendements(monkeypatch):
     _faux_request(monkeypatch, totaux={"AN1-COM": 341, "AN1-DEBATS": 329})
 
