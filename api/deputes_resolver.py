@@ -3,6 +3,14 @@ api/deputes_resolver.py — Résolveur local des députés et groupes politiques
 ==========================================================================================
 Permet la résolution O(1) locale des identifiants parlementaires (PA...) et groupes
 sans dépendre du réseau ni lever d'exception en cas d'inconnu.
+
+Deux référentiels :
+  • deputes_active.json     — députés en exercice (prioritaire) ;
+  • deputes_historique.json — tous les députés depuis 1997 (jeu officiel AMO30,
+    cf. scripts/construire_deputes_historique.py), en repli pour les cosignataires
+    ayant quitté l'Assemblée. Il ne sert qu'à la recherche par matricule et par
+    nom complet exact : la recherche approchée (nom de famille) reste limitée aux
+    députés en exercice, pour ne pas confondre des homonymes d'autres législatures.
 """
 
 from __future__ import annotations
@@ -18,6 +26,7 @@ logger = logging.getLogger("bourbon.deputes")
 
 CURRENT_DIR = Path(__file__).resolve().parent
 DATA_PATH = CURRENT_DIR / "data" / "deputes_active.json"
+DATA_PATH_HISTORIQUE = CURRENT_DIR / "data" / "deputes_historique.json"
 
 # ── Dictionnaire officiel des organes politiques (XVIIe Législature) ──
 MAPPING_ORGANES_XVII: dict[str, str] = {
@@ -42,6 +51,7 @@ MAPPING_ORGANES_XVII: dict[str, str] = {
 ORGANES_GROUPES_MAP = MAPPING_ORGANES_XVII
 
 _DEPUTES_DB: Optional[dict[str, dict[str, str]]] = None
+_DEPUTES_HISTORIQUE: Optional[dict[str, dict[str, Any]]] = None
 
 
 def _load_deputes_db() -> dict[str, dict[str, str]]:
@@ -65,10 +75,32 @@ def _load_deputes_db() -> dict[str, dict[str, str]]:
     return _DEPUTES_DB
 
 
-def get_depute_info(acteur_ref: str) -> Optional[dict[str, str]]:
-    """Retourne la fiche d'un député par son matricule PA... ou None."""
-    db = _load_deputes_db()
-    return db.get(acteur_ref)
+def _load_historique_db() -> dict[str, dict[str, Any]]:
+    """Charge le référentiel historique (députés depuis 1997), vide s'il est absent."""
+    global _DEPUTES_HISTORIQUE
+    if _DEPUTES_HISTORIQUE is not None:
+        return _DEPUTES_HISTORIQUE
+
+    _DEPUTES_HISTORIQUE = {}
+    try:
+        if DATA_PATH_HISTORIQUE.is_file():
+            with open(DATA_PATH_HISTORIQUE, "r", encoding="utf-8") as f:
+                _DEPUTES_HISTORIQUE = json.load(f)
+                logger.info(f"🏛️ Historique des députés chargé : {len(_DEPUTES_HISTORIQUE)} entrées.")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"⚠️ Erreur chargement deputes_historique.json ({exc}). Repli désactivé.")
+        _DEPUTES_HISTORIQUE = {}
+
+    return _DEPUTES_HISTORIQUE
+
+
+def get_depute_info(acteur_ref: str) -> Optional[dict[str, Any]]:
+    """Fiche d'un député par son matricule PA… (en exercice, sinon historique) ou None."""
+    return _load_deputes_db().get(acteur_ref) or _load_historique_db().get(acteur_ref)
+
+
+def _groupe_de(dep: dict[str, Any]) -> str:
+    return dep.get("groupe") or MAPPING_ORGANES_XVII.get(dep.get("organeRef", ""), "")
 
 
 def resolve_single_signataire(raw_signataire: Any) -> tuple[str, str, bool]:
@@ -90,10 +122,10 @@ def resolve_single_signataire(raw_signataire: Any) -> tuple[str, str, bool]:
         if "rapporteur" in qualite or "commission" in qualite:
             is_rapporteur = True
 
-        if acteur_ref and acteur_ref in db:
-            dep = db[acteur_ref]
+        dep = get_depute_info(acteur_ref) if acteur_ref else None
+        if dep:
             nom = dep.get("nom", acteur_ref)
-            groupe = groupe_natif or dep.get("groupe") or MAPPING_ORGANES_XVII.get(dep.get("organeRef", ""), "")
+            groupe = groupe_natif or _groupe_de(dep)
             return nom, groupe, is_rapporteur
         elif acteur_ref:
             nom = raw_signataire.get("nom") or acteur_ref
@@ -110,21 +142,19 @@ def resolve_single_signataire(raw_signataire: Any) -> tuple[str, str, bool]:
     if "rapporteur" in raw_str.lower() or "commission" in raw_str.lower():
         is_rapporteur = True
 
-    # Si c'est un identifiant exact PA...
-    if raw_str in db:
-        dep = db[raw_str]
-        nom = dep.get("nom", raw_str)
-        groupe = dep.get("groupe") or MAPPING_ORGANES_XVII.get(dep.get("organeRef", ""), "")
-        return nom, groupe, is_rapporteur
+    # Si c'est un identifiant exact PA... (en exercice, sinon historique)
+    dep = get_depute_info(raw_str)
+    if dep:
+        return dep.get("nom", raw_str), _groupe_de(dep), is_rapporteur
 
     clean_lower = raw_str.lower().strip()
 
-    # 1. Correspondance exacte du nom complet
-    for pa_id, dep in db.items():
-        dep_nom = dep.get("nom", "").lower().strip()
-        if dep_nom and dep_nom == clean_lower:
-            groupe = dep.get("groupe") or MAPPING_ORGANES_XVII.get(dep.get("organeRef", ""), "")
-            return raw_str, groupe, is_rapporteur
+    # 1. Correspondance exacte du nom complet (en exercice d'abord, puis historique)
+    for base in (db, _load_historique_db()):
+        for pa_id, dep in base.items():
+            dep_nom = dep.get("nom", "").lower().strip()
+            if dep_nom and dep_nom == clean_lower:
+                return raw_str, _groupe_de(dep), is_rapporteur
 
     # 2. Correspondance du nom complet comme mot délimité (\b)
     for pa_id, dep in db.items():

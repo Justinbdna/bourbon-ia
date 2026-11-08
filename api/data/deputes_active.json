@@ -2863,40 +2863,5 @@
     "nom": "Antoine Valentin",
     "groupe": "UDR",
     "organeRef": "PO872880"
-  },
-  "PA000001": {
-    "nom": "Député EPR 1",
-    "groupe": "EPR",
-    "organeRef": "PO845407"
-  },
-  "PA000002": {
-    "nom": "Député RN 2",
-    "groupe": "RN",
-    "organeRef": "PO845401"
-  },
-  "PA000003": {
-    "nom": "Député LFI 3",
-    "groupe": "LFI-NFP",
-    "organeRef": "PO845413"
-  },
-  "PA111111": {
-    "nom": "Alexandre Rapporteur",
-    "groupe": "EPR",
-    "organeRef": "PO845407"
-  },
-  "PA999001": {
-    "nom": "Député Isolé",
-    "groupe": "Dem",
-    "organeRef": "PO845454"
-  },
-  "PA1001": {
-    "nom": "Député Complexe 1",
-    "groupe": "SOC",
-    "organeRef": "PO845419"
-  },
-  "PA1002": {
-    "nom": "Député Complexe 2",
-    "groupe": "HOR",
-    "organeRef": "PO845470"
   }
 }
