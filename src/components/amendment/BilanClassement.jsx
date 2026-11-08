@@ -112,6 +112,15 @@ export default function BilanClassement({ bilan, categorieActive, onFiltrer }) {
           </button>
         )}
       </p>
+
+      <p className="mt-2 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 px-3 py-2 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+        ℹ️ <strong className="text-slate-800 dark:text-slate-200">Sans IA</strong> : l'amendement est classé selon les
+        mécanismes de filtrage appliqués aux informations fournies par l'Assemblée nationale (identiques signalés,
+        irrecevabilités, retraits, textes strictement identiques).{' '}
+        <strong className="text-slate-800 dark:text-slate-200">Avec IA</strong> : lorsque les données de l'Assemblée
+        nationale ne fournissent pas l'information — par exemple, savoir si deux amendements rédigés différemment portent
+        sur le même point —, l'IA intervient pour analyser et classer l'amendement.
+      </p>
     </section>
   )
 }
