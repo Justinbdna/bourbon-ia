@@ -4,10 +4,11 @@ import AmendmentTable from './components/AmendmentTable'
 import AmendmentDetail from './components/AmendmentDetail'
 import LawParticipants from './components/LawParticipants'
 import ClassifyButton from './components/ClassifyButton'
-import { classifyAmendmentsV2, normalizeAmendments } from './api/classify'
+import { classifyAmendmentsV2, normalizeAmendments, trierSansIA } from './api/classify'
 import ThemeToggle from './components/ThemeToggle'
 import AISettingsModal from './components/AISettingsModal'
 import ConsentModal from './components/ConsentModal'
+import DemoGuidee from './components/DemoGuidee'
 import { encrypt, decrypt } from './utils/crypto'
 
 const STORAGE_KEY = 'bourbon_session_amendments'
@@ -38,6 +39,10 @@ export default function App() {
   const [isReasoningMode, setIsReasoningMode] = useState(false)
   const [progressInfo, setProgressInfo] = useState(null)
   const [showCloudWarning, setShowCloudWarning] = useState(false)
+  const [demoActive, setDemoActive] = useState(false)
+  // Dernière liste connue, lue par les actions de la démo guidée (closures stables).
+  const amendmentsRef = useRef(amendments)
+  amendmentsRef.current = amendments
 
   // Consentement RGPD (sessionStorage = volatile)
   const [consentAsked, setConsentAsked] = useState(() => sessionStorage.getItem('bourbon_consent') !== null)
@@ -133,7 +138,8 @@ export default function App() {
   // ─── Séquence d'apparition RGPD (cooldown de 3s après l'entrée dans l'application) ───
   useEffect(() => {
     let timer = null
-    if (hasEntered && !consentAsked) {
+    // Pas pendant la démo guidée : la question est posée une fois la démo terminée.
+    if (hasEntered && !consentAsked && !demoActive) {
       timer = setTimeout(() => {
         setShowConsentModal(true)
       }, 3000)
@@ -141,7 +147,7 @@ export default function App() {
     return () => {
       if (timer) clearTimeout(timer)
     }
-  }, [hasEntered, consentAsked])
+  }, [hasEntered, consentAsked, demoActive])
 
   function handleConsentAccept() {
     sessionStorage.setItem('bourbon_consent', 'true')
@@ -209,7 +215,22 @@ export default function App() {
     // demande. Sans cela il alourdissait le bundle initial de tous les
     // visiteurs, y compris ceux qui importent leur propre fichier.
     const { default: sampleAmendments } = await import('./data/sampleAmendments.json')
-    handleImport(sampleAmendments, "Jeu de données d'exemple")
+    await handleImport(sampleAmendments, "Jeu de données d'exemple")
+  }
+
+  // ─── Démo guidée : actions exécutées par le bot (cf. DemoGuidee) ───
+  // Aucune n'appelle l'IA ni ne supprime de données.
+  const actionsDemo = {
+    chargerExemple: handleLoadSample,
+    async trierSansIA() {
+      setAmendments(await trierSansIA(amendmentsRef.current))
+    },
+  }
+
+  function lancerDemo() {
+    if (isClassifying) return
+    if (amendments.length > 0 && !window.confirm("La démo guidée remplace les amendements chargés par le jeu d'exemple. Continuer ?")) return
+    setDemoActive(true)
   }
 
   function handleStopClassify() {
@@ -405,6 +426,16 @@ export default function App() {
               )}
 
               <button
+                type="button"
+                onClick={lancerDemo}
+                disabled={isClassifying || demoActive}
+                className="bg-white dark:bg-neutral-800/50 hover:bg-neutral-100 dark:hover:bg-neutral-700/50 border border-neutral-200 dark:border-neutral-700/50 text-slate-700 dark:text-neutral-300 hover:text-slate-900 dark:hover:text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                title="Un bot présente l'outil étape par étape, puis vous rend la main."
+              >
+                ▶ Démo guidée
+              </button>
+
+              <button
                 onClick={() => setIsSettingsOpen(true)}
                 className="bg-white dark:bg-neutral-800/50 hover:bg-neutral-100 dark:hover:bg-neutral-700/50 border border-neutral-200 dark:border-neutral-700/50 text-slate-700 dark:text-neutral-300 hover:text-slate-900 dark:hover:text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 shrink-0"
                 title="Configure l'endpoint local (LM Studio) ou la clé API Cloud."
@@ -432,17 +463,19 @@ export default function App() {
           </div>
         )}
 
-        <ClassifyButton
-          disabled={amendments.length === 0}
-          loading={isClassifying}
-          error={classifyError}
-          warnings={warnings}
-          onClick={handleClassify}
-          onStop={handleStopClassify}
-          isReasoningMode={isReasoningMode}
-          onToggleReasoning={setIsReasoningMode}
-          progressInfo={progressInfo}
-        />
+        <div data-demo="classer">
+          <ClassifyButton
+            disabled={amendments.length === 0}
+            loading={isClassifying}
+            error={classifyError}
+            warnings={warnings}
+            onClick={handleClassify}
+            onStop={handleStopClassify}
+            isReasoningMode={isReasoningMode}
+            onToggleReasoning={setIsReasoningMode}
+            progressInfo={progressInfo}
+          />
+        </div>
 
         {/* ── État d'analyse en cours (V2) ── */}
         {isClassifying && (
@@ -558,6 +591,8 @@ export default function App() {
         onAccept={handleConsentAccept}
         onRefuse={handleConsentRefuse}
       />
+
+      {demoActive && <DemoGuidee actions={actionsDemo} onTerminer={() => setDemoActive(false)} />}
     </div>
     )
   }
@@ -573,6 +608,15 @@ export default function App() {
       >
         Entrer dans Bourbon.IA
       </button>
+
+      <button
+        type="button"
+        onClick={() => { setHasEntered(true); lancerDemo() }}
+        className="mt-5 px-6 py-2.5 border border-white/30 text-plume text-sm font-semibold rounded-lg hover:bg-white/10 transition-colors"
+      >
+        ▶ Voir la démo guidée
+      </button>
+      <p className="mt-2 text-xs text-slate-400">Un bot vous présente l'outil en deux minutes, puis vous rend la main.</p>
 
       <div className="absolute bottom-4 left-0 right-0 text-center text-xs text-slate-500 px-6 max-w-2xl mx-auto">
         <p>

@@ -91,6 +91,25 @@ export async function resumerAmendement(amendement, aiSettings = {}, options = {
   return (await response.json()).resume
 }
 
+/**
+ * Tri déterministe seul (règles de l'Assemblée, sans IA ni envoi vers le cloud) :
+ * identiques, doublons, irrecevables, isolés. Les cas ambigus restent « en attente d'IA ».
+ */
+export async function trierSansIA(amendements, options = {}) {
+  const { signal, payload = { amendements } } = options
+  const response = await fetch(`${API_BASE_URL}/api/v2/mecanique`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+    signal,
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Erreur inconnue')
+    throw new ClassifyError(`Pipeline V2 Mécanique : ${errorText}`, response.status)
+  }
+  return await response.json()
+}
+
 // ─── Import direct d'un dossier législatif (données ouvertes de l'AN) ───
 async function getImportDossier(chemin, params = {}, options = {}) {
   const query = new URLSearchParams(params).toString()
@@ -148,19 +167,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
   }
 
   // 1. Tri mécanique immédiat (sans LLM)
-  const resMec = await fetch(`${API_BASE_URL}/api/v2/mecanique`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-    signal,
-    body: JSON.stringify(payload),
-  })
-
-  if (!resMec.ok) {
-    const errorText = await resMec.text().catch(() => 'Erreur inconnue')
-    throw new ClassifyError(`Pipeline V2 Mécanique : ${errorText}`, resMec.status)
-  }
-
-  const mecaniques = await resMec.json()
+  const mecaniques = await trierSansIA(amendements, { signal, payload })
   // Met à jour l'UI instantanément avec le tri mécanique
   onMechanical(mecaniques)
 

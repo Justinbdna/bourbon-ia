@@ -19,8 +19,11 @@ const STYLES = {
 export default function ImpactBadge({ type }) {
   if (!type) return <span className="text-ink-500 text-xs">—</span>
 
-  const label = LABELS[type] || type
-  const style = STYLES[type] || 'bg-ink-100 text-ink-700 ring-ink-300'
+  // Le moteur renvoie les codes en majuscules (« POINT_RESTREINT ») ; avant le
+  // tri, la colonne porte la désignation de l'article, affichée telle quelle.
+  const cle = String(type).toLowerCase().replace(/^redaction_alinea$/, 'redaction_globale_alinea')
+  const label = LABELS[cle] || type
+  const style = STYLES[cle] || 'bg-ink-100 text-ink-700 ring-ink-300'
 
   return (
     <span

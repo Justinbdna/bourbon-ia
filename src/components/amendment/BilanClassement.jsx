@@ -69,6 +69,7 @@ export default function BilanClassement({ bilan, categorieActive, onFiltrer }) {
 
   return (
     <section
+      data-demo="bilan"
       aria-label="Bilan du classement"
       className="border-b border-ink-200 dark:border-ink-700 bg-white dark:bg-surface px-4 py-3"
     >

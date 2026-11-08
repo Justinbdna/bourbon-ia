@@ -101,6 +101,7 @@ export default function ImportPanel({ onImport }) {
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <button
             type="button"
+            data-demo="btn-assemblee"
             aria-expanded={dossierOpen}
             onClick={() => { setDossierOpen((v) => !v); setPasteOpen(false) }}
             className="w-full sm:w-auto rounded-md bg-[#D91227] text-white hover:bg-[#b80f21] px-4 py-2 text-xs sm:text-sm font-medium transition-colors text-center"
@@ -109,6 +110,7 @@ export default function ImportPanel({ onImport }) {
           </button>
           <button
             type="button"
+            data-demo="btn-json"
             onClick={() => fileInputRef.current?.click()}
             className="w-full sm:w-auto rounded-md bg-slate-900 text-white hover:bg-black dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white px-4 py-2 text-xs sm:text-sm font-medium transition-colors text-center"
           >
@@ -124,6 +126,7 @@ export default function ImportPanel({ onImport }) {
           />
           <button
             type="button"
+            data-demo="btn-coller"
             onClick={() => { setPasteOpen((v) => !v); setDossierOpen(false) }}
             className="w-full sm:w-auto rounded-md border border-neutral-300 px-4 py-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 dark:hover:border-neutral-600 transition-colors text-center"
           >

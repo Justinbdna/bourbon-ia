@@ -189,19 +189,19 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
         nbResultats={filtres.length}
         nbTotal={amendments.length}
       />
-      <div className="overflow-x-auto scroll-thin">
+      <div data-demo="tableau" className="overflow-x-auto scroll-thin">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-100 dark:bg-[#1A1B22] border-b border-gray-200 dark:border-gray-800">
             <tr>
-              <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20 min-w-20 max-w-20 sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-0">Art.</th>
-              <th className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20 min-w-20 max-w-20 sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-20">N°</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[220px] min-w-[220px] max-w-[220px] sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-40 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">Auteur(s)</th>
-              <th className="px-3 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-36 min-w-36">Groupe</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-44 min-w-44">Point d'impact</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[320px] min-w-[320px] max-w-[320px]">Commission / Thèmes</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-full min-w-[280px]">Extrait du dispositif</th>
-              <th className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider whitespace-nowrap">Statut</th>
-              <th className="px-4 py-4 text-right text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider whitespace-nowrap">Actions</th>
+              <th data-demo="col-art-num" className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20 min-w-20 max-w-20 sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-0">Art.</th>
+              <th data-demo="col-art-num" className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20 min-w-20 max-w-20 sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-20">N°</th>
+              <th data-demo="col-auteur-groupe" className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[220px] min-w-[220px] max-w-[220px] sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-40 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">Auteur(s)</th>
+              <th data-demo="col-auteur-groupe" className="px-3 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-36 min-w-36">Groupe</th>
+              <th data-demo="col-impact" className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-44 min-w-44">Point d'impact</th>
+              <th data-demo="col-commission" className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[320px] min-w-[320px] max-w-[320px]">Commission / Thèmes</th>
+              <th data-demo="col-extrait" className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-full min-w-[280px]">Extrait du dispositif</th>
+              <th data-demo="col-statut" className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider whitespace-nowrap">Statut</th>
+              <th data-demo="col-actions" className="px-4 py-4 text-right text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-[#0B0C10] divide-y divide-gray-200 dark:divide-gray-800">
