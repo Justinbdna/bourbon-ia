@@ -4,6 +4,8 @@ import GroupeBadge from './GroupeBadge'
 import CommissionKeywords from './amendment/CommissionKeywords'
 import PoliticalGroupTag from './amendment/PoliticalGroupTag'
 import AmendmentSearchBar from './amendment/AmendmentSearchBar'
+import BilanClassement from './amendment/BilanClassement'
+import { calculerBilan, categorieAmendement, estDoublon, estEcarte } from '../utils/bilan'
 import { downloadRtf } from '../utils/exportRtf'
 import { stripHtmlForDisplay } from '../utils/sanitize'
 
@@ -54,15 +56,12 @@ function auteursEnListe(a) {
   return a.auteurs ? [String(a.auteurs)] : []
 }
 
-// Doublon = même texte, même auteur, même commission (moteur déterministe).
-function estDoublon(a) {
-  return a.statut_mecanique === 'DOUBLON_MECANIQUE' || a.resultat_ia?.statut === 'Doublon'
-}
-
 export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, onExportJson }) {
   const [currentPage, setCurrentPage] = useState(0)
   const [filtre, setFiltre] = useState({ motCle: '', auteur: '' })
   const [masquerEcartes, setMasquerEcartes] = useState(false)
+  // Catégorie choisie dans le bandeau de bilan ('' = toutes).
+  const [categorieFiltre, setCategorieFiltre] = useState('')
 
   // Options de la recherche : mots-clés (avec effectif) et auteurs distincts.
   const optionsRecherche = useMemo(() => {
@@ -85,49 +84,29 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
     return amendments
       .map((a, idx) => ({ a, idx }))
       .filter(({ a }) => {
-        if (masquerEcartes) {
-          const statutLower = String(a.statut || a.resultat_ia?.statut || a.statut_mecanique || '').toLowerCase()
-          const sortLower = String(a.sort || a.raw_dict?.sort || '').toLowerCase()
-          const justifLower = String(a.justification_mecanique || '').toLowerCase()
-          const isEcarte = (
-            statutLower.includes('irrecevable') ||
-            statutLower.includes('retiré') ||
-            statutLower.includes('retire') ||
-            statutLower.includes('doublon') ||
-            justifLower.includes('irrecevable') ||
-            justifLower.includes('doublon') ||
-            justifLower.includes('retiré') ||
-            justifLower.includes('retire') ||
-            sortLower.includes('retiré') ||
-            sortLower.includes('retire') ||
-            a.statut_mecanique === 'DOUBLON_MECANIQUE'
-          )
-          if (isEcarte) return false
-        }
+        if (masquerEcartes && (estDoublon(a) || estEcarte(a))) return false
+        if (categorieFiltre && categorieAmendement(a) !== categorieFiltre) return false
         if (filtre.motCle && !(a.commission_mots_cles || []).includes(filtre.motCle)) return false
         if (auteurCherche && !normaliser(auteursEnListe(a).join(', ')).includes(auteurCherche)) return false
         return true
       })
-  }, [amendments, filtre, masquerEcartes])
+  }, [amendments, filtre, masquerEcartes, categorieFiltre])
 
   function handleRechercher(nouveauFiltre) {
     setFiltre(nouveauFiltre)
     setCurrentPage(0)
   }
 
-  // Compteurs calculés avec un seul reduce (déplacé AVANT le return conditionnel pour éviter l'erreur #310)
-  const counts = useMemo(() => {
-    return amendments.reduce((acc, a) => {
-      if (!a.resultat_ia) return acc
-      acc.total++
-      const s = a.resultat_ia.statut
-      if (s === 'Incompatible' || s === 'Discussion commune') acc.dc++
-      else if (s === 'Identique' || s === 'Identiques') acc.id++
-      else if (s === 'Doublon') acc.doublon++
-      else if (s === 'Nouveau' || s === 'Isolé') acc.isole++
-      return acc
-    }, { total: 0, dc: 0, id: 0, doublon: 0, isole: 0 })
-  }, [amendments])
+  // Les écartés et doublons seraient invisibles avec « Masquer les écartés » :
+  // filtrer sur ces catégories réaffiche donc les écartés.
+  function handleFiltrerCategorie(categorie) {
+    setCategorieFiltre(categorie)
+    if (categorie === 'ecarte' || categorie === 'doublon') setMasquerEcartes(false)
+    setCurrentPage(0)
+  }
+
+  // Calculé AVANT le return conditionnel (règle des hooks, erreur React #310).
+  const bilan = useMemo(() => calculerBilan(amendments), [amendments])
 
   if (amendments.length === 0) {
     return (
@@ -169,15 +148,9 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
   return (
     <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 overflow-hidden">
       <div className="bg-slate-100/80 dark:bg-slate-900/50 border-b border-ink-200 dark:border-ink-700 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
-        {counts.total > 0 ? (
-          <p className="text-sm font-medium text-slate-900 dark:text-plume">
-            {counts.total} amendements classés ({counts.dc} en discussion commune, {counts.id} identiques, {counts.doublon} doublon{counts.doublon > 1 ? 's' : ''}, {counts.isole} isolés).
-          </p>
-        ) : (
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            {amendments.length} amendements chargés
-          </p>
-        )}
+        <p className="text-sm font-medium text-slate-900 dark:text-plume">
+          {bilan.classes > 0 ? `${bilan.classes} amendements classés` : `${amendments.length} amendements chargés`}
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           {idsDoublons.length > 0 && onDeleteDoublons && (
             <button
@@ -191,7 +164,11 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
           )}
           <button
             type="button"
-            onClick={() => { setMasquerEcartes(v => !v); setCurrentPage(0); }}
+            onClick={() => {
+              if (!masquerEcartes && (categorieFiltre === 'ecarte' || categorieFiltre === 'doublon')) setCategorieFiltre('')
+              setMasquerEcartes(v => !v)
+              setCurrentPage(0)
+            }}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${
               masquerEcartes
                 ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-700 shadow-sm'
@@ -203,6 +180,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
           </button>
         </div>
       </div>
+      <BilanClassement bilan={bilan} categorieActive={categorieFiltre} onFiltrer={handleFiltrerCategorie} />
       <AmendmentSearchBar
         motsCles={optionsRecherche.motsCles}
         auteurs={optionsRecherche.auteurs}

@@ -28,8 +28,10 @@ function fournisseurIAParDefaut() {
 export default function App() {
   const [hasEntered, setHasEntered] = useState(false)
   const [amendments, setAmendments] = useState([])
+  const [sourceLabel, setSourceLabel] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
   const [isClassifying, setIsClassifying] = useState(false)
+  const [currentAnalyzing, setCurrentAnalyzing] = useState(null)
   const [classifyError, setClassifyError] = useState(null)
   const [warnings, setWarnings] = useState([])
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -447,7 +449,10 @@ export default function App() {
           <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3 animate-pulse">
             <span className="text-lg">🧠</span>
             <p className="text-sm text-blue-800 dark:text-blue-300 font-medium">
-              Analyse IA en cours...
+              Analyse IA en cours{sourceLabel ? ` (${sourceLabel})` : ''}
+              {currentAnalyzing && currentAnalyzing.total > 0
+                ? ` — ${currentAnalyzing.index}/${currentAnalyzing.total} (${currentAnalyzing.numero})`
+                : '...'}
             </p>
           </div>
         )}

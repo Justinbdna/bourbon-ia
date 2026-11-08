@@ -1570,6 +1570,49 @@
   "triAmendement": "aiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaae"
  },
  {
+  "uid": "AMANR5L17PO419604B1641P0D1N000181",
+  "identification": {
+   "numeroLong": "AC181"
+  },
+  "pointeurFragmentTexte": {
+   "division": {
+    "titre": "Article 3",
+    "articleDesignationCourte": "ART. 3",
+    "articleDesignation": "ARTICLE 3",
+    "type": "ARTICLE",
+    "avantAApres": "A",
+    "articleAdditionnel": "false",
+    "chapitreAdditionnel": "false",
+    "urlDivisionTexteVise": "/17/textes/1641.asp#D_Article_3"
+   },
+   "alinea": {
+    "numero": "3",
+    "alineaDesignation": "Alinéa 3"
+   }
+  },
+  "signataires": {
+   "auteur": {
+    "typeAuteur": "Rapporteur",
+    "acteurRef": "PA841367",
+    "groupePolitiqueRef": "PO845419"
+   },
+   "cosignatairesRefs": [
+    "PA795278",
+    "PA720190"
+   ],
+   "libelle": "M. Proen&#231;a, rapporteur, Mme Bellamy, rapporteure et M. Sorre, rapporteur"
+  },
+  "corps": {
+   "contenuAuteur": {
+    "dispositif": "<p style=\"text-align: justify;\">&#x00C0;&nbsp;l&#x2019;alin&#x00E9;a&nbsp;3, supprimer les mots&nbsp;:</p><p style=\"text-align: justify;\">&#x00AB;&nbsp;,&nbsp;notamment en mati&#x00E8;re de densit&#x00E9;, de surface et de hauteur,&nbsp;&#x00BB;.</p>",
+    "exposeSommaire": "<p style=\"text-align: justify;\">R&#x00E9;dactionnel&nbsp;</p><p style=\"text-align: justify;\">Redondant avec le renvoi &#x00E0; l&#x2019;article&nbsp;L.&nbsp;581&#x2011;9 du code de l'environnement.</p>"
+   }
+  },
+  "texteLegislatifRef": "PRJLANR5L17B1641",
+  "discussionIdentique": null,
+  "triAmendement": "aiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaae"
+ },
+ {
   "uid": "AMANR5L17PO419604B1641P0D1N000019",
   "identification": {
    "numeroLong": "AC19"
@@ -3478,6 +3521,45 @@
   "uid": "AMANR5L17PO419865B1641P0D1N000060",
   "identification": {
    "numeroLong": "CD60"
+  },
+  "pointeurFragmentTexte": {
+   "division": {
+    "titre": "Article 3 bis",
+    "articleDesignationCourte": "ART. 3 BIS",
+    "articleDesignation": "ARTICLE 3 BIS",
+    "type": "ARTICLE",
+    "avantAApres": "A",
+    "articleAdditionnel": "false",
+    "chapitreAdditionnel": "false",
+    "urlDivisionTexteVise": "/17/textes/1641.asp#D_Article_3_bis"
+   },
+   "alinea": {
+    "numero": "1",
+    "alineaDesignation": "Alinéa 1"
+   }
+  },
+  "signataires": {
+   "auteur": {
+    "typeAuteur": "Rapporteur",
+    "acteurRef": "PA718674",
+    "groupePolitiqueRef": "PO845407"
+   },
+   "libelle": "Mme Givernet, rapporteure"
+  },
+  "corps": {
+   "contenuAuteur": {
+    "dispositif": "<p style=\"text-align: justify;\">&#x00C0; l&#x2019;alin&#x00E9;a 1, substituer aux mots&nbsp;:</p><p style=\"text-align: justify;\">&#x00AB;&nbsp;incluant notamment une estimation du bilan carbone, mais &#x00E9;galement des impacts&nbsp;&#x00BB;</p><p style=\"text-align: justify;\">les mots&nbsp;:</p><p style=\"text-align: justify;\">&#x00AB;&nbsp;notamment de leur bilan carbone et de leurs cons&#x00E9;quences&nbsp;&#x00BB;.</p>",
+    "exposeSommaire": "<p style=\"text-align: justify;\">Amendement r&#x00E9;dactionnel.</p>"
+   }
+  },
+  "texteLegislatifRef": "PRJLANR5L17B1641",
+  "discussionIdentique": null,
+  "triAmendement": "alaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaah"
+ },
+ {
+  "uid": "AMANR5L17PO419865B1641P0D1N000076",
+  "identification": {
+   "numeroLong": "CD76"
   },
   "pointeurFragmentTexte": {
    "division": {
@@ -9322,6 +9404,55 @@
   "uid": "AMANR5L17PO419610B1641P0D1N000014",
   "identification": {
    "numeroLong": "CE14"
+  },
+  "pointeurFragmentTexte": {
+   "division": {
+    "titre": "Article 13",
+    "articleDesignationCourte": "ART. 13",
+    "articleDesignation": "ARTICLE 13",
+    "type": "ARTICLE",
+    "avantAApres": "A",
+    "articleAdditionnel": "false",
+    "chapitreAdditionnel": "false",
+    "urlDivisionTexteVise": "/17/textes/1641.asp#D_Article_13"
+   },
+   "alinea": {
+    "numero": "2",
+    "alineaDesignation": "Alinéa 2"
+   }
+  },
+  "signataires": {
+   "auteur": {
+    "typeAuteur": "Député",
+    "acteurRef": "PA840673",
+    "groupePolitiqueRef": "PO845419"
+   },
+   "cosignatairesRefs": [
+    "PA342415",
+    "PA841315",
+    "PA794854",
+    "PA840765",
+    "PA643157",
+    "PA607553",
+    "PA793816"
+   ],
+   "suffixe": "et les membres du groupe Socialistes et apparentés",
+   "libelle": "Mme Rossi, Mme Battistel, M. Benbrahim, M. Echaniz, M. Lhardit, M. Naillet, M. Potier, Mme Thomin et les membres du groupe Socialistes et apparent&#233;s"
+  },
+  "corps": {
+   "contenuAuteur": {
+    "dispositif": "<p style=\"text-align: justify;\">&#x00C0;&nbsp;l&#x2019;alin&#x00E9;a&nbsp;2, remplacer le nombre&nbsp;:</p><p style=\"text-align: justify;\">&#x00AB;&nbsp;trente-six&nbsp;&#x00BB;,</p><p style=\"text-align: justify;\">par le nombre&nbsp;:</p><p style=\"text-align: justify;\">&#x00AB;&nbsp;vingt-quatre&nbsp;&#x00BB;.</p>",
+    "exposeSommaire": "<p style=\"text-align: justify;\">Le pr&#x00E9;sent amendement des d&#x00E9;put&#x00E9;s Socialistes et apparent&#x00E9;s vise &#x00E0; ramener la dur&#x00E9;e maximale d&#x2019;implantation&nbsp;des constructions, installations et am&#x00E9;nagements temporaires utilis&#x00E9;s pour les jeux Olympiques et Paralympiques de 2030 de 36 mois &#x00E0; 24 mois.</p><p style=\"text-align: justify;\">Le code de l&#x2019;urbanisme pr&#x00E9;voit que la dur&#x00E9;e maximale d&#x2019;implantation de droit commun des&nbsp;constructions &#x00E0; caract&#x00E8;re temporaire est de trois mois. Cette dur&#x00E9;e peut-&#x00EA;tre sup&#x00E9;rieure pour les constructions n&#x00E9;cessaires au relogement ou &#x00E0; l&#x2019;h&#x00E9;bergement d&#x2019;urgence ou &#x00E0; l&#x2019;accueil de classes temporaires pendant des travaux, pouvant aller jusqu&#x2019;&#x00E0; deux ans.</p><p style=\"text-align: justify;\">Dans le projet de loi initial, une dur&#x00E9;e d&#x00E9;rogatoire de 18 mois avait &#x00E9;t&#x00E9; pr&#x00E9;vue afin de tenir compte des contraintes et caract&#x00E9;ristiques propres &#x00E0; ces territoires.&nbsp;</p><p style=\"text-align: justify;\">Le S&#x00E9;nat a souhait&#x00E9; &#x00E9"
+   }
+  },
+  "texteLegislatifRef": "PRJLANR5L17B1641",
+  "discussionIdentique": null,
+  "triAmendement": "dfaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaae"
+ },
+ {
+  "uid": "AMANR5L17PO419610B1641P0D1N000029",
+  "identification": {
+   "numeroLong": "CE29"
   },
   "pointeurFragmentTexte": {
    "division": {
