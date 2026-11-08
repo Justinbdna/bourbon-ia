@@ -15,9 +15,66 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * Les zones ciblées portent un attribut `data-demo="…"` ; plusieurs éléments
  * peuvent porter le même nom (ex. deux en-têtes de colonne), le cadre les
  * englobe alors tous.
+ *
+ * Voix : chaque étape est lue à voix haute par la synthèse vocale du
+ * navigateur (Web Speech API, voix française, de préférence installée sur le
+ * poste). Le rythme suit alors la lecture : on passe à l'étape suivante peu
+ * après la fin de la phrase. Coupable à tout moment (choix mémorisé) ; sans
+ * synthèse vocale, la démo garde ses durées fixes.
  */
 
 const DUREE_PAR_DEFAUT = 8000
+const PAUSE_APRES_LECTURE = 1200
+const CLE_VOIX = 'bourbon_demo_voix'
+
+const synthese = typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis : null
+
+// Texte adapté à la lecture : sans emoji ni guillemets, symboles prononçables.
+function pourLaVoix(texte) {
+  return texte
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
+    .replace(/️/g, '')
+    .replace(/[«»"]/g, '')
+    .replace(/\bN°/g, 'numéro')
+    .replace(/ = /g, ' : ')
+    .replace(/→/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// Lecture phrase par phrase : certains navigateurs coupent les énoncés longs.
+function phrases(texte) {
+  return texte.split(/(?<=[.!?…:;])\s+/).filter(Boolean)
+}
+
+// Voix masculines françaises connues, par ordre de préférence (l'API ne donne
+// pas le genre d'une voix) : macOS (Thomas, Jacques), Edge / Windows (Henri,
+// Rémy, Paul…), Android (fr-fr-x-frd / frb), puis voix canadiennes.
+const VOIX_MASCULINES = [
+  /\bthomas\b/i, /\bhenri\b/i, /\br[ée]my\b/i, /\bpaul\b/i, /\bjacques\b/i, /\bnicolas\b/i,
+  /\balain\b/i, /\bclaude\b/i, /\bj[ée]r[ôo]me\b/i, /\byves\b/i, /\bantoine\b/i, /\bfabrice\b/i,
+  /x-fr[bd]/i, /\beddy\b/i, /\breed\b/i, /\brocko\b/i, /\bmale\b/i,
+]
+
+/** Meilleure voix française masculine disponible ; `masculine` faux = repli. */
+function choisirVoix(voix) {
+  const francaises = voix.filter((v) => /^fr\b|^fr[-_]/i.test(v.lang || ''))
+  const rang = (v) => (/fr[-_]fr/i.test(v.lang) ? 0 : 1) + (v.localService ? 0 : 0.5)
+  for (const motif of VOIX_MASCULINES) {
+    const trouvees = francaises.filter((v) => motif.test(v.name)).sort((a, b) => rang(a) - rang(b))
+    if (trouvees.length) return { voix: trouvees[0], masculine: true }
+  }
+  const repli = [...francaises].sort((a, b) => rang(a) - rang(b))[0] || null
+  return { voix: repli, masculine: false }
+}
+
+function voixMemorisee() {
+  try {
+    return localStorage.getItem(CLE_VOIX) !== 'off'
+  } catch {
+    return true
+  }
+}
 
 const ETAPES = [
   {
@@ -146,6 +203,62 @@ export default function DemoGuidee({ actions, onTerminer }) {
   const etape = ETAPES[index]
   const derniere = index === ETAPES.length - 1
 
+  // ── Voix ──
+  const [voixActive, setVoixActive] = useState(voixMemorisee)
+  const [choixVoix, setChoixVoix] = useState({ voix: null, masculine: false })
+  const [lectureFinie, setLectureFinie] = useState(false)
+  const lectureVocale = Boolean(synthese) && voixActive
+
+  // Les voix se chargent de façon asynchrone dans certains navigateurs.
+  useEffect(() => {
+    if (!synthese) return
+    const charger = () => setChoixVoix(choisirVoix(synthese.getVoices()))
+    charger()
+    synthese.addEventListener('voiceschanged', charger)
+    return () => synthese.removeEventListener('voiceschanged', charger)
+  }, [])
+
+  // Lecture de l'étape ; la pause coupe la voix, la reprise relit l'étape.
+  useEffect(() => {
+    setLectureFinie(false)
+    if (!lectureVocale || enPause) return
+    let annule = false
+    const finir = () => { if (!annule) setLectureFinie(true) }
+    const texte = pourLaVoix(`${etape.titre}. ${etape.texte}`)
+    synthese.cancel()
+    phrases(texte).forEach((phrase, i, toutes) => {
+      const enonce = new SpeechSynthesisUtterance(phrase)
+      enonce.lang = 'fr-FR'
+      if (choixVoix.voix) enonce.voice = choixVoix.voix
+      // Sans voix masculine installée, une voix plus grave en repli.
+      enonce.pitch = choixVoix.masculine ? 1 : 0.8
+      enonce.rate = 1.02
+      if (i === toutes.length - 1) {
+        enonce.onend = finir
+        enonce.onerror = finir
+      }
+      synthese.speak(enonce)
+    })
+    // Filet de sécurité si le navigateur ne signale jamais la fin de lecture.
+    const secours = setTimeout(finir, 2000 + texte.length * 90)
+    return () => {
+      annule = true
+      clearTimeout(secours)
+      synthese.cancel()
+    }
+  }, [etape, lectureVocale, enPause, choixVoix])
+
+  function basculerVoix() {
+    setVoixActive((actif) => {
+      try {
+        localStorage.setItem(CLE_VOIX, actif ? 'off' : 'on')
+      } catch {
+        // stockage indisponible : le choix vaut pour cette démo seulement
+      }
+      return !actif
+    })
+  }
+
   // Action de l'étape, exécutée une seule fois (revenir en arrière ne la rejoue pas).
   useEffect(() => {
     const nom = etape.action
@@ -188,13 +301,18 @@ export default function DemoGuidee({ actions, onTerminer }) {
     else setIndex((i) => i + 1)
   }, [enCours, derniere, onTerminer])
 
-  // Lecture automatique (suspendue en pause et pendant une action).
+  // Lecture automatique (suspendue en pause et pendant une action). Avec la
+  // voix, on avance peu après la fin de la lecture ; sinon, après `duree`.
   useEffect(() => {
     const duree = etape.duree ?? DUREE_PAR_DEFAUT
     if (enPause || enCours || !duree) return
-    const minuteur = setTimeout(suivante, duree)
+    if (lectureVocale && !lectureFinie) return
+    const minuteur = setTimeout(suivante, lectureVocale ? PAUSE_APRES_LECTURE : duree)
     return () => clearTimeout(minuteur)
-  }, [etape, enPause, enCours, suivante])
+  }, [etape, enPause, enCours, suivante, lectureVocale, lectureFinie])
+
+  // La voix s'arrête avec la démo.
+  useEffect(() => () => synthese?.cancel(), [])
 
   // Clavier : Échap quitte, flèches naviguent, espace met en pause.
   useEffect(() => {
@@ -239,14 +357,27 @@ export default function DemoGuidee({ actions, onTerminer }) {
           <p className="text-xs font-semibold uppercase tracking-wide text-[#D91227]">
             🤖 Démo guidée · étape {index + 1} / {ETAPES.length}
           </p>
-          <button
-            type="button"
-            onClick={onTerminer}
-            aria-label="Quitter la démo"
-            className="text-slate-400 hover:text-slate-700 dark:hover:text-white text-lg leading-none"
-          >
-            ×
-          </button>
+          <div className="flex items-center gap-2">
+            {synthese && (
+              <button
+                type="button"
+                onClick={basculerVoix}
+                aria-pressed={voixActive}
+                title={voixActive ? 'Couper la voix' : 'Activer la voix'}
+                className="rounded-md border border-slate-300 dark:border-slate-600 px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                {voixActive ? '🔊 Voix' : '🔇 Voix coupée'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onTerminer}
+              aria-label="Quitter la démo"
+              className="text-slate-400 hover:text-slate-700 dark:hover:text-white text-lg leading-none"
+            >
+              ×
+            </button>
+          </div>
         </div>
         <h2 className="mt-1 text-base sm:text-lg font-bold text-slate-900 dark:text-white">{etape.titre}</h2>
         <p className="mt-1.5 text-sm leading-relaxed text-slate-700 dark:text-slate-300">{etape.texte}</p>
