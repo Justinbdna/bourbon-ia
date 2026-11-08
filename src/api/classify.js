@@ -91,6 +91,41 @@ export async function resumerAmendement(amendement, aiSettings = {}, options = {
   return (await response.json()).resume
 }
 
+// ─── Import direct d'un dossier législatif (données ouvertes de l'AN) ───
+async function getImportDossier(chemin, params = {}, options = {}) {
+  const query = new URLSearchParams(params).toString()
+  const response = await fetch(`${API_BASE_URL}${chemin}${query ? `?${query}` : ''}`, {
+    headers: { 'ngrok-skip-browser-warning': 'true' },
+    signal: options.signal,
+  })
+  if (!response.ok) {
+    let detail = `Erreur ${response.status}`
+    try {
+      const corps = await response.json()
+      detail = corps.error || corps.detail || detail
+    } catch {
+      // réponse non JSON : on garde le code HTTP
+    }
+    throw new ClassifyError(detail, response.status)
+  }
+  return await response.json()
+}
+
+/** Dossiers législatifs (XVIIe législature) dont le titre contient `recherche`. */
+export async function rechercherDossiers(recherche, options = {}) {
+  return (await getImportDossier('/api/v2/dossiers', { recherche }, options)).dossiers
+}
+
+/** Étapes de lecture du dossier ayant des amendements à l'Assemblée : [{ etape, libelle, nb }]. */
+export async function listerLiasses(dossierUid, options = {}) {
+  return (await getImportDossier(`/api/v2/dossiers/${encodeURIComponent(dossierUid)}/liasses`, {}, options)).liasses
+}
+
+/** Amendements d'une liasse, au format brut de l'AN : { amendements, total, tronque }. */
+export async function chargerLiasse(dossierUid, etape, options = {}) {
+  return await getImportDossier(`/api/v2/dossiers/${encodeURIComponent(dossierUid)}/amendements`, { etape }, options)
+}
+
 /**
  * Pipeline V2 — Orchestrateur frontend pour le backend FastAPI V2
  * (Tri déterministe → Cache SQLite → LLM Sémantique → Data Mapper)

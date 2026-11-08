@@ -38,7 +38,9 @@ try:
     from api.textes_resolver import extract_texte_ref, get_textes_reference, match_article_reference
     from api.commissions_resolver import resoudre_commission_et_mots_cles
     from api.participants_resolver import fetch_participants, resumer_par_groupe, resolve_dossier_ref
+    from api import import_dossier
 except ModuleNotFoundError:
+    import import_dossier
     from deterministic_engine import (
         process_deterministic_sorting,
         normalize_text,
@@ -411,6 +413,44 @@ def participants_endpoint(
         "participants": participants,
         "par_groupe": resumer_par_groupe(participants),
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# IMPORT DIRECT — amendements d'un dossier législatif (api/import_dossier.py)
+# ══════════════════════════════════════════════════════════════════════════
+def _import_indisponible(exc: Exception) -> JSONResponse:
+    return JSONResponse(status_code=503, content={"error": str(exc)})
+
+
+@app.get("/api/v2/dossiers")
+def dossiers_endpoint(recherche: str = ""):
+    """Recherche de dossiers législatifs (XVIIe législature) par mots du titre."""
+    try:
+        return {"dossiers": import_dossier.rechercher_dossiers(recherche[:200])}
+    except import_dossier.ImportIndisponible as exc:
+        return _import_indisponible(exc)
+
+
+@app.get("/api/v2/dossiers/{dossier_uid}/liasses")
+def liasses_endpoint(dossier_uid: str):
+    """Étapes de lecture du dossier ayant des amendements à l'Assemblée."""
+    if not import_dossier.dossier_uid_valide(dossier_uid):
+        raise HTTPException(status_code=400, detail="Identifiant de dossier invalide.")
+    try:
+        return {"liasses": import_dossier.lister_liasses(dossier_uid)}
+    except import_dossier.ImportIndisponible as exc:
+        return _import_indisponible(exc)
+
+
+@app.get("/api/v2/dossiers/{dossier_uid}/amendements")
+def amendements_dossier_endpoint(dossier_uid: str, etape: str):
+    """Amendements d'une liasse, au format brut de l'Assemblée (à normaliser comme un import JSON)."""
+    if not import_dossier.dossier_uid_valide(dossier_uid) or etape not in import_dossier.ETAPES_AN:
+        raise HTTPException(status_code=400, detail="Dossier ou étape invalide.")
+    try:
+        return import_dossier.amendements_de_liasse(dossier_uid, etape)
+    except import_dossier.ImportIndisponible as exc:
+        return _import_indisponible(exc)
 
 
 @app.get("/api/health")

@@ -1,15 +1,17 @@
 import { useRef, useState } from 'react'
+import ImportDossierAN from './ImportDossierAN'
 
 /**
  * Permet au personnel de l'Assemblée de récupérer les amendements
- * à traiter : soit en important un fichier JSON, soit en collant
- * un tableau JSON directement. L'import PDF sera branché plus tard
- * (traitement prévu côté backend).
+ * à traiter : directement depuis un dossier législatif de l'Assemblée,
+ * en important un fichier JSON, ou en collant un tableau JSON.
+ * L'import PDF sera branché plus tard (traitement prévu côté backend).
  */
 export default function ImportPanel({ onImport }) {
   const fileInputRef = useRef(null)
   const [error, setError] = useState(null)
   const [pasteOpen, setPasteOpen] = useState(false)
+  const [dossierOpen, setDossierOpen] = useState(false)
   const [pasteValue, setPasteValue] = useState('')
 
   function handleParsed(json, sourceLabel) {
@@ -92,11 +94,19 @@ export default function ImportPanel({ onImport }) {
         <div>
           <h2 className="font-display text-base sm:text-lg text-slate-900 dark:text-plume">Récupérer des amendements</h2>
           <p className="text-xs sm:text-sm text-ink-500 dark:text-ink-300 mt-0.5">
-            Importe un fichier JSON, ou colle directement les données.
+            Choisis un dossier législatif de l'Assemblée, importe un fichier JSON, ou colle directement les données.
           </p>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <button
+            type="button"
+            aria-expanded={dossierOpen}
+            onClick={() => { setDossierOpen((v) => !v); setPasteOpen(false) }}
+            className="w-full sm:w-auto rounded-md bg-[#D91227] text-white hover:bg-[#b80f21] px-4 py-2 text-xs sm:text-sm font-medium transition-colors text-center"
+          >
+            🏛️ Depuis l'Assemblée
+          </button>
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -114,13 +124,17 @@ export default function ImportPanel({ onImport }) {
           />
           <button
             type="button"
-            onClick={() => setPasteOpen((v) => !v)}
+            onClick={() => { setPasteOpen((v) => !v); setDossierOpen(false) }}
             className="w-full sm:w-auto rounded-md border border-neutral-300 px-4 py-2 text-xs sm:text-sm font-medium text-slate-700 dark:text-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 dark:hover:border-neutral-600 transition-colors text-center"
           >
             Coller du JSON
           </button>
         </div>
       </div>
+
+      {dossierOpen && (
+        <ImportDossierAN onImport={onImport} onClose={() => setDossierOpen(false)} />
+      )}
 
       {pasteOpen && (
         <div className="mt-4">

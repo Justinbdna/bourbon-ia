@@ -39,6 +39,8 @@ Pour les besoins du Hackathon, le prototype est un monolithe volontaire. Ce choi
 > - **Groq (Démo)** — démo publique en ligne uniquement : les amendements passent par le serveur Vercel puis sont envoyés à **Groq (États-Unis, hors UE)**. L'application l'annonce par une alerte avant chaque classement. À n'utiliser qu'avec des amendements **déjà publics**.
 > - **Clés API** : une clé personnelle est stockée **chiffrée** dans le navigateur ; elle est transmise au serveur à chaque requête pour appeler Groq, mais n'y est jamais enregistrée et reste masquée dans les journaux. La clé de la démo publique est une variable d'environnement du serveur, jamais envoyée au navigateur.
 > - **Texte de loi de référence** : seul l'identifiant public du texte est demandé à l'API Tricoteuses (désactivable avec `BOURBON_TEXTES_DISTANTS=0`).
+> - **Import « 🏛️ Depuis l'Assemblée »** : les mots recherchés et l'identifiant public du dossier sont envoyés à l'API Tricoteuses, qui renvoie les amendements publiés (données ouvertes de l'AN). Aucune donnée de l'utilisateur ne sort. Désactivé par le même `BOURBON_TEXTES_DISTANTS=0` (mode hors-ligne).
+> - **Référentiel des députés** : hors-ligne — députés en exercice et historique depuis 1997 (jeu AMO30, reconstruit par `scripts/construire_deputes_historique.py`).
 
 Pour une mise en production, l'architecture évoluera vers des **Micro-services conteneurisés** (Docker/K8s) avec chiffrement de bout en bout.
 
