@@ -223,7 +223,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
             )}
             {pageItems.map(({ a, idx }) => {
               const statut = a.statut || a.resultat_ia?.statut
-              const groupe = a.groupe || a.resultat_ia?.groupe
+              const groupe = a.groupe_politique || a.groupe || a.resultat_ia?.groupe_politique || a.resultat_ia?.groupe
               const isSelected = a.id === selectedId
               
               const isPending = isClassifying && !a.resultat_ia && !a.statut;
@@ -234,6 +234,9 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                 auteursText = auteursText.join(', ')
               }
               auteursText = auteursText || '—'
+
+              const estRapporteur = a.est_rapporteur || a.rapporteur || a.role === 'Rapporteur' || a.typeAuteur === 'Rapporteur'
+              const estGouvernement = a.est_gouvernement || a.role === 'Gouvernement' || groupe === 'GOUVERNEMENT' || a.typeAuteur === 'Gouvernement'
 
               return (
                 <tr 
@@ -252,13 +255,31 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                     {a.numero}
                   </td>
                   <td className="px-3 py-3 text-xs text-slate-800 dark:text-slate-200 w-44 max-w-[180px] align-top">
-                    <span className="break-words leading-snug" title={auteursText}>{auteursText}</span>
+                    <div className="flex flex-col items-start gap-1">
+                      <span className="break-words leading-snug" title={auteursText}>{auteursText}</span>
+                      {estRapporteur && (
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shadow-xs"
+                          title="Amendement déposé en qualité de Rapporteur au nom de la commission"
+                        >
+                          <span aria-hidden="true">📋</span> Rapporteur
+                        </span>
+                      )}
+                      {estGouvernement && (
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 shadow-xs"
+                          title="Amendement d'initiative gouvernementale (Exécutif)"
+                        >
+                          <span aria-hidden="true">🏛️</span> Exécutif
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-3 text-xs text-slate-800 dark:text-slate-200 w-28 align-top">
-                    {(a.groupe_politique || a.groupe_politique_ref || a.groupRef) ? (
+                    {(groupe || a.groupe_politique_ref || a.groupRef) ? (
                       <div className="flex items-start">
                         <PoliticalGroupTag
-                          group={a.groupe_politique}
+                          group={groupe}
                           groupRef={a.groupe_politique_ref || a.groupRef}
                         />
                       </div>

@@ -120,17 +120,30 @@ export default function AmendmentDetail({ amendment, onClose, isLoading, aiSetti
         <div className="flex flex-wrap gap-4 text-sm">
           {/* ── Auteur enrichi ── */}
           <div>
-            <p className="text-ink-500 dark:text-ink-400 text-xs mb-1">Auteur(s)</p>
+            <p className="text-ink-500 dark:text-ink-400 text-xs mb-1">Auteur(s) & Rôle</p>
             {a.auteur_nom && a.auteur_nom !== "Inconnu" ? (
-              <AuthorBadge data={{
-                auteur_nom: a.auteur_nom,
-                auteur_prenom: a.auteur_prenom,
-                auteur_trigramme: a.auteur_trigramme
-              }} />
+              <div className="flex flex-col items-start gap-1">
+                <AuthorBadge data={{
+                  auteur_nom: a.auteur_nom,
+                  auteur_prenom: a.auteur_prenom,
+                  auteur_trigramme: a.auteur_trigramme
+                }} />
+                {(a.est_rapporteur || a.rapporteur || a.role === 'Rapporteur') && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                    📋 Rapporteur
+                  </span>
+                )}
+                {(a.est_gouvernement || a.role === 'Gouvernement') && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-900 text-amber-200 border border-slate-700">
+                    🏛️ Exécutif
+                  </span>
+                )}
+              </div>
             ) : (
               <div className="max-h-24 overflow-y-auto text-sm bg-gray-100 text-slate-900 dark:bg-[#1A1B22] dark:text-white border border-gray-300 dark:border-gray-700 p-2 rounded mt-1">
                 <p className="font-medium">
-                  {a.rapporteur ? 'Rapporteur — ' : ''}
+                  {(a.est_rapporteur || a.rapporteur || a.role === 'Rapporteur') ? 'Rapporteur — ' : ''}
+                  {(a.est_gouvernement || a.role === 'Gouvernement') ? 'Gouvernement — ' : ''}
                   {(a.auteurs || []).join(', ') || '—'}
                 </p>
               </div>
@@ -141,7 +154,7 @@ export default function AmendmentDetail({ amendment, onClose, isLoading, aiSetti
           <div>
             <p className="text-ink-500 dark:text-ink-400 text-xs mb-1">Groupe</p>
             <PoliticalGroupTag
-              group={a.groupe_politique}
+              group={a.groupe_politique || a.groupe}
               groupRef={a.groupRef ?? a.groupe_politique_ref}
             />
           </div>

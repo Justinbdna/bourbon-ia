@@ -28,8 +28,9 @@ CURRENT_DIR = Path(__file__).resolve().parent
 DATA_PATH = CURRENT_DIR / "data" / "deputes_active.json"
 DATA_PATH_HISTORIQUE = CURRENT_DIR / "data" / "deputes_historique.json"
 
-# ── Dictionnaire officiel des organes politiques (XVIIe Législature) ──
+# ── Dictionnaire officiel des organes politiques (XVIIe Législature & Sénat) ──
 MAPPING_ORGANES_XVII: dict[str, str] = {
+    # Assemblée nationale XVIIe & XVIe
     "PO845401": "RN",       # Rassemblement National
     "PO845407": "EPR",      # Ensemble pour la République
     "PO845413": "LFI-NFP",  # La France Insoumise - Nouveau Front Populaire
@@ -47,6 +48,20 @@ MAPPING_ORGANES_XVII: dict[str, str] = {
     "PO840056": "NI",       # Non inscrits
     "PO793087": "NI",       # Non inscrits (XVIe)
     "NI": "Non inscrit",
+    # Sénat (organes politiques)
+    "PO77710": "LR",        # Les Républicains (Sénat)
+    "PO77714": "SER",       # Socialiste, Écologiste et Républicain (Sénat)
+    "PO77708": "UC",        # Union Centriste (Sénat)
+    "PO77724": "RDPI",      # Rassemblement des démocrates, progressistes et indépendants (Sénat)
+    "PO77720": "CRCE-K",    # Communiste républicain citoyen et écologiste (Sénat)
+    "PO77717": "RDSE",      # Rassemblement Démocratique et Social Européen (Sénat)
+    "PO77722": "LIRT",      # Les Indépendants - République et Territoires (Sénat)
+    "PO77725": "GEST",      # Écologiste - Solidarité et Territoires (Sénat)
+    "PO77726": "NI",        # Non-inscrits (Sénat)
+    # Exécutif / Institutionnel
+    "PO791599": "GOUVERNEMENT",
+    "GOUV": "GOUVERNEMENT",
+    "GOUVERNEMENT": "GOUVERNEMENT",
 }
 ORGANES_GROUPES_MAP = MAPPING_ORGANES_XVII
 
@@ -109,18 +124,38 @@ def resolve_single_signataire(raw_signataire: Any) -> tuple[str, str, bool]:
     Returns:
         tuple (nom_affiche, groupe_acronyme, is_rapporteur)
     """
+    import html
     db = _load_deputes_db()
     is_rapporteur = False
 
     if isinstance(raw_signataire, dict):
+        type_auteur = str(raw_signataire.get("typeAuteur") or "").strip()
+        qualite = str(raw_signataire.get("qualite") or "").strip()
+        libelle = html.unescape(str(raw_signataire.get("libelle") or "")).strip()
+        nom_dict = html.unescape(str(raw_signataire.get("nom") or "")).strip()
+
+        # Détection Gouvernement
+        if (
+            type_auteur.lower() == "gouvernement"
+            or "gouvernement" in libelle.lower()
+            or "gouvernement" in nom_dict.lower()
+        ):
+            return "le Gouvernement", "GOUVERNEMENT", False
+
+        # Détection Rapporteur / Commission
+        if (
+            "rapporteur" in type_auteur.lower()
+            or "rapporteur" in qualite.lower()
+            or "commission" in qualite.lower()
+            or "rapporteur" in libelle.lower()
+        ):
+            is_rapporteur = True
+
         # 1. Priorité absolue : groupePolitiqueRef natif si présent
         org_ref = str(raw_signataire.get("groupePolitiqueRef") or raw_signataire.get("organeRef") or "")
         groupe_natif = MAPPING_ORGANES_XVII.get(org_ref, "")
 
         acteur_ref = str(raw_signataire.get("acteurRef") or raw_signataire.get("uid") or "")
-        qualite = str(raw_signataire.get("qualite") or "").lower()
-        if "rapporteur" in qualite or "commission" in qualite:
-            is_rapporteur = True
 
         dep = get_depute_info(acteur_ref) if acteur_ref else None
         if dep:
@@ -128,16 +163,22 @@ def resolve_single_signataire(raw_signataire: Any) -> tuple[str, str, bool]:
             groupe = groupe_natif or _groupe_de(dep)
             return nom, groupe, is_rapporteur
         elif acteur_ref:
-            nom = raw_signataire.get("nom") or acteur_ref
+            nom = nom_dict or acteur_ref
             groupe = groupe_natif or raw_signataire.get("groupe") or ""
             return nom, groupe, is_rapporteur
         elif groupe_natif:
-            nom = raw_signataire.get("nom") or raw_signataire.get("libelle") or ""
+            nom = nom_dict or libelle or ""
             return nom, groupe_natif, is_rapporteur
+        elif libelle:
+            # Repli sur le libellé texte
+            return resolve_single_signataire(libelle)
 
-    raw_str = str(raw_signataire or "").strip()
+    raw_str = html.unescape(str(raw_signataire or "")).strip()
     if not raw_str:
         return "", "", False
+
+    if "gouvernement" in raw_str.lower():
+        return "le Gouvernement", "GOUVERNEMENT", False
 
     if "rapporteur" in raw_str.lower() or "commission" in raw_str.lower():
         is_rapporteur = True
@@ -180,25 +221,48 @@ def resolve_signataires(signataires_raw: Any) -> dict[str, Any]:
     """
     Résout une structure de signataires (list, str ou dict) et retourne :
       - auteurs_formatte : chaîne lisible (ex: "Laurent Monnier (EPR), Léa Balage (EcoS)")
-      - groupe_principal : acronyme du groupe du 1er signataire
+      - groupe_principal : acronyme du groupe du 1er signataire (ou "GOUVERNEMENT")
       - est_rapporteur : bool (True si rapporteur/commission détecté)
+      - est_gouvernement : bool (True si Gouvernement détecté)
+      - role : str ("Gouvernement", "Rapporteur" ou "Député")
     """
     if not signataires_raw:
         return {
             "auteurs_formatte": "",
             "groupe_principal": "",
             "est_rapporteur": False,
+            "est_gouvernement": False,
+            "role": "Député",
         }
 
     try:
+        import html
         items_to_resolve: list[Any] = []
         global_rapporteur = False
+        global_gouvernement = False
         groupe_principal = ""
 
         if isinstance(signataires_raw, dict):
+            libelle = html.unescape(str(signataires_raw.get("libelle") or "")).strip()
+            texte_libre = html.unescape(str(signataires_raw.get("texte") or "")).strip()
+
+            if "gouvernement" in libelle.lower() or "gouvernement" in texte_libre.lower():
+                global_gouvernement = True
+                groupe_principal = "GOUVERNEMENT"
+
+            if "rapporteur" in libelle.lower() or "rapporteur" in texte_libre.lower() or "commission" in texte_libre.lower():
+                global_rapporteur = True
+
             # Priorité absolue au groupePolitiqueRef de l'auteur principal
             auteur_block = signataires_raw.get("auteur", {})
             if isinstance(auteur_block, dict):
+                type_aut = str(auteur_block.get("typeAuteur") or "").lower()
+                if "gouvernement" in type_aut:
+                    global_gouvernement = True
+                    groupe_principal = "GOUVERNEMENT"
+                if "rapporteur" in type_aut:
+                    global_rapporteur = True
+
                 org_native = auteur_block.get("groupePolitiqueRef") or auteur_block.get("organeRef")
                 if org_native and str(org_native) in MAPPING_ORGANES_XVII:
                     groupe_principal = MAPPING_ORGANES_XVII[str(org_native)]
@@ -208,20 +272,24 @@ def resolve_signataires(signataires_raw: Any) -> dict[str, Any]:
                     global_rapporteur = True
                 items_to_resolve.append(auteur_block)
 
-            cosignataires = signataires_raw.get("cosignataires") or signataires_raw.get("coSignataires") or []
+            cosignataires = (
+                signataires_raw.get("cosignataires")
+                or signataires_raw.get("coSignataires")
+                or signataires_raw.get("cosignatairesRefs")
+                or []
+            )
             if isinstance(cosignataires, list):
-                items_to_resolve.extend(cosignataires)
+                items_to_resolve.extend(cosignataires[:5])
             elif isinstance(cosignataires, str):
                 items_to_resolve.append(cosignataires)
-
-            texte_libre = str(signataires_raw.get("texte") or "")
-            if "rapporteur" in texte_libre.lower() or "commission" in texte_libre.lower():
-                global_rapporteur = True
         elif isinstance(signataires_raw, list):
             items_to_resolve.extend(signataires_raw)
         else:
             # Chaîne brute (éventuellement séparée par des virgules)
-            str_val = str(signataires_raw)
+            str_val = html.unescape(str(signataires_raw)).strip()
+            if "gouvernement" in str_val.lower():
+                global_gouvernement = True
+                groupe_principal = "GOUVERNEMENT"
             if "rapporteur" in str_val.lower() or "commission" in str_val.lower():
                 global_rapporteur = True
             if "," in str_val:
@@ -230,27 +298,40 @@ def resolve_signataires(signataires_raw: Any) -> dict[str, Any]:
                 items_to_resolve.append(str_val)
 
         resolus = []
-        groupe_principal = ""
 
         for item in items_to_resolve:
             nom, grp, is_rap = resolve_single_signataire(item)
             if is_rap:
                 global_rapporteur = True
+            if grp == "GOUVERNEMENT" or nom == "le Gouvernement":
+                global_gouvernement = True
             if not groupe_principal and grp:
                 groupe_principal = grp
 
             if nom:
-                if grp:
+                if grp and grp != "GOUVERNEMENT":
                     resolus.append(f"{nom} ({grp})")
                 else:
                     resolus.append(nom)
 
-        auteurs_formatte = ", ".join(resolus) if resolus else (str(signataires_raw) if not isinstance(signataires_raw, (dict, list)) else "")
+        if global_gouvernement:
+            groupe_principal = "GOUVERNEMENT"
+            if not resolus:
+                resolus.append("le Gouvernement")
+
+        auteurs_formatte = ", ".join(resolus) if resolus else (
+            html.unescape(str(signataires_raw.get("libelle", ""))) if isinstance(signataires_raw, dict) and signataires_raw.get("libelle")
+            else (str(signataires_raw) if not isinstance(signataires_raw, (dict, list)) else "")
+        )
+
+        role = "Gouvernement" if global_gouvernement else ("Rapporteur" if global_rapporteur else "Député")
 
         return {
             "auteurs_formatte": auteurs_formatte,
             "groupe_principal": groupe_principal,
             "est_rapporteur": global_rapporteur,
+            "est_gouvernement": global_gouvernement,
+            "role": role,
         }
     except Exception as exc:
         logger.warning(f"⚠️ Erreur inattendue resolve_signataires ({exc}). Mode dégradé sans crash.")
@@ -258,4 +339,6 @@ def resolve_signataires(signataires_raw: Any) -> dict[str, Any]:
             "auteurs_formatte": str(signataires_raw) if signataires_raw and not isinstance(signataires_raw, (dict, list)) else "",
             "groupe_principal": "",
             "est_rapporteur": False,
+            "est_gouvernement": False,
+            "role": "Député",
         }

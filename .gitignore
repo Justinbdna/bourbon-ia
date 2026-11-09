@@ -40,7 +40,10 @@ data/clean/
 !docs/bourbon.ia.pdf
 
 # Environnement Python local (créé par l'IDE)
+venv
 venv/
+.venv
+.venv/
 
 # Liaison locale au projet Vercel (créée par `vercel link`)
 .vercel

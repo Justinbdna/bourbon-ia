@@ -242,19 +242,43 @@ def _enrichir_a_import(resultat: dict, source: dict, signataires=None) -> dict:
             source,
         )
 
-        # ── Groupe politique (référentiel local des députés) ──
-        if not resultat.get("groupe_politique"):
-            source_sig = (
-                signataires
-                or source.get("auteurs")
-                or resultat.get("auteurs")
-                or resultat.get("auteur")
-            )
-            if source_sig:
-                resolu = resolve_signataires(source_sig)
-                groupe = resolu.get("groupe_principal", "") or ""
-                if groupe:
-                    resultat["groupe_politique"] = groupe
+        # ── Groupe politique et rôle (référentiel local des députés) ──
+        source_sig = (
+            signataires
+            or source.get("auteurs")
+            or resultat.get("auteurs")
+            or resultat.get("auteur")
+        )
+        if source_sig:
+            resolu = resolve_signataires(source_sig)
+            groupe = resolu.get("groupe_principal", "") or ""
+            if not resultat.get("groupe_politique") and groupe:
+                resultat["groupe_politique"] = groupe
+            if not resultat.get("groupe") and resultat.get("groupe_politique"):
+                resultat["groupe"] = resultat["groupe_politique"]
+            if resolu.get("est_rapporteur"):
+                resultat["est_rapporteur"] = True
+            if resolu.get("est_gouvernement"):
+                resultat["est_gouvernement"] = True
+            if resolu.get("role"):
+                resultat["role"] = resolu["role"]
+
+        # Détection explicite de typeAuteur
+        type_auteur = (
+            (signataires.get("auteur", {}).get("typeAuteur") if isinstance(signataires, dict) else "")
+            or (source.get("signataires", {}).get("auteur", {}).get("typeAuteur") if isinstance(source.get("signataires"), dict) else "")
+            or source.get("typeAuteur")
+            or ""
+        )
+        if "rapporteur" in str(type_auteur).lower():
+            resultat["est_rapporteur"] = True
+            resultat["role"] = "Rapporteur"
+        elif "gouvernement" in str(type_auteur).lower():
+            resultat["est_gouvernement"] = True
+            resultat["role"] = "Gouvernement"
+            if not resultat.get("groupe_politique"):
+                resultat["groupe_politique"] = "GOUVERNEMENT"
+                resultat["groupe"] = "GOUVERNEMENT"
 
         # ── Commission + thèmes corrélés (uid d'organe embarqué dans l'uid) ──
         if not resultat.get("commission"):
@@ -307,7 +331,7 @@ def normaliser_amendement(data, index: int = 0) -> dict:
             auteur = ""
             signataires = am.get("signataires", {})
             if isinstance(signataires, dict):
-                auteur = safe_str(signataires.get("libelle", ""))
+                auteur = html.unescape(safe_str(signataires.get("libelle", "")))
                 if not auteur:
                     aut = signataires.get("auteur", {})
                     if isinstance(aut, dict):
@@ -315,7 +339,7 @@ def normaliser_amendement(data, index: int = 0) -> dict:
                     elif isinstance(aut, list) and len(aut) > 0:
                         auteur = safe_str(aut[0].get("acteurRef", "Inconnu"))
             else:
-                auteur = safe_str(signataires)
+                auteur = html.unescape(safe_str(signataires))
 
             # Résolution enrichie facultative sécurisée
             try:
@@ -344,7 +368,10 @@ def normaliser_amendement(data, index: int = 0) -> dict:
                 "texte": dispositif,
                 "expose_sommaire": expose_sommaire,
                 "exposeSommaire": expose_sommaire,
-                "auteur": auteur
+                "auteur": auteur,
+                "role": "Député",
+                "est_rapporteur": False,
+                "est_gouvernement": False,
             }
             # Commission saisie au fond (import « Depuis l'Assemblée ») : conservée
             # pour que le tri retrouve les thèmes des amendements de séance plénière.
@@ -655,15 +682,26 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
         except Exception as exc:  # noqa: BLE001
             logging.debug(f"Résolution groupe politique ignorée : {exc}")
 
-    # ── Détection de qualité Rapporteur / Commission ──
+    # ── Détection de qualité Rapporteur / Commission / Gouvernement ──
     qualite_auteur = str(auteur_block.get("qualite") or "").lower()
-    is_rapporteur = "rapporteur" in qualite_auteur or "commission" in qualite_auteur
+    type_aut = str(auteur_block.get("typeAuteur") or am.get("typeAuteur") or "").lower()
+    is_rapporteur = "rapporteur" in qualite_auteur or "commission" in qualite_auteur or "rapporteur" in type_aut
     if not is_rapporteur:
         auteurs_list = am.get("auteurs") or raw.get("auteurs", [])
         if auteurs_list:
             auteurs_join = " ".join(str(x) for x in auteurs_list).lower()
             if "rapporteur" in auteurs_join or "commission" in auteurs_join:
                 is_rapporteur = True
+
+    is_gouvernement = (
+        "gouvernement" in qualite_auteur
+        or "gouvernement" in type_aut
+        or groupe_nom == "GOUVERNEMENT"
+        or "gouvernement" in str(am.get("auteurs") or "").lower()
+        or "gouvernement" in str(raw.get("signataires") or "").lower()
+    )
+    if is_gouvernement and not groupe_nom:
+        groupe_nom = "GOUVERNEMENT"
 
     # ── Identiques officiels ──
     est_identique = bool(am.get("discussionIdentique") or am.get("estIdentique") or am.get("est_identique_officiel"))
@@ -685,6 +723,8 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
 
     est_gage = detect_gage_financier(dispositif_raw, raw)
 
+    role = "Gouvernement" if is_gouvernement else ("Rapporteur" if is_rapporteur else "Député")
+
     return EnrichedAmendment(
         amendement_uid=str(uid),
         numero_long=numero,
@@ -703,6 +743,8 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
         est_identique_officiel=est_identique,
         id_discussion_identique=str(id_discussion) if id_discussion else None,
         est_rapporteur=is_rapporteur,
+        est_gouvernement=is_gouvernement,
+        role=role,
         amendement_parent_ref=amendement_parent_ref,
         est_gage=est_gage,
         # ── Commission + corrélation thématique (résolu hors-ligne) ──
@@ -740,7 +782,9 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         "groupRef": amend.groupe_politique_ref,
         "groupe_politique": amend.groupe_politique,
         "groupe": amend.groupe_politique,
-        "est_rapporteur": amend.est_rapporteur,
+        "est_rapporteur": getattr(amend, "est_rapporteur", False),
+        "est_gouvernement": getattr(amend, "est_gouvernement", False),
+        "role": getattr(amend, "role", "Gouvernement" if getattr(amend, "est_gouvernement", False) else ("Rapporteur" if getattr(amend, "est_rapporteur", False) else "Député")),
         "texte_loi_reference": amend.texte_loi_reference,
 
         # ── Dossier législatif (pour <LegislativeContext>) ──
