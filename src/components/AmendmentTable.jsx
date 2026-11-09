@@ -57,9 +57,6 @@ function auteursEnListe(a) {
   return a.auteurs ? [String(a.auteurs)] : []
 }
 
-<<<<<<< HEAD
-export default function AmendmentTable({ amendments, source, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, onExportJson }) {
-=======
 function formaterArticle(art) {
   if (!art) return '—'
   const texte = String(art).trim()
@@ -67,8 +64,7 @@ function formaterArticle(art) {
   return texte.replace(/^article\s+/i, '')
 }
 
-export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, onExportJson }) {
->>>>>>> origin/main
+export default function AmendmentTable({ amendments, source, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, onExportJson }) {
   const [currentPage, setCurrentPage] = useState(0)
   const [filtre, setFiltre] = useState({ motCle: '', auteur: '' })
   const [masquerEcartes, setMasquerEcartes] = useState(false)
