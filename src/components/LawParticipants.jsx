@@ -175,11 +175,10 @@ export default function LawParticipants({ dossierRef, amendementUid, titre, limi
                         : <span className="text-xs text-slate-400">non renseigné</span>}
                     </td>
                     <td className="px-4 py-2">
-                      {p.roles?.length ? (
-                        <span className="text-xs text-slate-600 dark:text-slate-400">{p.roles.join(' · ')}</span>
-                      ) : (
-                        <span className="text-xs text-slate-400 dark:text-slate-600">—</span>
-                      )}
+                      {/* Sans rôle déclaré (rapporteur, auteur…) : « Collaborateur ». */}
+                      <span className="text-xs text-slate-600 dark:text-slate-400">
+                        {p.roles?.length ? p.roles.join(' · ') : 'Collaborateur'}
+                      </span>
                     </td>
                   </tr>
                 ))}
