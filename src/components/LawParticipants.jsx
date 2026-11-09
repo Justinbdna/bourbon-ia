@@ -1,8 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import PoliticalGroupTag from './amendment/PoliticalGroupTag';
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:8000');
+import { apiBase } from '../api/serveur';
 
 /**
  * LawParticipants — Participants d'un TEXTE DE LOI
@@ -46,7 +44,7 @@ export default function LawParticipants({ dossierRef, amendementUid, titre, limi
         else params.set('amendement_uid', amendementUid);
 
         const res = await fetch(
-          `${API_BASE_URL}/api/participants?${params.toString()}`,
+          `${apiBase()}/api/participants?${params.toString()}`,
           { signal: controleur.signal }
         );
         if (!res.ok) throw new Error(`Erreur API ${res.status}`);

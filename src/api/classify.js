@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:8000')
+import { apiBase, postJSON } from './serveur'
 
 export class ClassifyError extends Error {
   constructor(message, status) {
@@ -9,11 +9,7 @@ export class ClassifyError extends Error {
 }
 
 export async function normalizeAmendments(amendements) {
-  const response = await fetch(`${API_BASE_URL}/api/normalize`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-    body: JSON.stringify({ amendements, model: 'llama3-8b-8192' }),
-  })
+  const response = await postJSON('/api/normalize', { amendements, model: 'llama3-8b-8192' })
   if (!response.ok) {
     throw new ClassifyError(`Erreur de normalisation: ${await response.text()}`, response.status)
   }
@@ -27,18 +23,13 @@ export async function normalizeAmendments(amendements) {
 export async function analyzeSurtransposition(amendement, options = {}) {
   const { signal } = options
   try {
-    const response = await fetch(`${API_BASE_URL}/api/v2/surtransposition`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-      signal,
-      body: JSON.stringify({
-        amendement_uid: amendement.id || amendement.uid,
-        dispositif: amendement.dispositif_raw || amendement.dispositif || '',
-        expose_sommaire: amendement.expose_sommaire || amendement.exposeSommaire || '',
-        article_vise: amendement.article_vise || amendement.article || '',
-        celex_id: amendement.celex_id || null,
-      }),
-    })
+    const response = await postJSON('/api/v2/surtransposition', {
+      amendement_uid: amendement.id || amendement.uid,
+      dispositif: amendement.dispositif_raw || amendement.dispositif || '',
+      expose_sommaire: amendement.expose_sommaire || amendement.exposeSommaire || '',
+      article_vise: amendement.article_vise || amendement.article || '',
+      celex_id: amendement.celex_id || null,
+    }, { signal })
     if (!response.ok) {
       return null
     }
@@ -66,19 +57,14 @@ function reglagesLLM(aiSettings = {}) {
  * Lève ClassifyError avec un message lisible en cas d'échec.
  */
 export async function resumerAmendement(amendement, aiSettings = {}, options = {}) {
-  const response = await fetch(`${API_BASE_URL}/api/v2/resumer`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-    signal: options.signal,
-    body: JSON.stringify({
-      amendement_uid: amendement.id || amendement.uid || null,
-      article: amendement.article || null,
-      dispositif: amendement.dispositif || '',
-      expose_sommaire: amendement.expose_sommaire || '',
-      texte_loi_reference: amendement.texte_loi_reference || null,
-      ...reglagesLLM(aiSettings),
-    }),
-  })
+  const response = await postJSON('/api/v2/resumer', {
+    amendement_uid: amendement.id || amendement.uid || null,
+    article: amendement.article || null,
+    dispositif: amendement.dispositif || '',
+    expose_sommaire: amendement.expose_sommaire || '',
+    texte_loi_reference: amendement.texte_loi_reference || null,
+    ...reglagesLLM(aiSettings),
+  }, { signal: options.signal })
   if (!response.ok) {
     let detail = `Erreur ${response.status}`
     try {
@@ -102,12 +88,7 @@ export function doitPasserParIA(a) {
  */
 export async function trierSansIA(amendements, options = {}) {
   const { signal, payload = { amendements } } = options
-  const response = await fetch(`${API_BASE_URL}/api/v2/mecanique`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-    signal,
-    body: JSON.stringify(payload),
-  })
+  const response = await postJSON('/api/v2/mecanique', payload, { signal })
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'Erreur inconnue')
     throw new ClassifyError(`Pipeline V2 Mécanique : ${errorText}`, response.status)
@@ -118,7 +99,7 @@ export async function trierSansIA(amendements, options = {}) {
 // ─── Import direct d'un dossier législatif (données ouvertes de l'AN) ───
 async function getImportDossier(chemin, params = {}, options = {}) {
   const query = new URLSearchParams(params).toString()
-  const response = await fetch(`${API_BASE_URL}${chemin}${query ? `?${query}` : ''}`, {
+  const response = await fetch(`${apiBase()}${chemin}${query ? `?${query}` : ''}`, {
     headers: { 'ngrok-skip-browser-warning': 'true' },
     signal: options.signal,
   })
@@ -200,12 +181,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
     }
 
     try {
-      const resSingle = await fetch(`${API_BASE_URL}/api/v2/analyser-llm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-        signal,
-        body: JSON.stringify(singlePayload),
-      })
+      const resSingle = await postJSON('/api/v2/analyser-llm', singlePayload, { signal })
 
       if (!resSingle.ok) {
         const errText = await resSingle.text().catch(() => 'Erreur API unitaire')

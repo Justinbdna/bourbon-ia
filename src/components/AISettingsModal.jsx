@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import ServeurBourbon from './ServeurBourbon'
 
 function getModelTypeBadge(modelObj) {
   if (!modelObj) {
@@ -239,6 +240,12 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
         </div>
         
         <div className="p-4 sm:p-6 space-y-6 overflow-y-auto">
+          <ServeurBourbon />
+
+          <div className="border-t border-ink-200 dark:border-ink-700 pt-5">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-plume">Modèle d'IA</h3>
+            <p className="text-xs text-ink-500 dark:text-ink-300 mt-0.5">Pour les cas ambigus et le résumé.</p>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button
               onClick={() => setProvider('groq_auto')}

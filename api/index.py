@@ -10,6 +10,7 @@ from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 from dotenv import load_dotenv
 
@@ -39,8 +40,10 @@ try:
     from api.commissions_resolver import resoudre_commission_et_mots_cles
     from api.participants_resolver import fetch_participants, resumer_par_groupe, resolve_dossier_ref
     from api import import_dossier
+    from api.transport import DecompressionRequetes, ReseauPriveAutorise
 except ModuleNotFoundError:
     import import_dossier
+    from transport import DecompressionRequetes, ReseauPriveAutorise
     from deterministic_engine import (
         process_deterministic_sorting,
         normalize_text,
@@ -177,6 +180,11 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# Ordre Starlette : le dernier middleware ajouté est le plus externe.
+# Vercel limite requêtes et réponses à 4,5 Mo : les gros échanges d'amendements
+# voyagent compressés dans les deux sens (cf. api/transport.py).
+app.add_middleware(DecompressionRequetes)
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -188,6 +196,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Site en ligne → serveur Bourbon.IA lancé sur le poste (localhost).
+app.add_middleware(ReseauPriveAutorise)
 
 class AnalyzeRequest(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
