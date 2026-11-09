@@ -5,6 +5,7 @@ import {
   analyzeSurtransposition,
   resumerAmendement,
   ClassifyError,
+  doitPasserParIA,
 } from '../api/classify'
 
 describe('classify.js — Pipeline Orchestrateur Frontend V2', () => {
@@ -169,5 +170,12 @@ describe('classify.js — Pipeline Orchestrateur Frontend V2', () => {
     })
 
     await expect(resumerAmendement({ id: 'AM-2' }, {})).rejects.toThrow('Clé API invalide')
+  })
+
+  it('doitPasserParIA : seuls les cas non classés par les règles partent à l\'IA', () => {
+    expect(doitPasserParIA({ statut_mecanique: 'NOUVEAU', _skipLLM: false })).toBe(true)
+    expect(doitPasserParIA({ statut_mecanique: 'NOUVEAU', _skipLLM: true })).toBe(false)
+    expect(doitPasserParIA({ statut_mecanique: 'SEANCE_PLENIERE', _skipLLM: true })).toBe(false)
+    expect(doitPasserParIA({ statut_mecanique: 'IDENTIQUE_OFFICIEL' })).toBe(false)
   })
 })

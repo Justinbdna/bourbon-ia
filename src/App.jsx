@@ -4,7 +4,7 @@ import AmendmentTable from './components/AmendmentTable'
 import AmendmentDetail from './components/AmendmentDetail'
 import LawParticipants from './components/LawParticipants'
 import ClassifyButton from './components/ClassifyButton'
-import { classifyAmendmentsV2, normalizeAmendments, trierSansIA } from './api/classify'
+import { classifyAmendmentsV2, normalizeAmendments, trierSansIA, doitPasserParIA } from './api/classify'
 import ThemeToggle from './components/ThemeToggle'
 import AISettingsModal from './components/AISettingsModal'
 import ConsentModal from './components/ConsentModal'
@@ -40,6 +40,8 @@ export default function App() {
   const [progressInfo, setProgressInfo] = useState(null)
   const [showCloudWarning, setShowCloudWarning] = useState(false)
   const [demoActive, setDemoActive] = useState(false)
+  // Tri par règles préalable à l'alerte cloud (cf. handleClassify).
+  const [triEnCours, setTriEnCours] = useState(false)
   // Dernière liste connue, lue par les actions de la démo guidée (closures stables).
   const amendmentsRef = useRef(amendments)
   amendmentsRef.current = amendments
@@ -240,7 +242,21 @@ export default function App() {
 
   async function handleClassify() {
     // ── MODALE CLOUD BLOQUANTE ──
+    // Le tri par règles (sans IA) se fait d'abord sur le serveur Bourbon.IA :
+    // l'alerte n'apparaît que s'il reste des amendements à envoyer à l'IA cloud.
     if (aiSettings.provider !== 'local') {
+      setTriEnCours(true)
+      setClassifyError(null)
+      try {
+        const mecaniques = await trierSansIA(amendments)
+        setAmendments(mecaniques)
+        if (!mecaniques.some(doitPasserParIA)) return
+      } catch (err) {
+        setClassifyError(err.message || 'Erreur inconnue lors du classement.')
+        return
+      } finally {
+        setTriEnCours(false)
+      }
       setShowCloudWarning(true)
       return
     }
@@ -466,7 +482,7 @@ export default function App() {
         <div data-demo="classer">
           <ClassifyButton
             disabled={amendments.length === 0}
-            loading={isClassifying}
+            loading={isClassifying || triEnCours}
             error={classifyError}
             warnings={warnings}
             onClick={handleClassify}

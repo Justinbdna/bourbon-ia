@@ -91,6 +91,11 @@ export async function resumerAmendement(amendement, aiSettings = {}, options = {
   return (await response.json()).resume
 }
 
+/** Amendement que le tri par règles n'a pas pu classer : il sera envoyé à l'IA. */
+export function doitPasserParIA(a) {
+  return a.statut_mecanique === 'NOUVEAU' && !a._skipLLM && !a.skip_llm
+}
+
 /**
  * Tri déterministe seul (règles de l'Assemblée, sans IA ni envoi vers le cloud) :
  * identiques, doublons, irrecevables, isolés. Les cas ambigus restent « en attente d'IA ».
@@ -173,7 +178,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
 
   // 2. Boucle LLM Séquentielle (Frontend Orchestrator)
   // Les amendements marqués _skipLLM (identiques ou isolés mécaniquement) ne sollicitent pas le LLM
-  const aTraiter = mecaniques.filter(a => a.statut_mecanique === 'NOUVEAU' && !a._skipLLM && !a.skip_llm)
+  const aTraiter = mecaniques.filter(doitPasserParIA)
   const nb_classes = mecaniques.length - aTraiter.length
 
   // Appel immédiat pour que le compteur s'incrémente des triés mécaniques
