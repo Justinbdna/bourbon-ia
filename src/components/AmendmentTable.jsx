@@ -6,10 +6,11 @@ import PoliticalGroupTag from './amendment/PoliticalGroupTag'
 import AmendmentSearchBar from './amendment/AmendmentSearchBar'
 import BilanClassement from './amendment/BilanClassement'
 import { calculerBilan, categorieAmendement, estDoublon, estEcarte, estSeancePleniere } from '../utils/bilan'
+import { TRIS, trierEntrees } from '../utils/tri'
 import { downloadRtf } from '../utils/exportRtf'
 import { stripHtmlForDisplay } from '../utils/sanitize'
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 25
 
 // Extrait du dispositif : 250 caractères au plus (coupés sur un mot), avec
 // « Voir plus » pour déplier le texte complet dans la cellule.
@@ -62,6 +63,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
   const [masquerEcartes, setMasquerEcartes] = useState(false)
   // Catégorie choisie dans le bandeau de bilan ('' = toutes).
   const [categorieFiltre, setCategorieFiltre] = useState('')
+  const [tri, setTri] = useState('recent')
 
   // Options de la recherche : mots-clés (avec effectif) et auteurs distincts.
   const optionsRecherche = useMemo(() => {
@@ -81,7 +83,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
   // (onReorder) travaille sur la liste complète, pas sur la liste filtrée.
   const filtres = useMemo(() => {
     const auteurCherche = normaliser(filtre.auteur)
-    return amendments
+    const liste = amendments
       .map((a, idx) => ({ a, idx }))
       .filter(({ a }) => {
         if (masquerEcartes && (estDoublon(a) || estEcarte(a))) return false
@@ -92,7 +94,8 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
         if (auteurCherche && !normaliser(auteursEnListe(a).join(', ')).includes(auteurCherche)) return false
         return true
       })
-  }, [amendments, filtre, masquerEcartes, categorieFiltre])
+    return trierEntrees(liste, tri)
+  }, [amendments, filtre, masquerEcartes, categorieFiltre, tri])
 
   function handleRechercher(nouveauFiltre) {
     setFiltre(nouveauFiltre)
@@ -154,6 +157,16 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
           {bilan.classes > 0 ? `${bilan.classes} amendements classés` : `${amendments.length} amendements chargés`}
         </p>
         <div className="flex flex-wrap items-center gap-2">
+          <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">
+            Trier :
+            <select
+              value={tri}
+              onChange={(e) => { setTri(e.target.value); setCurrentPage(0) }}
+              className="rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] px-2 py-1 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#D91227]/40"
+            >
+              {TRIS.map((t) => <option key={t.cle} value={t.cle}>{t.libelle}</option>)}
+            </select>
+          </label>
           {idsDoublons.length > 0 && onDeleteDoublons && (
             <button
               type="button"
@@ -231,7 +244,8 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               return (
                 <tr 
                   key={a.id ?? `fallback-${idx}`}
-                  draggable
+                  draggable={tri === 'texte'}
+                  title={tri === 'texte' ? undefined : 'Pour réordonner par glisser-déposer, triez par « Ordre du texte ».'}
                   onDragStart={(e) => handleDragStart(e, idx)}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => handleDrop(e, idx)}

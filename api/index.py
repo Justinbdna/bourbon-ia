@@ -349,6 +349,12 @@ def normaliser_amendement(data, index: int = 0) -> dict:
             # pour que le tri retrouve les thèmes des amendements de séance plénière.
             if am.get("commissionFondRef"):
                 resultat["commissionFondRef"] = am["commissionFondRef"]
+            # Date de dépôt (tri chronologique du tableau) : à la racine pour
+            # l'import « Depuis l'Assemblée », sous cycleDeVie dans les exports AN.
+            cycle = am.get("cycleDeVie") if isinstance(am.get("cycleDeVie"), dict) else {}
+            date_depot = am.get("dateDepot") or cycle.get("dateDepot")
+            if isinstance(date_depot, str) and date_depot:
+                resultat["dateDepot"] = date_depot
             return _enrichir_a_import(resultat, am, signataires)
 
         # Données déjà plates (ex: sampleAmendments.json)

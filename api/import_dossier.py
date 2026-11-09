@@ -177,6 +177,7 @@ def tricoteuses_vers_format_an(a: dict[str, Any], commission_fond: str = "") -> 
         "estIdentique": bool(a.get("estIdentique")),
         "amendementParentRef": a.get("amendementParentRefUid") or None,
         "triAmendement": a.get("triAmendement") or "",
+        "dateDepot": a.get("dateDepot") or "",
         "commissionFondRef": commission_fond,
     }
 

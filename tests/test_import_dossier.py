@@ -39,6 +39,7 @@ AMENDEMENT_TRICOTEUSES = {
     "idDiscussionIdentique": 85409,
     "amendementParentRefUid": None,
     "triAmendement": "abc",
+    "dateDepot": "2025-12-03T00:00:00.000Z",
 }
 
 
@@ -72,6 +73,7 @@ def test_conversion_au_format_an_puis_normalisation():
     assert norm["article"] == "Article 5"
     assert norm["auteur"] == "Joël Bruneau (LIOT)"
     assert norm["dispositif"] == "Supprimer cet article."
+    assert norm["dateDepot"] == "2025-12-03T00:00:00.000Z"
 
 
 def test_seance_pleniere_prend_les_themes_de_la_commission_au_fond():
