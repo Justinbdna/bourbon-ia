@@ -36,6 +36,11 @@ function pourLaVoix(texte) {
     .replace(/️/g, '')
     .replace(/[«»"]/g, '')
     .replace(/\bN°/g, 'numéro')
+    .replace(/\bArt\./g, 'Article')
+    .replace(/\bJSON\b/gi, 'J-sonne')
+    .replace(/\bJOP 2030\b/gi, 'Jeux Olympiques et Paralympiques 2030')
+    .replace(/\bLFI-NFP\b/gi, 'L.F.I., N.F.P.')
+    .replace(/\bIA\b/g, 'I.A.')
     .replace(/ = /g, ' : ')
     .replace(/→/g, '')
     .replace(/\s+/g, ' ')
@@ -59,7 +64,8 @@ const VOIX_MASCULINES = [
 /** Meilleure voix française masculine disponible ; `masculine` faux = repli. */
 function choisirVoix(voix) {
   const francaises = voix.filter((v) => /^fr\b|^fr[-_]/i.test(v.lang || ''))
-  const rang = (v) => (/fr[-_]fr/i.test(v.lang) ? 0 : 1) + (v.localService ? 0 : 0.5)
+  const estNaturelle = (v) => /natural|neural|enhanced|premium|siri|google/i.test(v.name)
+  const rang = (v) => (/fr[-_]fr/i.test(v.lang) ? 0 : 1) - (estNaturelle(v) ? 2 : 0)
   for (const motif of VOIX_MASCULINES) {
     const trouvees = francaises.filter((v) => motif.test(v.name)).sort((a, b) => rang(a) - rang(b))
     if (trouvees.length) return { voix: trouvees[0], masculine: true }
@@ -207,7 +213,8 @@ export default function DemoGuidee({ actions, onTerminer }) {
   const [voixActive, setVoixActive] = useState(voixMemorisee)
   const [choixVoix, setChoixVoix] = useState({ voix: null, masculine: false })
   const [lectureFinie, setLectureFinie] = useState(false)
-  const lectureVocale = Boolean(synthese) && voixActive
+  const audioRef = useRef(null)
+  const lectureVocale = voixActive
 
   // Les voix se chargent de façon asynchrone dans certains navigateurs.
   useEffect(() => {
@@ -218,35 +225,99 @@ export default function DemoGuidee({ actions, onTerminer }) {
     return () => synthese.removeEventListener('voiceschanged', charger)
   }, [])
 
-  // Lecture de l'étape ; la pause coupe la voix, la reprise relit l'étape.
+  // Gestion pause / reprise sur l'audio en cours
+  useEffect(() => {
+    if (!audioRef.current) return
+    if (enPause) {
+      audioRef.current.pause()
+    } else if (voixActive && !lectureFinie) {
+      audioRef.current.play().catch(() => {})
+    }
+  }, [enPause, voixActive, lectureFinie])
+
+  // Lecture de l'étape : MP3 HD en priorité, synthèse vocale en repli
   useEffect(() => {
     setLectureFinie(false)
-    if (!lectureVocale || enPause) return
+    if (!lectureVocale || enPause) {
+      synthese?.cancel()
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+      return
+    }
+
     let annule = false
     const finir = () => { if (!annule) setLectureFinie(true) }
-    const texte = pourLaVoix(`${etape.titre}. ${etape.texte}`)
-    synthese.cancel()
-    phrases(texte).forEach((phrase, i, toutes) => {
-      const enonce = new SpeechSynthesisUtterance(phrase)
-      enonce.lang = 'fr-FR'
-      if (choixVoix.voix) enonce.voice = choixVoix.voix
-      // Sans voix masculine installée, une voix plus grave en repli.
-      enonce.pitch = choixVoix.masculine ? 1 : 0.8
-      enonce.rate = 1.02
-      if (i === toutes.length - 1) {
-        enonce.onend = finir
-        enonce.onerror = finir
+
+    // Arrêt immédiat de toute lecture précédente
+    synthese?.cancel()
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.onended = null
+      audioRef.current.onerror = null
+      audioRef.current = null
+    }
+
+    // Repli de secours : synthèse vocale Web Speech API
+    const lancerSynthese = () => {
+      if (annule || !synthese) {
+        finir()
+        return
       }
-      synthese.speak(enonce)
+      synthese.cancel()
+      const texte = pourLaVoix(`${etape.titre}. ${etape.texte}`)
+      const listePhrases = phrases(texte)
+      if (listePhrases.length === 0) {
+        finir()
+        return
+      }
+      listePhrases.forEach((phrase, i, toutes) => {
+        const enonce = new SpeechSynthesisUtterance(phrase)
+        enonce.lang = 'fr-FR'
+        if (choixVoix.voix) enonce.voice = choixVoix.voix
+        enonce.pitch = 1
+        enonce.rate = 1.02
+        if (i === toutes.length - 1) {
+          enonce.onend = finir
+          enonce.onerror = finir
+        }
+        synthese.speak(enonce)
+      })
+      setTimeout(finir, 2000 + texte.length * 90)
+    }
+
+    // 1. Essai prioritaire du fichier MP3 pré-enregistré
+    const audioUrl = `/audio/demo/etape-${String(index + 1).padStart(2, '0')}.mp3`
+    const audio = new Audio(audioUrl)
+    audioRef.current = audio
+
+    audio.onended = finir
+    audio.onerror = () => {
+      if (!annule) {
+        audioRef.current = null
+        lancerSynthese()
+      }
+    }
+
+    audio.play().catch(() => {
+      if (!annule) {
+        audioRef.current = null
+        lancerSynthese()
+      }
     })
-    // Filet de sécurité si le navigateur ne signale jamais la fin de lecture.
-    const secours = setTimeout(finir, 2000 + texte.length * 90)
+
     return () => {
       annule = true
-      clearTimeout(secours)
-      synthese.cancel()
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.onended = null
+        audioRef.current.onerror = null
+        audioRef.current = null
+      }
+      synthese?.cancel()
     }
-  }, [etape, lectureVocale, enPause, choixVoix])
+  }, [index, etape, lectureVocale, enPause, choixVoix])
 
   function basculerVoix() {
     setVoixActive((actif) => {
@@ -312,7 +383,13 @@ export default function DemoGuidee({ actions, onTerminer }) {
   }, [etape, enPause, enCours, suivante, lectureVocale, lectureFinie])
 
   // La voix s'arrête avec la démo.
-  useEffect(() => () => synthese?.cancel(), [])
+  useEffect(() => () => {
+    synthese?.cancel()
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
+  }, [])
 
   // Clavier : Échap quitte, flèches naviguent, espace met en pause.
   useEffect(() => {
@@ -358,17 +435,15 @@ export default function DemoGuidee({ actions, onTerminer }) {
             🤖 Démo guidée · étape {index + 1} / {ETAPES.length}
           </p>
           <div className="flex items-center gap-2">
-            {synthese && (
-              <button
-                type="button"
-                onClick={basculerVoix}
-                aria-pressed={voixActive}
-                title={voixActive ? 'Couper la voix' : 'Activer la voix'}
-                className="rounded-md border border-slate-300 dark:border-slate-600 px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                {voixActive ? '🔊 Voix' : '🔇 Voix coupée'}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={basculerVoix}
+              aria-pressed={voixActive}
+              title={voixActive ? 'Couper la voix' : 'Activer la voix'}
+              className="rounded-md border border-slate-300 dark:border-slate-600 px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              {voixActive ? '🔊 Voix' : '🔇 Voix coupée'}
+            </button>
             <button
               type="button"
               onClick={onTerminer}

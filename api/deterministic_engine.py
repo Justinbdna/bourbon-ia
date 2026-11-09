@@ -561,6 +561,10 @@ def process_deterministic_sorting(
             res_dep = resolve_signataires(src_signataires)
             if res_dep.get("est_rapporteur"):
                 amend.est_rapporteur = True
+            if res_dep.get("est_gouvernement"):
+                amend.est_gouvernement = True
+            if res_dep.get("role"):
+                amend.role = res_dep["role"]
             if res_dep.get("groupe_principal"):
                 amend.groupe_politique = res_dep["groupe_principal"]
             if res_dep.get("auteurs_formatte") and not amend.auteurs_raw:

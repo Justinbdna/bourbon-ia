@@ -57,3 +57,30 @@ def test_referentiel_reel_couvre_les_cosignataires_du_jeu_exemple():
     """Les 10 cosignataires du jeu d'exemple absents de deputes_active.json."""
     for matricule in ("PA720386", "PA794478", "PA840171"):
         assert get_depute_info(matricule), matricule
+
+
+def test_gouvernement_detection():
+    """Vérifie la détection et l'assignation du groupe GOUVERNEMENT et du rôle Gouvernement."""
+    res_str = resolve_signataires("le Gouvernement")
+    assert res_str["est_gouvernement"] is True
+    assert res_str["groupe_principal"] == "GOUVERNEMENT"
+    assert res_str["role"] == "Gouvernement"
+
+    res_dict = resolve_signataires({"libelle": "le Gouvernement"})
+    assert res_dict["est_gouvernement"] is True
+    assert res_dict["groupe_principal"] == "GOUVERNEMENT"
+    assert res_dict["role"] == "Gouvernement"
+
+    res_type = resolve_signataires({"auteur": {"typeAuteur": "Gouvernement"}})
+    assert res_type["est_gouvernement"] is True
+    assert res_type["groupe_principal"] == "GOUVERNEMENT"
+    assert res_type["role"] == "Gouvernement"
+
+
+def test_rapporteur_detection(monkeypatch):
+    """Vérifie la détection de la qualité de Rapporteur et l'assignation du rôle."""
+    _referentiels(monkeypatch)
+    res = resolve_signataires({"auteur": {"typeAuteur": "Rapporteur", "acteurRef": "PA1"}})
+    assert res["est_rapporteur"] is True
+    assert res["groupe_principal"] == "EPR"
+    assert res["role"] == "Rapporteur"
