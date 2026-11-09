@@ -187,6 +187,7 @@ app.add_middleware(DecompressionRequetes)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(
     CORSMiddleware,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_origins=[
         "https://bourbon-ia.vercel.app",
         "http://localhost:5173",
