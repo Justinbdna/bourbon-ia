@@ -56,6 +56,13 @@ function auteursEnListe(a) {
   return a.auteurs ? [String(a.auteurs)] : []
 }
 
+function formaterArticle(art) {
+  if (!art) return '—'
+  const texte = String(art).trim()
+  if (/^article\s+premier$/i.test(texte) || /^premier$/i.test(texte)) return '1er'
+  return texte.replace(/^article\s+/i, '')
+}
+
 export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, onExportJson }) {
   const [currentPage, setCurrentPage] = useState(0)
   const [filtre, setFiltre] = useState({ motCle: '', auteur: '' })
@@ -195,7 +202,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
         <table className="w-full divide-y divide-gray-200 dark:divide-gray-800 text-left">
           <thead className="bg-gray-100 dark:bg-[#1A1B22] border-b border-gray-200 dark:border-gray-800">
             <tr>
-              <th data-demo="col-art-num" className="px-3 py-3.5 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-16">Art.</th>
+              <th data-demo="col-art-num" className="px-2 py-3.5 text-center text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-16">Art.</th>
               <th data-demo="col-art-num" className="px-2 py-3.5 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20">N°</th>
               <th data-demo="col-auteur-groupe" className="px-3 py-3.5 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-44 max-w-[180px]">Auteur(s)</th>
               <th data-demo="col-auteur-groupe" className="px-3 py-3.5 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-28">Groupe</th>
@@ -203,7 +210,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
               <th data-demo="col-commission" className="px-3 py-3.5 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-64 max-w-[260px]">Commission / Thèmes</th>
               <th data-demo="col-extrait" className="px-4 py-3.5 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider min-w-[240px]">Extrait du dispositif</th>
               <th data-demo="col-statut" className="px-3 py-3.5 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-36 whitespace-nowrap">Statut</th>
-              <th data-demo="col-actions" className="px-3 py-3.5 text-right text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20 whitespace-nowrap">Actions</th>
+              <th data-demo="col-actions" className="px-3 py-3.5 text-center text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-24 whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-[#0B0C10] divide-y divide-gray-200 dark:divide-gray-800">
@@ -238,8 +245,8 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   onClick={() => onSelect && onSelect(a.id)}
                   className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22] border-l-4 border-l-[#D91227]' : 'dark:bg-[#0B0C10] hover:bg-slate-50 dark:hover:bg-gray-900/50'}`}
                 >
-                  <td className="px-3 py-3 w-16 text-xs text-slate-800 dark:text-slate-200 align-top whitespace-nowrap" title={a.article}>
-                    {String(a.article || "—").replace(/^Article\s+/i, "")}
+                  <td className="px-2 py-3 w-16 text-xs font-semibold text-slate-800 dark:text-slate-200 text-center align-top whitespace-nowrap" title={a.article}>
+                    {formaterArticle(a.article)}
                   </td>
                   <td className="px-2 py-3 w-20 text-xs font-semibold text-slate-900 dark:text-white align-top whitespace-nowrap" title={a.numero}>
                     {a.numero}
@@ -300,8 +307,15 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-right text-xs font-medium w-20 align-top">
-                    <button onClick={(e) => { e.stopPropagation(); if (onDelete) onDelete(a.id); }} className="text-gray-400 hover:text-red-600 transition-colors">Retirer</button>
+                  <td className="px-3 py-3 whitespace-nowrap text-center text-xs font-medium w-24 align-top">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); if (onDelete) onDelete(a.id); }}
+                      className="inline-flex items-center justify-center rounded-md px-2 py-0.5 text-xs font-medium text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                      title="Retirer cet amendement de la liste de travail"
+                    >
+                      Retirer
+                    </button>
                   </td>
                 </tr>
               )
