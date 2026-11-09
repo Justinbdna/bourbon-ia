@@ -125,7 +125,8 @@ export function generateRtfPrejaune(amendments) {
       prefix = '\\b [Id.]\\b0  '
     }
     
-    const rawContent = `Adt n\u00b0 ${a.numero}${a.rectification ? ' ' + a.rectification : ''} de ${auteursText}`
+    const mentionTombant = a.alerte_tombant ? ` (${a.alerte_tombant})` : (a.tombe_si_adoption ? ` (⚠️ Tombe si adoption de ${a.parent_suppression_numero || 'suppression'})` : '')
+    const rawContent = `Adt n\u00b0 ${a.numero}${a.rectification ? ' ' + a.rectification : ''} de ${auteursText}${mentionTombant}`
     const escapedContent = prefix + rtfEscape(rawContent)
     
     parts.push(

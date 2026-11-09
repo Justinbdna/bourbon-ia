@@ -890,6 +890,64 @@ def test_sous_amendement_rattachement():
     assert idx_sous == idx_parent + 1
 
 
+def test_calculate_priorite_appel():
+    from api.deterministic_engine import calculate_priorite_appel
+    # 1. Suppression globale
+    p1, lib1 = calculate_priorite_appel("Supprimer cet article.", "ARTICLE PREMIER")
+    assert p1 == 1
+    assert "Suppression" in lib1
+
+    # 2. Rédaction globale
+    p2, lib2 = calculate_priorite_appel("Rédiger ainsi cet article : 'Le présent texte...'", "ARTICLE PREMIER")
+    assert p2 == 2
+    assert "Rédaction" in lib2
+
+    # 3. Suppression d'alinéa
+    p3, lib3 = calculate_priorite_appel("Supprimer l'alinéa 2.", "ALINEA 2")
+    assert p3 == 3
+    assert "Suppression" in lib3
+
+    # 4. Substitution
+    p4, lib4 = calculate_priorite_appel("À l'alinéa 2, substituer aux mots 'chat' le mot 'chien'.", "ALINEA 2")
+    assert p4 == 4
+    assert "Substitution" in lib4
+
+    # 5. Insertion / Adjonction
+    p5, lib5 = calculate_priorite_appel("Compléter cet article par l'alinéa suivant : '...'", "ARTICLE PREMIER")
+    assert p5 == 5
+    assert "Insertion" in lib5
+
+
+def test_amendements_tombants_detection():
+    from api.deterministic_engine import process_deterministic_sorting
+    from api.schemas import EnrichedAmendment
+
+    a1 = EnrichedAmendment(
+        amendement_uid="AMD-SUPPR",
+        numero_long="CD50",
+        article_vise="3 BIS",
+        dispositif_raw="Supprimer cet article.",
+        dispositif_clean="supprimer cet article",
+        expose_sommaire="Suppression de l'article.",
+    )
+    a2 = EnrichedAmendment(
+        amendement_uid="AMD-MODIF",
+        numero_long="CD51",
+        article_vise="3 BIS",
+        dispositif_raw="À l'alinéa 2, substituer les mots 'A' par 'B'.",
+        dispositif_clean="a l alinea 2 substituer les mots a par b",
+        expose_sommaire="Modification de l'alinéa 2.",
+    )
+    result = process_deterministic_sorting([a1, a2])
+    suppr = next(a for a in result if a.numero_long == "CD50")
+    modif = next(a for a in result if a.numero_long == "CD51")
+
+    assert suppr.priorite_appel == 1
+    assert suppr.tombe_si_adoption is False
+    assert modif.tombe_si_adoption is True
+    assert "CD50" in (modif.alerte_tombant or "")
+
+
 if __name__ == "__main__":
     tests = [
         test_normalize_strips_html,

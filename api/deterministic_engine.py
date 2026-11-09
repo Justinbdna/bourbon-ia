@@ -131,6 +131,47 @@ def classify_point_impact(dispositif_clean: str) -> tuple[int, PointImpact]:
     return (5, PointImpact.POINT_RESTREINT)
 
 
+def calculate_priorite_appel(dispositif_clean: str, point_impact: Optional[PointImpact]) -> tuple[int, str]:
+    """
+    Calcule le score d'éloignement et la priorité d'appel en séance (Règlement de l'AN, Art. 98) :
+      1. Suppression totale de l'article (score 1)
+      2. Rédaction globale de l'article (score 2)
+      3. Suppression d'alinéas (score 3)
+      4. Substitution ou réécriture partielle (score 4)
+      5. Amendements d'insertion ou d'adjonction (score 5)
+    """
+    text = (dispositif_clean or "").lower().strip()
+
+    if (
+        point_impact == PointImpact.SUPPRESSION_ARTICLE
+        or "supprimer cet article" in text
+        or re.search(r"supprimer\s+(?:cet\s+|l['’]?\s*)article", text)
+    ):
+        return (1, "Suppression totale de l'article")
+
+    if (
+        point_impact == PointImpact.REDACTION_GLOBALE_ARTICLE
+        or re.search(r"r[eé]diger\s+ainsi\s+(?:cet\s+|l['’]?\s*)article", text)
+    ):
+        return (2, "Rédaction globale de l'article")
+
+    if (
+        point_impact == PointImpact.SUPPRESSION_ALINEA
+        or re.search(r"supprimer\s+(?:l['’]|les\s+|cet\s+|l\s+)?alin[eé]as?", text)
+    ):
+        return (3, "Suppression d'alinéa")
+
+    if (
+        point_impact == PointImpact.REDACTION_ALINEA
+        or "substituer" in text
+        or "remplacer" in text
+        or re.search(r"r[eé]diger\s+ainsi\s+(?:l['’]|les\s+|cet\s+|l\s+)?alin[eé]as?", text)
+    ):
+        return (4, "Substitution ou réécriture partielle")
+
+    return (5, "Insertion ou adjonction")
+
+
 _ALINEA_REGEX = re.compile(r"\balin[eé]as?\s*(\d+)", re.IGNORECASE)
 
 
@@ -450,32 +491,27 @@ def _get_alinea_int_for_sort(amend: EnrichedAmendment) -> int:
 
 def get_article_internal_sort_key(amend: EnrichedAmendment) -> tuple:
     """
-    Ordre de priorité réglementaire strict de l'Assemblée nationale au sein d'un article :
-      1. SUPPRESSION_ARTICLE
-      2. REDACTION_GLOBALE_ARTICLE
-      3. Numéro d'alinéa croissant (avec suppression alinéa < rédaction alinéa < point restreint)
-      4. Amendements de commission / rapporteur prioritaires
-      5. Ordre de dépôt
+    Ordre de priorité réglementaire strict de l'Assemblée nationale au sein d'un article (Art. 98) :
+      1. Priorité d'appel (1 = Suppression totale, 2 = Rédaction globale, 3 = Suppression alinéa, 4 = Substitution, 5 = Insertion)
+      2. Numéro d'alinéa croissant
+      3. Amendements de commission / rapporteur prioritaires
+      4. Ordre de dépôt
     """
-    if amend.point_impact == PointImpact.SUPPRESSION_ARTICLE:
-        prio_type = 1
+    prio_type = getattr(amend, "priorite_appel", None) or 5
+    if prio_type in (1, 2):
         alinea_num = 0
-        sub_type = 0
-    elif amend.point_impact == PointImpact.REDACTION_GLOBALE_ARTICLE:
-        prio_type = 2
-        alinea_num = 0
-        sub_type = 0
     else:
-        prio_type = 3
         alinea_num = _get_alinea_int_for_sort(amend)
-        if amend.point_impact == PointImpact.SUPPRESSION_ALINEA:
-            sub_type = 1
-        elif amend.point_impact == PointImpact.REDACTION_ALINEA:
-            sub_type = 2
-        elif amend.point_impact == PointImpact.POINT_RESTREINT:
-            sub_type = 3
-        else:
-            sub_type = 4
+
+    sub_type = 0
+    if amend.point_impact == PointImpact.SUPPRESSION_ALINEA:
+        sub_type = 1
+    elif amend.point_impact == PointImpact.REDACTION_ALINEA:
+        sub_type = 2
+    elif amend.point_impact == PointImpact.POINT_RESTREINT:
+        sub_type = 3
+    else:
+        sub_type = 4
 
     prio_rapporteur = 0 if amend.est_rapporteur else 1
 
@@ -524,6 +560,16 @@ def process_deterministic_sorting(
         amend.dispositif_clean = normalize_text(amend.dispositif_raw)
         priority, impact = classify_point_impact(amend.dispositif_clean)
         amend.point_impact = impact
+
+        # Priorité d'appel en séance (Art. 98 du Règlement AN)
+        prio_appel, lib_appel = calculate_priorite_appel(amend.dispositif_clean, impact)
+        amend.priorite_appel = prio_appel
+        amend.libelle_appel = lib_appel
+
+        # Détection Cavalier législatif Art. 45
+        if amend.commission_hors_champ:
+            amend.est_cavalier_art45 = True
+            amend.alerte_art45 = "⚠️ Risque Art. 45 (Lien indirect douteux)"
 
         # Détection du gage financier Art. 40
         amend.est_gage = detect_gage_financier(amend.dispositif_raw or amend.dispositif_clean, amend.raw_dict)
@@ -709,6 +755,30 @@ def process_deterministic_sorting(
             f"Amendement de séance plénière sur {amend.article_vise or 'article non spécifié'} : "
             f"classé en discussion commune."
         )
+
+    # ── Phase 4ter : Détection des amendements tombants (Chute par ricochet) ──
+    # Si un amendement de suppression totale d'article (priorité 1) est adopté,
+    # tous les autres amendements portant sur cet article tombent automatiquement.
+    amends_par_article = defaultdict(list)
+    for a in amendments:
+        art_key = (a.article_vise or "ART_INCONNU").strip().upper()
+        amends_par_article[art_key].append(a)
+
+    for art_key, art_amends in amends_par_article.items():
+        suppr_amend = next(
+            (
+                a for a in art_amends
+                if a.priorite_appel == 1 or a.point_impact == PointImpact.SUPPRESSION_ARTICLE
+            ),
+            None
+        )
+        if suppr_amend:
+            for other in art_amends:
+                if other.amendement_uid != suppr_amend.amendement_uid and other.priorite_appel > 1:
+                    other.parent_suppression_id = suppr_amend.amendement_uid
+                    other.parent_suppression_numero = suppr_amend.numero_long or suppr_amend.amendement_uid
+                    other.tombe_si_adoption = True
+                    other.alerte_tombant = f"⚠️ Tombe si adoption de {other.parent_suppression_numero}"
 
     # ── Phase 5 : Tri stable officiel (article parlementaire, priorité interne AN, sous-amendements) ──
     amendments.sort(key=lambda a: (

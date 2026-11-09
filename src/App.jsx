@@ -363,6 +363,27 @@ export default function App() {
     if (aRetirer.has(selectedId)) setSelectedId(null)
   }
 
+  function handleArbitrage(id, nouveauStatut) {
+    setAmendments((prev) =>
+      prev.map((a) => {
+        if (a.id === id || a.uid === id) {
+          const resIa = a.resultat_ia ? { ...a.resultat_ia } : {}
+          resIa.statut = nouveauStatut
+          resIa.analyse_intention = `✍️ Statut requalifié manuellement en « ${nouveauStatut} » par l'administrateur.`
+          return {
+            ...a,
+            statut: nouveauStatut,
+            statut_mecanique: nouveauStatut,
+            arbitre_manuellement: true,
+            date_arbitrage: new Date().toISOString(),
+            resultat_ia: resIa,
+          }
+        }
+        return a
+      })
+    )
+  }
+
   function handleExport() {
     const fileName = window.prompt("Comment souhaitez-vous nommer ce fichier d'export ?", "amendements_export")
     if (fileName === null) return
@@ -516,6 +537,7 @@ export default function App() {
               onReorder={handleReorder}
               onDelete={handleDelete}
               onDeleteDoublons={handleDeleteDoublons}
+              onArbitrage={handleArbitrage}
               isClassifying={isClassifying}
               onExportJson={handleExport}
             />
@@ -523,6 +545,7 @@ export default function App() {
           <div className="w-full">
             <AmendmentDetail
               amendment={selected}
+              allAmendments={amendments}
               onClose={() => setSelectedId(null)}
               isLoading={isClassifying && selected && !selected.resultat_ia}
               aiSettings={aiSettings}

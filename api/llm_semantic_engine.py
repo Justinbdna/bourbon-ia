@@ -273,12 +273,18 @@ Tu n'as PAS à classer par ordre de priorité (suppression, rédaction globale, 
 Renvoie UNIQUEMENT un objet JSON, sans texte avant ni après, sans balise Markdown. Les clés doivent apparaître dans cet ordre EXACT :
 
 {
-  "analyse_intention": "<ce que l'auteur modifie concrètement : point d'impact et effet juridique>",
+  "analyse_intention": "• Conflit légistique : <point d'impact précis et collision>\n• Clivage politique : <divergence entre les groupes politiques>\n• Conséquence du vote : <conséquence directe de l'adoption>",
   "analyse_politique": "<positionnement du groupe, stratégie de dépôt, lien avec le dossier>",
   "statut": "Similaire" | "Discussion commune" | "Isolé",
   "id_discussion_cible": "<identifiant copié d'un candidat>" | null,
   "niveau_confiance": <nombre entre 0.0 et 1.0>
 }
+
+RÈGLE IMPÉRATIVE POUR analyse_intention :
+Tu dois STRICTEMENT structurer "analyse_intention" en ces 3 points clairs lisibles en 5 secondes par un administrateur :
+• Conflit légistique : [Collision ou concurrence sur l'article/alinéa précis]
+• Clivage politique : [Divergence entre groupes ou auteurs]
+• Conséquence du vote : [Effet direct du vote : adoption de l'un fait tomber l'autre, ou discussion commune prioritaire]
 
 Tu dois remplir "analyse_intention" et "analyse_politique" AVANT de choisir "statut" : ton raisonnement doit précéder ta conclusion.
 
@@ -428,14 +434,40 @@ def generate_classification_prompt(
         f"<TEXTE_AMENDEMENT type=\"expose_sommaire\">\n{_tronquer_intelligemment(amd.get('exposeSommaire'), MAX_EXPOSE_CHARS) or 'Non renseigné'}\n</TEXTE_AMENDEMENT>",
     ]
 
-    # ── Injection du texte de loi de référence (Chantier 2) ──
+    # ── Injection du texte de loi de référence et de l'alinéa cible (RAG contextuel) ──
     if texte_ref:
         article_nom = amd.get("divisionArticleDesignation") or "Article"
+        dispositif_am = str(amd.get("dispositif") or "")
+        
+        m_al = re.search(r"\balin[eé]as?\s*(\d+)", dispositif_am, re.IGNORECASE)
+        alinea_cible_extrait = None
+        num_al = None
+        if m_al:
+            num_al = m_al.group(1)
+            pattern_al = rf"(?:^|\n)(?:Alinéa\s*{num_al}|{num_al}°|I\.\s*-\s*Alinéa\s*{num_al}|(?:\n\s*){num_al}\s*[\.-])\s*([^\n]+(?:\n(?!\d+[\.-]|\bAlinéa)[^\n]+)*)"
+            trouve = re.search(pattern_al, str(texte_ref), re.IGNORECASE)
+            if trouve:
+                alinea_cible_extrait = trouve.group(0).strip()
+
         lignes.extend([
             "",
             f'<TEXTE_LOI_INITIAL article="{article_nom}">',
             str(texte_ref).strip(),
             "</TEXTE_LOI_INITIAL>",
+        ])
+
+        if alinea_cible_extrait:
+            lignes.extend([
+                "",
+                f'<ALINEA_CIBLE_INITIAL numero="{num_al}">',
+                alinea_cible_extrait,
+                "</ALINEA_CIBLE_INITIAL>",
+                "",
+                f"⚠️ FOCUS CHIRURGICAL : L'amendement cible expressément l'alinéa {num_al} extrait ci-dessus. "
+                f"Compare directement les mots du dispositif aux termes exacts de cet alinéa d'origine.",
+            ])
+
+        lignes.extend([
             "",
             "Consigne stricte : Tu dois analyser l'impact des amendements en concurrence PAR RAPPORT au texte de loi initial ci-dessus. "
             "Deux amendements modifiant la même phrase du texte initial ou ayant des effets incompatibles doivent être classés en 'Discussion commune'.",

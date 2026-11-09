@@ -8,6 +8,7 @@ import BilanClassement from './amendment/BilanClassement'
 import { calculerBilan, categorieAmendement, estDoublon, estEcarte, estSeancePleniere } from '../utils/bilan'
 import { TRIS, trierEntrees } from '../utils/tri'
 import { downloadRtf } from '../utils/exportRtf'
+import { downloadEloiJson } from '../utils/exportEloi'
 import { stripHtmlForDisplay } from '../utils/sanitize'
 
 const PAGE_SIZE = 25
@@ -64,25 +65,53 @@ function formaterArticle(art) {
   return texte.replace(/^article\s+/i, '')
 }
 
-export default function AmendmentTable({ amendments, source, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, onExportJson }) {
+export default function AmendmentTable({ amendments, source, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, onArbitrage, isClassifying, onExportJson }) {
   const [currentPage, setCurrentPage] = useState(0)
-  const [filtre, setFiltre] = useState({ motCle: '', auteur: '' })
+  const [filtre, setFiltre] = useState({ article: '', groupe: '', motCle: '', auteur: '' })
   const [masquerEcartes, setMasquerEcartes] = useState(false)
   // Catégorie choisie dans le bandeau de bilan ('' = toutes).
   const [categorieFiltre, setCategorieFiltre] = useState('')
   const [tri, setTri] = useState('recent')
 
-  // Options de la recherche : mots-clés (avec effectif) et auteurs distincts.
+  // Options de la recherche : mots-clés, auteurs, articles et groupes distincts.
   const optionsRecherche = useMemo(() => {
     const parMot = new Map()
+    const parArticle = new Map()
+    const parGroupe = new Map()
     const auteurs = new Set()
+
     for (const a of amendments) {
-      for (const mot of new Set(a.commission_mots_cles || [])) parMot.set(mot, (parMot.get(mot) || 0) + 1)
-      for (const nom of auteursEnListe(a)) auteurs.add(nom)
+      for (const mot of new Set(a.commission_mots_cles || [])) {
+        parMot.set(mot, (parMot.get(mot) || 0) + 1)
+      }
+      for (const nom of auteursEnListe(a)) {
+        auteurs.add(nom)
+      }
+      const art = formaterArticle(a.article)
+      if (art && art !== '—') {
+        parArticle.set(art, (parArticle.get(art) || 0) + 1)
+      }
+      const grp = a.groupe_politique || a.groupe || a.groupRef || ''
+      if (grp) {
+        parGroupe.set(grp, (parGroupe.get(grp) || 0) + 1)
+      }
     }
+
+    // Tri naturel des articles (ex. 1er, 2, 3...)
+    const articles = [...parArticle].map(([art, nb]) => ({ article: art, nb })).sort((x, y) => {
+      const numX = parseInt(x.article.replace(/\D/g, ''), 10) || 0
+      const numY = parseInt(y.article.replace(/\D/g, ''), 10) || 0
+      if (numX !== numY) return numX - numY
+      return x.article.localeCompare(y.article, 'fr')
+    })
+
+    const groupes = [...parGroupe].map(([grp, nb]) => ({ groupe: grp, nb })).sort((x, y) => x.groupe.localeCompare(y.groupe, 'fr'))
+
     return {
       motsCles: [...parMot].map(([mot, nb]) => ({ mot, nb })).sort((x, y) => x.mot.localeCompare(y.mot, 'fr')),
       auteurs: [...auteurs].sort((x, y) => x.localeCompare(y, 'fr')),
+      articles,
+      groupes,
     }
   }, [amendments])
 
@@ -90,6 +119,9 @@ export default function AmendmentTable({ amendments, source, selectedId, onSelec
   // (onReorder) travaille sur la liste complète, pas sur la liste filtrée.
   const filtres = useMemo(() => {
     const auteurCherche = normaliser(filtre.auteur)
+    const articleCherche = normaliser(filtre.article)
+    const groupeCherche = normaliser(filtre.groupe)
+
     const liste = amendments
       .map((a, idx) => ({ a, idx }))
       .filter(({ a }) => {
@@ -99,6 +131,17 @@ export default function AmendmentTable({ amendments, source, selectedId, onSelec
         } else if (categorieFiltre && categorieAmendement(a) !== categorieFiltre) return false
         if (filtre.motCle && !(a.commission_mots_cles || []).includes(filtre.motCle)) return false
         if (auteurCherche && !normaliser(auteursEnListe(a).join(', ')).includes(auteurCherche)) return false
+        if (articleCherche) {
+          const artNorm = normaliser(a.article)
+          const artFormate = normaliser(formaterArticle(a.article))
+          if (artNorm !== articleCherche && artFormate !== articleCherche && !artNorm.includes(articleCherche)) {
+            return false
+          }
+        }
+        if (groupeCherche) {
+          const grpAmd = normaliser(a.groupe_politique || a.groupe || a.groupRef || '')
+          if (grpAmd !== groupeCherche && !grpAmd.includes(groupeCherche)) return false
+        }
         return true
       })
     return trierEntrees(liste, tri)
@@ -155,6 +198,13 @@ export default function AmendmentTable({ amendments, source, selectedId, onSelec
     if (fileName === null) return
     const finalName = fileName.trim() || "amendements_export"
     downloadRtf(amendments, `${finalName}.rtf`)
+  }
+
+  function handleExportEloi() {
+    const fileName = window.prompt("Comment souhaitez-vous nommer ce fichier d'export Éloi ?", "amendements_eloi")
+    if (fileName === null) return
+    const finalName = fileName.trim() || "amendements_eloi"
+    downloadEloiJson(amendments, `${finalName}.json`)
   }
 
   return (
@@ -214,6 +264,8 @@ export default function AmendmentTable({ amendments, source, selectedId, onSelec
       <AmendmentSearchBar
         motsCles={optionsRecherche.motsCles}
         auteurs={optionsRecherche.auteurs}
+        articles={optionsRecherche.articles}
+        groupes={optionsRecherche.groupes}
         filtre={filtre}
         onRechercher={handleRechercher}
         nbResultats={filtres.length}
@@ -310,13 +362,31 @@ export default function AmendmentTable({ amendments, source, selectedId, onSelec
                     )}
                   </td>
                   <td className="px-3 py-3 text-xs text-slate-800 dark:text-slate-200 w-36 align-top">
-                    <ImpactBadge
-                      type={
-                        typeof a.point_impact === 'string'
-                          ? a.point_impact
-                          : (a.point_impact?.type || '')
-                      }
-                    />
+                    <div className="flex flex-col gap-1 items-start">
+                      <ImpactBadge
+                        type={
+                          typeof a.point_impact === 'string'
+                            ? a.point_impact
+                            : (a.point_impact?.type || '')
+                        }
+                      />
+                      {a.alerte_tombant && (
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800 shadow-xs"
+                          title={`Cet amendement devient sans objet (tombe) si l'amendement ${a.parent_suppression_numero || 'de suppression'} est adopté.`}
+                        >
+                          <span aria-hidden="true">⚠️</span> {a.alerte_tombant}
+                        </span>
+                      )}
+                      {a.est_cavalier_art45 && (
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shadow-xs"
+                          title="Signal faible de cavalier législatif (Article 45 de la Constitution) : absence de lien direct ou indirect constaté avec le texte."
+                        >
+                          <span aria-hidden="true">⚖️</span> Risque Art. 45
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-3 text-xs w-64 max-w-[260px] align-top">
                     <CommissionKeywords
@@ -330,23 +400,78 @@ export default function AmendmentTable({ amendments, source, selectedId, onSelec
                     <ExtraitDispositif text={a.dispositif} />
                   </td>
                   <td className="px-3 py-3 text-xs whitespace-nowrap align-top w-36">
-                    <div className="flex items-center gap-1">
-                      <GroupeBadge statut={statutToDisplay} groupe={groupe} isPending={isPending} />
-                      {/* 💡 Tooltip Chain of Thought (inline) */}
-                      {a.resultat_ia?.analyse_intention && (
-                        <div className="group relative inline-flex">
-                          <span className="cursor-help text-sm" title={a.resultat_ia.analyse_intention}>💡</span>
-                          <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bottom-full right-0 mb-2 w-64 bg-slate-900 text-white text-xs rounded-lg shadow-xl p-2.5 leading-relaxed">
-                            <p className="font-semibold text-amber-300 mb-1">
-                              {(statutToDisplay === 'Identique' || a.resultat_ia.analyse_intention?.startsWith('Détecté mécaniquement')) ? '⚙️ Tri Mécanique' : '🧠 Raisonnement IA'}
-                            </p>
-                            <p>{a.resultat_ia.analyse_intention}</p>
-                            {a.resultat_ia.niveau_confiance != null && (
-                              <p className="text-slate-400 mt-1">Confiance : {(a.resultat_ia.niveau_confiance * 100).toFixed(0)}%</p>
-                            )}
-                            <div className="absolute top-full right-4 -mt-[1px] border-4 border-transparent border-t-slate-900" />
+                    <div className="flex flex-col gap-1 items-start">
+                      <div className="flex items-center gap-1.5">
+                        {isPending ? (
+                          <GroupeBadge statut={statutToDisplay} groupe={groupe} isPending={isPending} />
+                        ) : (
+                          <div className="relative group/arbitrage inline-flex items-center">
+                            <select
+                              value={
+                                (statutToDisplay || '').includes('commune')
+                                  ? 'Discussion commune'
+                                  : ((statutToDisplay || '').includes('identique')
+                                      ? 'Identique'
+                                      : ((statutToDisplay || '').includes('doublon')
+                                          ? 'Doublon'
+                                          : ((statutToDisplay || '').includes('écarte') || (statutToDisplay || '').includes('écarté')
+                                              ? 'Écarté'
+                                              : 'Isolé')))
+                              }
+                              onChange={(e) => {
+                                e.stopPropagation()
+                                if (onArbitrage) onArbitrage(a.id, e.target.value)
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className={`cursor-pointer text-xs font-semibold rounded-full pl-2.5 pr-5 py-0.5 border appearance-none transition-all focus:outline-none focus:ring-2 focus:ring-[#D91227]/40 ${
+                                (statutToDisplay || '').includes('commune')
+                                  ? 'bg-purple-100 text-purple-900 border-purple-300 dark:bg-purple-950/60 dark:text-purple-200 dark:border-purple-800'
+                                  : ((statutToDisplay || '').includes('identique')
+                                      ? 'bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-950/60 dark:text-blue-200 dark:border-blue-800'
+                                      : ((statutToDisplay || '').includes('doublon') || (statutToDisplay || '').includes('écarte') || (statutToDisplay || '').includes('écarté')
+                                          ? 'bg-rose-100 text-rose-900 border-rose-300 dark:bg-rose-950/60 dark:text-rose-200 dark:border-rose-800'
+                                          : 'bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700'))
+                              }`}
+                              title="Requalification manuelle en 1 clic (Human-in-the-Loop)"
+                            >
+                              <option value="Discussion commune">Discussion commune</option>
+                              <option value="Identique">Identique</option>
+                              <option value="Isolé">Isolé</option>
+                              <option value="Écarté">Écarté</option>
+                              <option value="Doublon">Doublon</option>
+                            </select>
+                            <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-500">
+                              ▼
+                            </span>
                           </div>
-                        </div>
+                        )}
+
+                        {/* 💡 Tooltip Chain of Thought (inline) */}
+                        {a.resultat_ia?.analyse_intention && (
+                          <div className="group relative inline-flex">
+                            <span className="cursor-help text-sm" title={a.resultat_ia.analyse_intention}>💡</span>
+                            <div className="pointer-events-none absolute z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bottom-full right-0 mb-2 w-64 bg-slate-900 text-white text-xs rounded-lg shadow-xl p-2.5 leading-relaxed">
+                              <p className="font-semibold text-amber-300 mb-1">
+                                {(statutToDisplay === 'Identique' || a.resultat_ia.analyse_intention?.startsWith('Détecté mécaniquement')) ? '⚙️ Tri Mécanique' : '🧠 Raisonnement IA'}
+                              </p>
+                              <p>{a.resultat_ia.analyse_intention}</p>
+                              {a.resultat_ia.niveau_confiance != null && (
+                                <p className="text-slate-400 mt-1">Confiance : {(a.resultat_ia.niveau_confiance * 100).toFixed(0)}%</p>
+                              )}
+                              <div className="absolute top-full right-4 -mt-[1px] border-4 border-transparent border-t-slate-900" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Pastille Arbitré manuellement */}
+                      {a.arbitre_manuellement && (
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 shadow-xs"
+                          title="Statut arbitré manuellement par l'administrateur"
+                        >
+                          <span>✍️</span> Arbitré
+                        </span>
                       )}
                     </div>
                   </td>
@@ -414,6 +539,15 @@ export default function AmendmentTable({ amendments, source, selectedId, onSelec
               Exporter en JSON
             </button>
           )}
+          <button
+            type="button"
+            disabled={amendments.length === 0}
+            onClick={handleExportEloi}
+            className="w-full sm:w-auto rounded-md bg-[#D91227] text-white px-3 py-1.5 text-xs sm:text-sm font-semibold hover:bg-[#b00f20] disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap text-center shadow-xs"
+            title="Export au format standardisé AN Éloi / LexImpact"
+          >
+            📋 Export Éloi (AN)
+          </button>
           <button
             type="button"
             disabled={amendments.length === 0}

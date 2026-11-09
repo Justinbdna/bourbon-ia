@@ -31,6 +31,7 @@ try:
         normalize_text,
         strip_html_for_display,
         detect_gage_financier,
+        calculate_priorite_appel,
     )
     from api.schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
     from api.llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
@@ -49,6 +50,7 @@ except ModuleNotFoundError:
         normalize_text,
         strip_html_for_display,
         detect_gage_financier,
+        calculate_priorite_appel,
     )
     from schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
     from llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
@@ -294,6 +296,15 @@ def _enrichir_a_import(resultat: dict, source: dict, signataires=None) -> dict:
                 resultat["commission_libelle"] = com.get("commission_libelle", "")
                 resultat["commission_mots_cles"] = com.get("commission_mots_cles", [])
                 resultat["commission_hors_champ"] = com.get("commission_hors_champ", False)
+
+        # ── Priorité d'appel (Art. 98) & Cavalier législatif (Art. 45) ──
+        dispo = resultat.get("dispositif", "") or source.get("dispositif", "")
+        prio_appel, lib_appel = calculate_priorite_appel(dispo, None)
+        resultat["priorite_appel"] = prio_appel
+        resultat["libelle_appel"] = lib_appel
+        if resultat.get("commission_hors_champ"):
+            resultat["est_cavalier_art45"] = True
+            resultat["alerte_art45"] = "⚠️ Risque Art. 45 (Lien indirect douteux)"
     except Exception as exc:  # noqa: BLE001
         logging.debug(f"Enrichissement à l'import ignoré : {exc}")
     return resultat
@@ -825,6 +836,20 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         "statut_mecanique": amend.statut_mecanique,
         "justification_mecanique": amend.justification_mecanique,
         "groupe_identique_id": amend.groupe_identique_id,
+
+        # ── Ordre d'appel en séance (Art. 98 Règlement AN) ──
+        "priorite_appel": getattr(amend, "priorite_appel", 5) or 5,
+        "libelle_appel": getattr(amend, "libelle_appel", ""),
+
+        # ── Amendements tombants (Chute par ricochet) ──
+        "parent_suppression_id": getattr(amend, "parent_suppression_id", None),
+        "parent_suppression_numero": getattr(amend, "parent_suppression_numero", None),
+        "tombe_si_adoption": getattr(amend, "tombe_si_adoption", False),
+        "alerte_tombant": getattr(amend, "alerte_tombant", None),
+
+        # ── Cavalier législatif (Article 45 de la Constitution) ──
+        "est_cavalier_art45": getattr(amend, "est_cavalier_art45", False),
+        "alerte_art45": getattr(amend, "alerte_art45", None),
     }
 
     # ── Résultat LLM sémantique (si disponible) ──

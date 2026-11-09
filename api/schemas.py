@@ -114,6 +114,20 @@ class EnrichedAmendment(BaseModel):
     texte_loi_reference: Optional[str] = Field(None, description="Texte initial de l'article de loi de référence")
     amendement_parent_ref: Optional[str] = Field(None, description="Référence de l'amendement parent s'il s'agit d'un sous-amendement")
     est_gage: bool = Field(False, description="True si l'amendement comporte une formule de gage financier au titre de l'Art. 40")
+
+    # ── Amendements tombants (Chute par ricochet) ──
+    parent_suppression_id: Optional[str] = Field(None, description="UID de l'amendement de suppression totale dont dépend la chute")
+    parent_suppression_numero: Optional[str] = Field(None, description="Numéro d'affichage de l'amendement de suppression totale (ex: CD50)")
+    tombe_si_adoption: bool = Field(False, description="True si cet amendement tombe en cas d'adoption de la suppression totale")
+    alerte_tombant: Optional[str] = Field(None, description="Mention d'alerte : ⚠️ Tombe si adoption de CD50")
+
+    # ── Ordre d'appel en séance (Règlement AN, Art. 98) ──
+    priorite_appel: int = Field(5, description="Score d'éloignement / priorité d'appel en séance (1 = suppression globale, 5 = adjonction)")
+    libelle_appel: str = Field("", description="Libellé légistique de l'appel")
+
+    # ── Cavalier législatif (Article 45 de la Constitution) ──
+    est_cavalier_art45: bool = Field(False, description="True si risque avéré de cavalier législatif (absence de lien direct ou indirect)")
+    alerte_art45: Optional[str] = Field(None, description="Mention d'alerte : ⚠️ Risque Art. 45 (Lien indirect douteux)")
     
     raw_dict: dict = Field(default_factory=dict, description="Données d'origine pour préserver les métadonnées")
 
