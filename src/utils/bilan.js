@@ -9,6 +9,14 @@
 
 export const CATEGORIES = ['commune', 'identique', 'doublon', 'ecarte', 'isole', 'attente', 'erreur']
 
+// Organe des amendements examinés en séance plénière (hémicycle).
+const ORGANE_SEANCE = 'PO838901'
+
+/** Amendement examiné en séance plénière (filtre transversal aux catégories). */
+export function estSeancePleniere(a) {
+  return a?.commission_ref === ORGANE_SEANCE
+}
+
 // Doublon = même texte, même auteur, même commission (moteur déterministe).
 export function estDoublon(a) {
   return a.statut_mecanique === 'DOUBLON_MECANIQUE' || a.resultat_ia?.statut === 'Doublon'
@@ -45,7 +53,8 @@ export function categorieAmendement(a) {
 
 /**
  * Bilan du classement : effectif par catégorie, nombre d'amendements triés
- * sans IA (moteur déterministe) et nombre analysés par l'IA.
+ * sans IA (moteur déterministe), nombre analysés par l'IA, et nombre
+ * d'amendements de séance plénière (`seance`, qui recoupe les catégories).
  * `classes` vaut 0 tant que le classement n'a pas été lancé.
  */
 export function calculerBilan(amendments) {
@@ -53,15 +62,17 @@ export function calculerBilan(amendments) {
   let classes = 0
   let sansIA = 0
   let parIA = 0
+  let seance = 0
 
   for (const a of amendments) {
     const categorie = categorieAmendement(a)
     if (!categorie) continue
     classes++
     parCategorie[categorie]++
+    if (estSeancePleniere(a)) seance++
     if (a._skipLLM || a.skip_llm || a.statut_mecanique !== 'NOUVEAU') sansIA++
     else if (categorie !== 'attente' && categorie !== 'erreur') parIA++
   }
 
-  return { total: amendments.length, classes, sansIA, parIA, parCategorie }
+  return { total: amendments.length, classes, sansIA, parIA, seance, parCategorie }
 }

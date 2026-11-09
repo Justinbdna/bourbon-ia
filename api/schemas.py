@@ -28,6 +28,7 @@ class StatutMecanique(str, Enum):
     DOUBLON_MECANIQUE = "DOUBLON_MECANIQUE"        # Même dispositif, même auteur
     IDENTIQUE_OFFICIEL = "IDENTIQUE_OFFICIEL"      # Marqué par l'AN via discussionIdentique
     ISOLE_MECANIQUE = "ISOLE_MECANIQUE"            # Seul sur sa zone d'impact (skip LLM)
+    SEANCE_PLENIERE = "SEANCE_PLENIERE"            # Séance plénière → discussion commune (skip LLM)
 
 
 # ──────────────────────────────────────────────────────────────────────────

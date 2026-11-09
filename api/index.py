@@ -335,6 +335,10 @@ def normaliser_amendement(data, index: int = 0) -> dict:
                 "exposeSommaire": expose_sommaire,
                 "auteur": auteur
             }
+            # Commission saisie au fond (import « Depuis l'Assemblée ») : conservée
+            # pour que le tri retrouve les thèmes des amendements de séance plénière.
+            if am.get("commissionFondRef"):
+                resultat["commissionFondRef"] = am["commissionFondRef"]
             return _enrichir_a_import(resultat, am, signataires)
 
         # Données déjà plates (ex: sampleAmendments.json)
@@ -800,6 +804,13 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
             couleur = amend.alerte_couleur or "orange"
             intention = f"Détecté mécaniquement : {amend.justification_mecanique}"
             politique = "Classification déterministe (100 % fiable, sans IA)."
+            confiance = 1.0
+        elif amend.statut_mecanique == StatutMecanique.SEANCE_PLENIERE:
+            # Règle de l'équipe : séance plénière → discussion commune (sans IA).
+            statut_display = "Discussion commune"
+            couleur = amend.alerte_couleur or "orange"
+            intention = f"Détecté mécaniquement : {amend.justification_mecanique}"
+            politique = "Classement par règle (séance plénière), sans IA."
             confiance = 1.0
         else:
             statut_display = "Identique" # Strict mapping anti-jargon

@@ -39,6 +39,11 @@ except ModuleNotFoundError:
         def resolve_signataires(x): return {"auteurs_formatte": str(x) if x else "", "groupe_principal": "", "est_rapporteur": False}
         MAPPING_ORGANES_XVII = {}
 
+try:
+    from api.commissions_resolver import ORGANE_SEANCE
+except ModuleNotFoundError:
+    from commissions_resolver import ORGANE_SEANCE
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # Étape 1 : Normalisation textuelle
@@ -680,6 +685,26 @@ def process_deterministic_sorting(
                     else:
                         # Tous identiques dans ce cluster : le référent reste NOUVEAU
                         amend.skip_llm = False
+
+    # ── Phase 4bis : Séance plénière → discussion commune (choix de l'équipe) ──
+    # Les amendements examinés en séance plénière, encore isolés ou en attente
+    # d'IA, sont regroupés en discussion commune sans passer par l'IA. Les
+    # identiques, doublons et amendements irrecevables / retirés / vides
+    # gardent leur statut.
+    for amend in amendments:
+        if amend.commission_ref != ORGANE_SEANCE:
+            continue
+        if amend.statut_mecanique not in (StatutMecanique.NOUVEAU, StatutMecanique.ISOLE_MECANIQUE):
+            continue
+        if is_boilerplate_or_empty(amend.dispositif_clean) or is_boilerplate_or_empty(amend.dispositif_raw):
+            continue
+        amend.statut_mecanique = StatutMecanique.SEANCE_PLENIERE
+        amend.skip_llm = True
+        amend.alerte_couleur = "orange"
+        amend.justification_mecanique = (
+            f"Amendement de séance plénière sur {amend.article_vise or 'article non spécifié'} : "
+            f"classé en discussion commune."
+        )
 
     # ── Phase 5 : Tri stable officiel (article parlementaire, priorité interne AN, sous-amendements) ──
     amendments.sort(key=lambda a: (

@@ -29,6 +29,16 @@ describe('bilan.js — catégories et bilan du classement', () => {
     expect(categorieAmendement(amdt('NOUVEAU', { statut: 'Erreur IA', analyse_intention: '⚠️ Impossible de joindre l\'IA' }))).toBe('erreur')
   })
 
+  it('compte les amendements de séance plénière, rangés en discussion commune', () => {
+    const seance = amdt('SEANCE_PLENIERE', { statut: 'Discussion commune', analyse_intention: 'Détecté mécaniquement' }, { commission_ref: 'PO838901' })
+    const commission = amdt('ISOLE_MECANIQUE', { statut: 'Isolé' }, { commission_ref: 'PO419604' })
+
+    const bilan = calculerBilan([seance, commission])
+
+    expect(categorieAmendement(seance)).toBe('commune')
+    expect(bilan).toMatchObject({ seance: 1, sansIA: 2 })
+  })
+
   it('compte les triés sans IA et les analysés par l\'IA', () => {
     const bilan = calculerBilan([
       amdt('DOUBLON_MECANIQUE', { statut: 'Doublon' }),

@@ -3,15 +3,17 @@
  *
  * Une tuile par catégorie (discussions communes, identiques, doublons,
  * écartés, isolés ; « en attente d'IA » et « erreurs IA » seulement s'il y en
- * a). Cliquer une tuile filtre le tableau sur cette catégorie ; la recliquer
- * retire le filtre. Une ligne indique la part triée sans IA.
+ * a), plus « Séance plénière », filtre transversal : ces amendements sont aussi
+ * comptés dans leur catégorie (en discussion commune, par règle de l'équipe).
+ * Cliquer une tuile filtre le tableau ; la recliquer retire le filtre. Une
+ * ligne indique la part triée sans IA.
  */
 
 const TUILES = [
   {
     cle: 'commune',
     libelle: 'Discussions communes',
-    aide: 'Amendements concurrents sur le même passage, à discuter ensemble.',
+    aide: 'Amendements concurrents sur le même passage, à discuter ensemble — dont tous ceux de séance plénière.',
     style: 'border-purple-200 bg-purple-50 text-purple-900 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-200',
     actif: 'ring-purple-500',
   },
@@ -44,6 +46,14 @@ const TUILES = [
     actif: 'ring-slate-500',
   },
   {
+    cle: 'seance',
+    libelle: 'Séance plénière',
+    aide: "Amendements examinés en séance plénière (dans l'hémicycle), classés en discussion commune.",
+    style: 'border-indigo-200 bg-indigo-50 text-indigo-900 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200',
+    actif: 'ring-indigo-500',
+    compte: (bilan) => bilan.seance,
+  },
+  {
     cle: 'attente',
     libelle: "En attente d'IA",
     aide: "Cas ambigus pas encore analysés par l'IA : lancez le classement.",
@@ -64,7 +74,8 @@ const TUILES = [
 export default function BilanClassement({ bilan, categorieActive, onFiltrer }) {
   if (!bilan || bilan.classes === 0) return null
 
-  const tuiles = TUILES.filter((t) => !t.siPresent || bilan.parCategorie[t.cle] > 0)
+  const compter = (t) => (t.compte ? t.compte(bilan) : bilan.parCategorie[t.cle])
+  const tuiles = TUILES.filter((t) => !t.siPresent || compter(t) > 0)
   const partSansIA = Math.round((bilan.sansIA / bilan.classes) * 100)
 
   return (
@@ -75,7 +86,7 @@ export default function BilanClassement({ bilan, categorieActive, onFiltrer }) {
     >
       <div className="flex flex-wrap gap-2">
         {tuiles.map((t) => {
-          const nb = bilan.parCategorie[t.cle]
+          const nb = compter(t)
           const actif = categorieActive === t.cle
           return (
             <button
@@ -116,7 +127,8 @@ export default function BilanClassement({ bilan, categorieActive, onFiltrer }) {
       <p className="mt-2 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 px-3 py-2 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
         ℹ️ <strong className="text-slate-800 dark:text-slate-200">Sans IA</strong> : l'amendement est classé selon les
         mécanismes de filtrage appliqués aux informations fournies par l'Assemblée nationale (identiques signalés,
-        irrecevabilités, retraits, textes strictement identiques).{' '}
+        irrecevabilités, retraits, textes strictement identiques) ; les amendements de séance plénière sont
+        regroupés en discussion commune.{' '}
         <strong className="text-slate-800 dark:text-slate-200">Avec IA</strong> : lorsque les données de l'Assemblée
         nationale ne fournissent pas l'information — par exemple, savoir si deux amendements rédigés différemment portent
         sur le même point —, l'IA intervient pour analyser et classer l'amendement.

@@ -5,7 +5,7 @@ import CommissionKeywords from './amendment/CommissionKeywords'
 import PoliticalGroupTag from './amendment/PoliticalGroupTag'
 import AmendmentSearchBar from './amendment/AmendmentSearchBar'
 import BilanClassement from './amendment/BilanClassement'
-import { calculerBilan, categorieAmendement, estDoublon, estEcarte } from '../utils/bilan'
+import { calculerBilan, categorieAmendement, estDoublon, estEcarte, estSeancePleniere } from '../utils/bilan'
 import { downloadRtf } from '../utils/exportRtf'
 import { stripHtmlForDisplay } from '../utils/sanitize'
 
@@ -85,7 +85,9 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
       .map((a, idx) => ({ a, idx }))
       .filter(({ a }) => {
         if (masquerEcartes && (estDoublon(a) || estEcarte(a))) return false
-        if (categorieFiltre && categorieAmendement(a) !== categorieFiltre) return false
+        if (categorieFiltre === 'seance') {
+          if (!estSeancePleniere(a)) return false
+        } else if (categorieFiltre && categorieAmendement(a) !== categorieFiltre) return false
         if (filtre.motCle && !(a.commission_mots_cles || []).includes(filtre.motCle)) return false
         if (auteurCherche && !normaliser(auteursEnListe(a).join(', ')).includes(auteurCherche)) return false
         return true
