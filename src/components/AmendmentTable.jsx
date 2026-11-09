@@ -192,18 +192,18 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
         nbTotal={amendments.length}
       />
       <div data-demo="tableau" className="overflow-x-auto scroll-thin">
-        <table className="min-w-full divide-y divide-gray-200">
+        <table className="w-full divide-y divide-gray-200 dark:divide-gray-800 text-left">
           <thead className="bg-gray-100 dark:bg-[#1A1B22] border-b border-gray-200 dark:border-gray-800">
             <tr>
-              <th data-demo="col-art-num" className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20 min-w-20 max-w-20 sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-0">Art.</th>
-              <th data-demo="col-art-num" className="px-2 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20 min-w-20 max-w-20 sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-20">N°</th>
-              <th data-demo="col-auteur-groupe" className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[220px] min-w-[220px] max-w-[220px] sticky z-20 bg-gray-100 dark:bg-[#1A1B22] left-40 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">Auteur(s)</th>
-              <th data-demo="col-auteur-groupe" className="px-3 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-36 min-w-36">Groupe</th>
-              <th data-demo="col-impact" className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-44 min-w-44">Point d'impact</th>
-              <th data-demo="col-commission" className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-[320px] min-w-[320px] max-w-[320px]">Commission / Thèmes</th>
-              <th data-demo="col-extrait" className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider w-full min-w-[280px]">Extrait du dispositif</th>
-              <th data-demo="col-statut" className="px-4 py-4 text-left text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider whitespace-nowrap">Statut</th>
-              <th data-demo="col-actions" className="px-4 py-4 text-right text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider whitespace-nowrap">Actions</th>
+              <th data-demo="col-art-num" className="px-3 py-3.5 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-16">Art.</th>
+              <th data-demo="col-art-num" className="px-2 py-3.5 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20">N°</th>
+              <th data-demo="col-auteur-groupe" className="px-3 py-3.5 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-44 max-w-[180px]">Auteur(s)</th>
+              <th data-demo="col-auteur-groupe" className="px-3 py-3.5 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-28">Groupe</th>
+              <th data-demo="col-impact" className="px-3 py-3.5 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-36">Point d'impact</th>
+              <th data-demo="col-commission" className="px-3 py-3.5 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-64 max-w-[260px]">Commission / Thèmes</th>
+              <th data-demo="col-extrait" className="px-4 py-3.5 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider min-w-[240px]">Extrait du dispositif</th>
+              <th data-demo="col-statut" className="px-3 py-3.5 text-left text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-36 whitespace-nowrap">Statut</th>
+              <th data-demo="col-actions" className="px-3 py-3.5 text-right text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider w-20 whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-[#0B0C10] divide-y divide-gray-200 dark:divide-gray-800">
@@ -238,12 +238,16 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                   onClick={() => onSelect && onSelect(a.id)}
                   className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22] border-l-4 border-l-[#D91227]' : 'dark:bg-[#0B0C10] hover:bg-slate-50 dark:hover:bg-gray-900/50'}`}
                 >
-                  <td className={`px-2 py-4 w-20 min-w-20 max-w-20 text-sm text-slate-800 dark:text-slate-200 truncate sticky left-0 z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.article}>{String(a.article || "—").replace(/^Article\s+/i, "")}</td>
-                  <td className={`px-1 py-4 w-20 min-w-20 max-w-20 text-xs text-slate-800 dark:text-slate-200 truncate sticky left-20 z-10 ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`} title={a.numero}>{a.numero}</td>
-                  <td className={`px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-[220px] min-w-[220px] max-w-[220px] align-top sticky left-40 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)] ${isSelected ? 'bg-slate-100 dark:bg-[#1A1B22]' : 'bg-white dark:bg-[#0B0C10]'}`}>
+                  <td className="px-3 py-3 w-16 text-xs text-slate-800 dark:text-slate-200 align-top whitespace-nowrap" title={a.article}>
+                    {String(a.article || "—").replace(/^Article\s+/i, "")}
+                  </td>
+                  <td className="px-2 py-3 w-20 text-xs font-semibold text-slate-900 dark:text-white align-top whitespace-nowrap" title={a.numero}>
+                    {a.numero}
+                  </td>
+                  <td className="px-3 py-3 text-xs text-slate-800 dark:text-slate-200 w-44 max-w-[180px] align-top">
                     <span className="break-words leading-snug" title={auteursText}>{auteursText}</span>
                   </td>
-                  <td className="px-3 py-4 text-sm text-slate-800 dark:text-slate-200 w-36 min-w-36 align-top">
+                  <td className="px-3 py-3 text-xs text-slate-800 dark:text-slate-200 w-28 align-top">
                     {(a.groupe_politique || a.groupe_politique_ref || a.groupRef) ? (
                       <div className="flex items-start">
                         <PoliticalGroupTag
@@ -255,7 +259,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       <span className="text-xs text-slate-400">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-44 min-w-44 align-top">
+                  <td className="px-3 py-3 text-xs text-slate-800 dark:text-slate-200 w-36 align-top">
                     <ImpactBadge
                       type={
                         typeof a.point_impact === 'string'
@@ -264,7 +268,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       }
                     />
                   </td>
-                  <td className="px-4 py-4 text-sm w-[320px] min-w-[320px] max-w-[320px] align-top">
+                  <td className="px-3 py-3 text-xs w-64 max-w-[260px] align-top">
                     <CommissionKeywords
                       commission={a.commission}
                       commissionLibelle={a.commission_libelle}
@@ -272,8 +276,10 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       horsChamp={a.commission_hors_champ}
                     />
                   </td>
-                  <td className="px-4 py-4 text-sm text-slate-800 dark:text-slate-200 w-full min-w-[280px] align-top whitespace-normal break-words leading-snug"><ExtraitDispositif text={a.dispositif} /></td>
-                  <td className="px-4 py-4 text-sm whitespace-nowrap align-top">
+                  <td className="px-4 py-3 text-xs text-slate-800 dark:text-slate-200 min-w-[240px] align-top whitespace-normal break-words leading-relaxed">
+                    <ExtraitDispositif text={a.dispositif} />
+                  </td>
+                  <td className="px-3 py-3 text-xs whitespace-nowrap align-top w-36">
                     <div className="flex items-center gap-1">
                       <GroupeBadge statut={statutToDisplay} groupe={groupe} isPending={isPending} />
                       {/* 💡 Tooltip Chain of Thought (inline) */}
@@ -294,7 +300,7 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <td className="px-3 py-3 whitespace-nowrap text-right text-xs font-medium w-20 align-top">
                     <button onClick={(e) => { e.stopPropagation(); if (onDelete) onDelete(a.id); }} className="text-gray-400 hover:text-red-600 transition-colors">Retirer</button>
                   </td>
                 </tr>
