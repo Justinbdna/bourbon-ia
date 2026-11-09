@@ -57,7 +57,7 @@ function auteursEnListe(a) {
   return a.auteurs ? [String(a.auteurs)] : []
 }
 
-export default function AmendmentTable({ amendments, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, onExportJson }) {
+export default function AmendmentTable({ amendments, source, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, isClassifying, onExportJson }) {
   const [currentPage, setCurrentPage] = useState(0)
   const [filtre, setFiltre] = useState({ motCle: '', auteur: '' })
   const [masquerEcartes, setMasquerEcartes] = useState(false)
@@ -153,9 +153,17 @@ export default function AmendmentTable({ amendments, selectedId, onSelect, onReo
   return (
     <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 overflow-hidden">
       <div className="bg-slate-100/80 dark:bg-slate-900/50 border-b border-ink-200 dark:border-ink-700 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm font-medium text-slate-900 dark:text-plume">
-          {bilan.classes > 0 ? `${bilan.classes} amendements classés` : `${amendments.length} amendements chargés`}
-        </p>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-slate-900 dark:text-plume">
+            {bilan.classes > 0 ? `${bilan.classes} amendements classés` : `${amendments.length} amendements chargés`}
+          </p>
+          {/* Origine de la liasse (dossier législatif et étape, fichier, exemple) */}
+          {source && (
+            <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400 break-words" title={source}>
+              📁 {source}
+            </p>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">
             Trier :

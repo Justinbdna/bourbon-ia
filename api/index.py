@@ -193,6 +193,8 @@ app.add_middleware(
         "http://localhost:3000",
         "http://127.0.0.1:5173",
     ],
+    # Application lancée en local sur un autre port (5174… si 5173 est pris).
+    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_methods=["*"],
     allow_headers=["*"],
 )

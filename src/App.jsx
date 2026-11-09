@@ -510,6 +510,7 @@ export default function App() {
           <div className="w-full">
             <AmendmentTable
               amendments={amendments}
+              source={sourceLabel}
               selectedId={selectedId}
               onSelect={setSelectedId}
               onReorder={handleReorder}
