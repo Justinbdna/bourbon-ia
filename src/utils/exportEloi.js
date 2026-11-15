@@ -72,3 +72,4 @@ export function downloadEloiJson(amendments, filename = "amendements_eloi.json")
   document.body.removeChild(link)
   URL.revokeObjectURL(url)
 }
+

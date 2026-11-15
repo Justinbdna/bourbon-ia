@@ -78,3 +78,4 @@ describe('computeWordDiff in AmendmentDetail', () => {
     expect(addChunk.text).toBe('chien')
   })
 })
+
