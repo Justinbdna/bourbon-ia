@@ -27,10 +27,16 @@ liste vide et le front affiche simplement un panneau vide.
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Any, Optional
 
 logger = logging.getLogger("bourbon.participants")
+
+
+def _textes_distants_actives() -> bool:
+    """Vérifie si les appels réseau distants sont explicitement autorisés (BOURBON_TEXTES_DISTANTS == '1')."""
+    return os.getenv("BOURBON_TEXTES_DISTANTS", "0").strip() == "1"
 
 # Cache mémoire : {dossier_uid: (timestamp, participants)}
 _CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
@@ -148,6 +154,10 @@ def resolve_dossier_ref(amendements: Any) -> str:
     if premier_uid in _CACHE_DOSSIER:
         return _CACHE_DOSSIER[premier_uid]
 
+    if not _textes_distants_actives():
+        logger.info("Mode hors-ligne (BOURBON_TEXTES_DISTANTS=0) : résolution distante du dossier désactivée.")
+        return ""
+
     # 2. Repli réseau : un unique appel pour tout le lot
     try:
         try:
@@ -195,6 +205,10 @@ def fetch_participants(
         if entree and (time.time() - entree[0]) < _TTL_SECONDS:
             logger.info(f"♻️  Participants {dossier_uid} servis depuis le cache.")
             return entree[1][:limite]
+
+    if not _textes_distants_actives():
+        logger.info(f"Mode hors-ligne (BOURBON_TEXTES_DISTANTS=0) : participants distants désactivés pour {dossier_uid}.")
+        return []
 
     try:
         # Double import : convention du dépôt (cf. api/index.py) — `api.x` en

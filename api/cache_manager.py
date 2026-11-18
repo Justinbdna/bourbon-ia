@@ -15,6 +15,7 @@ Spécifications techniques :
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import threading
 import time
@@ -117,14 +118,47 @@ class InMemoryCache:
 _MEMORY_CACHE = InMemoryCache()
 
 
-def get_cached_classification(uid: str) -> Optional[dict[str, Any]]:
+def _build_cache_key(
+    uid: str,
+    context_key: Optional[str] = None,
+    model: Optional[str] = None,
+    candidats: Optional[list[dict[str, Any]]] = None,
+) -> str:
+    if model is not None or candidats is not None:
+        cand_ids = sorted(
+            str(c.get("id_discussion") or c.get("uid") or "")
+            for c in (candidats or [])
+            if isinstance(c, dict)
+        )
+        raw_sig = f"{model or ''}|{'|'.join(cand_ids)}|{context_key or ''}"
+        digest = hashlib.sha256(raw_sig.encode("utf-8")).hexdigest()[:16]
+        return f"{uid}::{digest}"
+    if context_key:
+        digest = hashlib.sha256(str(context_key).encode("utf-8")).hexdigest()[:16]
+        return f"{uid}::{digest}"
+    return uid
+
+
+def get_cached_classification(
+    uid: str,
+    context_key: Optional[str] = None,
+    model: Optional[str] = None,
+    candidats: Optional[list[dict[str, Any]]] = None,
+) -> Optional[dict[str, Any]]:
     """Accès au cache en mémoire compatible avec l'API FastAPI Bourbon.IA."""
-    return _MEMORY_CACHE.get(uid)
+    return _MEMORY_CACHE.get(_build_cache_key(uid, context_key=context_key, model=model, candidats=candidats))
 
 
-def save_classification(uid: str, data: dict[str, Any], ttl: int = DEFAULT_TTL_SECONDS) -> None:
+def save_classification(
+    uid: str,
+    data: dict[str, Any],
+    ttl: int = DEFAULT_TTL_SECONDS,
+    context_key: Optional[str] = None,
+    model: Optional[str] = None,
+    candidats: Optional[list[dict[str, Any]]] = None,
+) -> None:
     """Sauvegarde dans le cache en mémoire compatible avec l'API FastAPI Bourbon.IA."""
-    _MEMORY_CACHE.set(uid, data, ttl=ttl)
+    _MEMORY_CACHE.set(_build_cache_key(uid, context_key=context_key, model=model, candidats=candidats), data, ttl=ttl)
 
 
 def clear_cache() -> int:

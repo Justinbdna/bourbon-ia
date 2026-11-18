@@ -54,4 +54,30 @@ describe('exportRtf.js — Générateur Préjaune RTF', () => {
     expect(rtf).toContain('M. Dupont, Mme Martin')
     expect(rtf).toContain('[Dc.]')
   })
+
+  it('trace les crochets RTF sur des résultats V2 sans sous-objet groupe explicite', () => {
+    const v2Amendments = [
+      {
+        id: 'AM10',
+        numero: '10',
+        article: '2',
+        auteurs: ['M. Alpha'],
+        groupe_identique_id: 'ID-GRP-2',
+        resultat_ia: { statut: 'Identique' },
+      },
+      {
+        id: 'AM11',
+        numero: '11',
+        article: '2',
+        auteurs: ['Mme Beta'],
+        groupe_identique_id: 'ID-GRP-2',
+        resultat_ia: { statut: 'Identique' },
+      },
+    ]
+
+    const rtf = generateRtfPrejaune(v2Amendments)
+    expect(rtf).toContain('Id.')
+    expect(rtf).toContain(rtfEscape('╓'))
+    expect(rtf).toContain(rtfEscape('╙'))
+  })
 })

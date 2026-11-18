@@ -157,3 +157,28 @@ class SurtranspositionRequest(BaseModel):
     article_vise: Optional[str] = Field(None, max_length=200)
     amendement_uid: Optional[str] = Field(None, max_length=150)
     celex_id: Optional[str] = Field(None, max_length=100)
+    provider: Optional[str] = Field("local", max_length=30)
+    llm_endpoint: Optional[str] = Field(None, max_length=500)
+    model: Optional[str] = Field(None, max_length=200)
+    api_key: Optional[str] = Field(None, max_length=500)
+
+
+class RAGIngestItem(BaseModel):
+    doc_id: str = Field(..., max_length=200)
+    titre: str = Field("", max_length=500)
+    article_ref: str = Field("", max_length=200)
+    source_type: str = Field("general", max_length=100)
+    chunk_text: str = Field(..., max_length=500_000)
+
+
+class RAGIngestRequest(BaseModel):
+    documents: list[dict] = Field(..., max_length=2000)
+    try_remote_embedding: bool = False
+
+
+class RAGQueryRequest(BaseModel):
+    question: str = Field(..., max_length=10_000)
+    top_k: int = Field(5, ge=1, le=50)
+    min_score: float = Field(0.45, ge=0.0, le=1.0)
+    source_type: Optional[str] = Field(None, max_length=100)
+    doc_id: Optional[str] = Field(None, max_length=200)

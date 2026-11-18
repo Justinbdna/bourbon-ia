@@ -3,3 +3,6 @@ pydantic
 openai
 python-dotenv
 httpx
+requests
+uvicorn
+mcp

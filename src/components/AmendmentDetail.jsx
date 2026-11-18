@@ -63,31 +63,98 @@ export function computeWordDiff(text1 = '', text2 = '') {
   return result
 }
 
-export default function AmendmentDetail({ amendment, allAmendments = [], onClose, isLoading, aiSettings }) {
+export function extractTargetedLawSegment(texteLoi = '', dispositif = '') {
+  if (!texteLoi) return ''
+  const strLoi = String(texteLoi).trim()
+  const strDisp = String(dispositif || '')
+  const alineaMatch = strDisp.match(/alin[eé]a\s+(\d+)/i)
+  if (alineaMatch) {
+    const num = alineaMatch[1]
+    const lines = strLoi.split('\n')
+    const matchedLine = lines.find((l) => l.trim().startsWith(`(${num})`))
+    if (matchedLine) {
+      return matchedLine.replace(/^\(\d+\)\s*/, '').trim()
+    }
+  }
+  return strLoi
+}
+
+export default function AmendmentDetail({
+  amendment,
+  allAmendments = [],
+  onClose,
+  isLoading,
+  aiSettings,
+  initialCompareWithLaw = false,
+}) {
   const [euCompliance, setEuCompliance] = useState(amendment?.eu_compliance || null)
   const [compareId, setCompareId] = useState(null)
+  const [compareWithLaw, setCompareWithLaw] = useState(initialCompareWithLaw)
+
+  const amendmentKey = amendment?.uid ?? amendment?.id ?? null
 
   useEffect(() => {
     let isCurrent = true
+    setCompareId(null)
+    setCompareWithLaw(false)
     if (amendment?.eu_compliance) {
       setEuCompliance(amendment.eu_compliance)
-      return
+      return () => {
+        isCurrent = false
+      }
     }
+    setEuCompliance(null)
     if (amendment) {
-      analyzeSurtransposition(amendment)
+      analyzeSurtransposition(amendment, { aiSettings })
         .then((result) => {
           if (isCurrent && result) {
             setEuCompliance(result)
           }
         })
         .catch(() => {})
-    } else {
-      setEuCompliance(null)
     }
     return () => {
       isCurrent = false
     }
-  }, [amendment])
+  }, [amendmentKey, amendment, aiSettings])
+
+  const a = amendment || {}
+  const res = a.resultat_ia
+
+  const concurrents = useMemo(() => {
+    if (!amendment || !allAmendments || allAmendments.length === 0) return []
+    const monId = a.id ?? a.uid
+    return allAmendments.filter((other) => (other.id ?? other.uid) !== monId)
+  }, [allAmendments, amendment, a.id, a.uid])
+
+  const concurrentsTries = useMemo(() => {
+    return [...concurrents].sort((x, y) => {
+      const memeArtX = x.article === a.article ? 0 : 1
+      const memeArtY = y.article === a.article ? 0 : 1
+      if (memeArtX !== memeArtY) return memeArtX - memeArtY
+      return (x.numero || '').localeCompare(y.numero || '', 'fr', { numeric: true })
+    })
+  }, [concurrents, a.article])
+
+  const targetAmd = useMemo(() => {
+    if (!compareId) return null
+    return concurrents.find((c) => String(c.id ?? c.uid) === String(compareId)) || null
+  }, [compareId, concurrents])
+
+  const diffMots = useMemo(() => {
+    if (!targetAmd || !a.dispositif) return null
+    return computeWordDiff(a.dispositif, targetAmd.dispositif || '')
+  }, [targetAmd, a.dispositif])
+
+  const segmentLoiCible = useMemo(() => {
+    if (!a.texte_loi_reference) return ''
+    return extractTargetedLawSegment(a.texte_loi_reference, a.dispositif)
+  }, [a.texte_loi_reference, a.dispositif])
+
+  const diffLoi = useMemo(() => {
+    if (!compareWithLaw || !segmentLoiCible || !a.dispositif) return null
+    return computeWordDiff(segmentLoiCible, a.dispositif)
+  }, [compareWithLaw, segmentLoiCible, a.dispositif])
 
   // ── Safe Rendering : Skeleton si en cours de chargement ──
   if (isLoading) {
@@ -107,34 +174,6 @@ export default function AmendmentDetail({ amendment, allAmendments = [], onClose
       </div>
     )
   }
-
-  const a = amendment
-  const res = a.resultat_ia
-
-  const concurrents = useMemo(() => {
-    if (!allAmendments || allAmendments.length === 0) return []
-    const monId = a.id ?? a.uid
-    return allAmendments.filter((other) => (other.id ?? other.uid) !== monId)
-  }, [allAmendments, a])
-
-  const concurrentsTries = useMemo(() => {
-    return [...concurrents].sort((x, y) => {
-      const memeArtX = x.article === a.article ? 0 : 1
-      const memeArtY = y.article === a.article ? 0 : 1
-      if (memeArtX !== memeArtY) return memeArtX - memeArtY
-      return (x.numero || '').localeCompare(y.numero || '', 'fr', { numeric: true })
-    })
-  }, [concurrents, a])
-
-  const targetAmd = useMemo(() => {
-    if (!compareId) return null
-    return concurrents.find((c) => String(c.id ?? c.uid) === String(compareId)) || null
-  }, [compareId, concurrents])
-
-  const diffMots = useMemo(() => {
-    if (!targetAmd || !a.dispositif) return null
-    return computeWordDiff(a.dispositif, targetAmd.dispositif || '')
-  }, [targetAmd, a.dispositif])
 
   return (
     <div className="rounded-lg border border-ink-300 bg-white dark:bg-surface dark:border-ink-700 flex flex-col h-full">
@@ -268,7 +307,7 @@ export default function AmendmentDetail({ amendment, allAmendments = [], onClose
 
           <div>
             <p className="text-ink-500 dark:text-ink-400 text-xs">Date de dépôt</p>
-            <p className="text-ink-900 dark:text-plume font-medium">{a.date_depot || '—'}</p>
+            <p className="text-ink-900 dark:text-plume font-medium">{a.date_depot || a.dateDepot || '—'}</p>
           </div>
           <div>
             <p className="text-ink-500 dark:text-ink-400 text-xs">Point d'impact</p>
@@ -291,7 +330,7 @@ export default function AmendmentDetail({ amendment, allAmendments = [], onClose
             <div className="space-y-3 text-sm">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-semibold text-slate-900 dark:text-plume">Rang {res.rang}</span>
-                <GroupeBadge type={res.groupe?.type} />
+                <GroupeBadge statut={res.statut} groupe={res.groupe} />
 
                 {/* ── 💡 Tooltip Chain of Thought ── */}
                 {res.analyse_intention && (
@@ -337,28 +376,93 @@ export default function AmendmentDetail({ amendment, allAmendments = [], onClose
             <h4 className="font-display text-sm uppercase tracking-wide text-slate-900 dark:text-plume">
               Dispositif
             </h4>
-            {concurrentsTries.length > 0 && (
-              <div className="flex items-center gap-1.5">
-                <label className="text-xs text-slate-600 dark:text-slate-400 font-medium">
-                  ⚖️ Comparer avec :
-                </label>
-                <select
-                  value={compareId || ''}
-                  onChange={(e) => setCompareId(e.target.value || null)}
-                  className="rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] px-2 py-1 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-[#D91227]"
-                >
-                  <option value="">Texte seul</option>
-                  {concurrentsTries.map((c) => (
-                    <option key={c.id ?? c.uid} value={c.id ?? c.uid}>
-                      {c.article === a.article ? '🎯 ' : ''}N° {c.numero || c.id} ({c.auteur_nom || c.auteurs?.[0] || 'Inconnu'} - {c.groupe_politique || c.groupe || '—'})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCompareWithLaw((prev) => !prev)
+                  setCompareId(null)
+                }}
+                className={`rounded border px-2.5 py-1 text-xs font-medium transition-colors ${
+                  compareWithLaw
+                    ? 'border-[#D91227] bg-[#D91227]/10 text-[#D91227] dark:bg-[#D91227]/20 dark:text-red-300'
+                    : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                ⚖️ Comparer avec le texte de loi initial
+              </button>
+              {concurrentsTries.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                    Concurrent :
+                  </label>
+                  <select
+                    value={compareId || ''}
+                    onChange={(e) => {
+                      const val = e.target.value || null
+                      setCompareId(val)
+                      if (val) setCompareWithLaw(false)
+                    }}
+                    className="rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] px-2 py-1 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-[#D91227]"
+                  >
+                    <option value="">Texte seul</option>
+                    {concurrentsTries.map((c) => (
+                      <option key={c.id ?? c.uid} value={c.id ?? c.uid}>
+                        {c.article === a.article ? '🎯 ' : ''}N° {c.numero || c.id} ({c.auteur_nom || c.auteurs?.[0] || 'Inconnu'} - {c.groupe_politique || c.groupe || '—'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
           </div>
 
-          {diffMots && targetAmd ? (
+          {compareWithLaw ? (
+            a.texte_loi_reference && diffLoi ? (
+              <div className="space-y-3" data-testid="law-diff-view">
+                <div className="flex flex-wrap items-center gap-2 text-xs bg-amber-50 dark:bg-amber-950/30 p-2 rounded border border-amber-200 dark:border-amber-800/50">
+                  <span className="font-semibold text-amber-900 dark:text-amber-200">
+                    Différentiel Loi initiale ({formatCleanArticleHeading(a.article)}) vs Amendement n° {a.numero || a.id} :
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-950/60 px-1.5 py-0.5 rounded font-mono text-[11px]">
+                    <del>rouge</del> = texte de loi initial
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-950/60 px-1.5 py-0.5 rounded font-mono text-[11px]">
+                    <ins className="no-underline font-semibold">+vert</ins> = modification proposée
+                  </span>
+                </div>
+                <div className="max-h-60 overflow-y-auto p-3 rounded bg-white dark:bg-[#0B0C10] border border-slate-200 dark:border-slate-800 font-mono text-xs leading-relaxed">
+                  {diffLoi.map((chunk, i) => {
+                    if (chunk.type === 'del') {
+                      return (
+                        <span key={i} className="bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300 line-through px-0.5 rounded mr-0.5">
+                          {chunk.text}
+                        </span>
+                      )
+                    }
+                    if (chunk.type === 'add') {
+                      return (
+                        <span key={i} className="bg-green-100 text-green-800 dark:bg-green-950/80 dark:text-green-300 font-semibold px-0.5 rounded mr-0.5">
+                          {chunk.text}
+                        </span>
+                      )
+                    }
+                    return <span key={i}>{chunk.text}</span>
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div
+                className="p-3 rounded bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-xs text-amber-900 dark:text-amber-200"
+                data-testid="law-diff-fallback"
+              >
+                Texte de loi initial non disponible pour cet amendement ({formatCleanArticleHeading(a.article)}). Affichage du dispositif seul :
+                <div className="mt-2">
+                  <ScrollableText text={a.dispositif} />
+                </div>
+              </div>
+            )
+          ) : diffMots && targetAmd ? (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2 text-xs bg-slate-100 dark:bg-slate-800/80 p-2 rounded border border-slate-200 dark:border-slate-700">
                 <span className="font-semibold text-slate-700 dark:text-slate-300">Diff mot-à-mot vs N° {targetAmd.numero || targetAmd.id} :</span>

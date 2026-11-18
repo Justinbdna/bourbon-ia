@@ -47,13 +47,13 @@ async function compresser(texte) {
 /** POST JSON vers le serveur Bourbon.IA, compressé en gzip au-delà de 20 Ko. */
 export async function postJSON(chemin, donnees, options = {}) {
   const texte = JSON.stringify(donnees)
-  const headers = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' }
+  const headers = { 'Content-Type': 'application/json' }
   let body = texte
   if (texte.length > SEUIL_COMPRESSION && typeof CompressionStream !== 'undefined') {
     body = await compresser(texte)
     headers['Content-Encoding'] = 'gzip'
   }
-  return fetch(`${apiBase()}${chemin}`, { method: 'POST', headers, body, signal: options.signal })
+  return fetch(`${apiBase()}${chemin}`, { method: 'POST', headers, signal: options.signal, body })
 }
 
 /** Vérifie qu'un serveur Bourbon.IA répond à cette adresse (GET /api/health). */

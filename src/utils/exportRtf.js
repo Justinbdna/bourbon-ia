@@ -33,11 +33,27 @@ export function rtfEscape(str) {
 // glyphe de crochet (╓ premier, ║ milieu, ╙ dernier) à afficher.
 // Les doublons et additionnels ne sont pas mis entre crochets dans le
 // préjaune officiel : seuls Dc. et Id. le sont.
+function extractGroupInfo(a) {
+  const g = a.resultat_ia?.groupe
+  if (g?.groupe_id && GROUP_LABELS[g.type]) {
+    return g
+  }
+  const statut = a.resultat_ia?.statut || a.statut
+  if (statut === 'Identique' || statut === 'Identiques') {
+    const gid = a.groupe_identique_id || a.discussionId || a.id_discussion_identique || a.cluster_id
+    if (gid) return { type: 'identiques', groupe_id: String(gid) }
+  } else if (statut === 'Discussion commune' || statut === 'Similaire' || statut === 'Incompatible') {
+    const cid = a.resultat_ia?.id_discussion_cible || a.cluster_id
+    if (cid) return { type: 'discussion_commune', groupe_id: String(cid) }
+  }
+  return null
+}
+
 function computeLineDecorations(amendments) {
   const decos = []
   let i = 0
   while (i < amendments.length) {
-    const g = amendments[i].resultat_ia?.groupe
+    const g = extractGroupInfo(amendments[i])
     const bracketable = g?.groupe_id && GROUP_LABELS[g.type]
 
     if (!bracketable) {
@@ -47,7 +63,7 @@ function computeLineDecorations(amendments) {
     }
 
     let j = i + 1
-    while (j < amendments.length && amendments[j].resultat_ia?.groupe?.groupe_id === g.groupe_id) {
+    while (j < amendments.length && extractGroupInfo(amendments[j])?.groupe_id === g.groupe_id) {
       j += 1
     }
     const label = GROUP_LABELS[g.type]

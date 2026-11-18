@@ -5,6 +5,15 @@
 // ─────────────────────────────────────────────────────────────
 
 const KEY_STORAGE = 'bourbon_session_key'
+const CHUNK_SIZE = 0x8000
+
+function uint8ToBase64(bytes) {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK_SIZE))
+  }
+  return btoa(binary)
+}
 
 async function getOrCreateKey() {
   const stored = sessionStorage.getItem(KEY_STORAGE)
@@ -14,7 +23,7 @@ async function getOrCreateKey() {
   }
   const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt'])
   const exported = await crypto.subtle.exportKey('raw', key)
-  sessionStorage.setItem(KEY_STORAGE, btoa(String.fromCharCode(...new Uint8Array(exported))))
+  sessionStorage.setItem(KEY_STORAGE, uint8ToBase64(new Uint8Array(exported)))
   return key
 }
 
@@ -30,7 +39,7 @@ export async function encrypt(plaintext) {
   const combined = new Uint8Array(iv.length + ciphertext.byteLength)
   combined.set(iv, 0)
   combined.set(new Uint8Array(ciphertext), iv.length)
-  return btoa(String.fromCharCode(...combined))
+  return uint8ToBase64(combined)
 }
 
 /**

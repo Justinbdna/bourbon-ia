@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import os
 import ipaddress
+import socket
 import urllib.parse
 import json
 import logging
@@ -80,16 +81,31 @@ def validate_endpoint_url(endpoint: Optional[str]) -> str:
 
     is_cloud = os.environ.get("VERCEL") == "1"
     if is_cloud:
-        if hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1", "metadata.google.internal"):
+        if (
+            hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1", "metadata.google.internal")
+            or hostname.endswith((".local", ".internal", ".localhost", ".lan", "localtest.me", "nip.io", "sslip.io"))
+        ):
             raise ValueError("Accès aux hôtes locaux interdit en environnement Cloud (SSRF protection).")
 
-        try:
-            ip = ipaddress.ip_address(hostname)
+        def _check_ip(ip_str: str) -> None:
+            ip = ipaddress.ip_address(ip_str)
             if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or str(ip) == "169.254.169.254":
                 raise ValueError("Accès aux réseaux privés et métadonnées interdit en environnement Cloud (SSRF protection).")
+
+        try:
+            _check_ip(hostname)
         except ValueError as ip_err:
             if "Accès" in str(ip_err):
                 raise
+            # Hostname non-IP : vérifier les adresses résolues par DNS si disponibles
+            try:
+                infos = socket.getaddrinfo(hostname, parsed.port or (443 if parsed.scheme.lower() == "https" else 80))
+                for info in infos:
+                    sockaddr = info[4]
+                    if sockaddr and sockaddr[0]:
+                        _check_ip(sockaddr[0])
+            except socket.gaierror:
+                pass
 
     return url
 
@@ -159,8 +175,8 @@ class LLMClassificationResponse(BaseModel):
     id_discussion_cible: Optional[str] = Field(
         default=None,
         description="Identifiant de la discussion rejointe. OBLIGATOIRE si "
-                    "statut = DISCUSSION_COMMUNE, et doit provenir des candidats "
-                    "fournis (jamais inventé). None si statut = NOUVEAU.",
+                    "statut = Discussion commune ou Similaire, et doit provenir des candidats "
+                    "fournis (jamais inventé). None si statut = Isolé ou NOUVEAU.",
     )
     niveau_confiance: float = Field(
         ...,
@@ -295,9 +311,9 @@ AMENDEMENT : Article 5 · "Supprimer cet article." · Mme Martin (Écologiste et
 CANDIDATS : [{"id_discussion": "DISC-ART5-SUPPR", "article": "Article 5", "extrait": "Supprimer cet article.", "groupe": "La France insoumise"}]
 RÉPONSE :
 {
-  "analyse_intention": "L'auteure demande la suppression pure et simple de l'article 5. Le point d'impact est l'article entier, la portée est maximale.",
+  "analyse_intention": "• Conflit légistique : Suppression intégrale de l'article 5, même point d'impact que le candidat.\n• Clivage politique : Convergence de deux groupes d'opposition sur la suppression de l'article.\n• Conséquence du vote : Discussion commune obligatoire (Règle A), l'adoption fait tomber l'article.",
   "analyse_politique": "Groupe d'opposition distinct du candidat, mais la convergence est totale sur l'objet : faire tomber l'article. La règle A s'applique sans réserve.",
-  "statut": "DISCUSSION_COMMUNE",
+  "statut": "Discussion commune",
   "id_discussion_cible": "DISC-ART5-SUPPR",
   "niveau_confiance": 0.97
 }
@@ -307,7 +323,7 @@ AMENDEMENT : Article 12 · "À l'alinéa 3, substituer aux mots : « trente jour
 CANDIDATS : [{"id_discussion": "DISC-ART5-SUPPR", "article": "Article 5", "extrait": "Supprimer cet article.", "groupe": "La France insoumise"}]
 RÉPONSE :
 {
-  "analyse_intention": "Modification restreinte d'un délai procédural à l'alinéa 3 de l'article 12 : on double la durée, sans toucher à l'architecture du dispositif.",
+  "analyse_intention": "• Conflit légistique : Modification d'un délai à l'alinéa 3 de l'article 12, sans collision avec l'article 5.\n• Clivage politique : Amendement technique d'assouplissement isolé sur cet alinéa.\n• Conséquence du vote : Vote indépendant sans incidence sur les autres discussions.",
   "analyse_politique": "Amendement technique d'assouplissement, sans lien avec la suppression de l'article 5 portée par le candidat. Aucune exclusion juridique entre les deux.",
   "statut": "Isolé",
   "id_discussion_cible": null,

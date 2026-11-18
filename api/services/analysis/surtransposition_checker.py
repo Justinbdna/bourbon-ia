@@ -17,7 +17,20 @@ from typing import Any, Dict, List, Literal, Optional
 import requests
 from pydantic import BaseModel, Field, ValidationError
 
-from api.services.legal_ingestion.vector_indexer import LegalVectorIndexer
+try:
+    from api.services.legal_ingestion.vector_indexer import LegalVectorIndexer
+except ModuleNotFoundError:
+    from services.legal_ingestion.vector_indexer import LegalVectorIndexer
+
+try:
+    from api.services.rag_store import PersistentRAGStore, get_default_rag_store
+except ModuleNotFoundError:
+    from services.rag_store import PersistentRAGStore, get_default_rag_store
+
+try:
+    from api.llm_semantic_engine import validate_endpoint_url
+except ModuleNotFoundError:
+    from llm_semantic_engine import validate_endpoint_url
 
 logger = logging.getLogger("bourbon.surtransposition")
 
@@ -81,10 +94,13 @@ class SurtranspositionChecker:
         self,
         vector_indexer: Optional[LegalVectorIndexer] = None,
         ollama_url: Optional[str] = None,
-        model_name: str = DEFAULT_MODEL
+        model_name: Optional[str] = None,
+        rag_store: Optional[PersistentRAGStore] = None,
     ):
         self.vector_indexer = vector_indexer or LegalVectorIndexer()
-        self.ollama_url = ollama_url or os.getenv("OLLAMA_URL", OLLAMA_DEFAULT_URL)
+        self.rag_store = rag_store or (get_default_rag_store() if vector_indexer is None else None)
+        raw_url = ollama_url or os.getenv("OLLAMA_URL", OLLAMA_DEFAULT_URL)
+        self.ollama_url = validate_endpoint_url(raw_url)
         self.model_name = model_name or os.getenv("OLLAMA_MODEL", DEFAULT_MODEL)
 
     def analyze_amendment(
@@ -93,11 +109,14 @@ class SurtranspositionChecker:
         target_article: Optional[str] = None,
         celex_id: Optional[str] = None,
         top_k: int = 3,
-        timeout: int = 12
+        timeout: int = 12,
+        llm_endpoint: Optional[str] = None,
+        model_name: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> SurtranspositionAnalysisResult:
         """
         Core RAG evaluation function:
-        1. Query `eu_directives_index` vector DB for top-k matching directive chunks.
+        1. Query persistent SQLite RAG store (`bourbon_rag.db`) or `eu_directives_index` vector DB.
         2. Execute local LLM prompt expecting strict JSON output.
         3. Parse output into Pydantic model with deterministic fallback on network failure or invalid JSON.
         """
@@ -112,23 +131,45 @@ class SurtranspositionChecker:
                 analysis_mode="EMPTY_INPUT_FALLBACK"
             )
 
-        # 1. RAG Retrieval from local vector DB
-        retrieved_chunks = self.vector_indexer.search_similar(
-            query=clean_text,
-            collection_name="eu_directives_index",
-            top_k=top_k
-        )
+        matched_sources: List[MatchedSource] = []
 
-        matched_sources: List[MatchedSource] = [
-            MatchedSource(
-                celex_id=c.get("metadata", {}).get("celex_id", celex_id or "N/A"),
-                article_id=c.get("metadata", {}).get("article_id", "Art."),
-                title=c.get("metadata", {}).get("title", ""),
-                score=c.get("score", 0.0),
-                text_snippet=c.get("text", "")[:300]
+        # 1a. Check in-memory vector_indexer if populated (e.g. explicit unit test injection)
+        if self.vector_indexer is not None:
+            retrieved_chunks = self.vector_indexer.search_similar(
+                query=clean_text,
+                collection_name="eu_directives_index",
+                top_k=top_k
             )
-            for c in retrieved_chunks
-        ]
+            matched_sources.extend(
+                MatchedSource(
+                    celex_id=c.get("metadata", {}).get("celex_id", celex_id or "N/A"),
+                    article_id=c.get("metadata", {}).get("article_id", "Art."),
+                    title=c.get("metadata", {}).get("title", ""),
+                    score=c.get("score", 0.0),
+                    text_snippet=c.get("text", "")[:300]
+                )
+                for c in retrieved_chunks
+            )
+
+        # 1b. Query persistent SQLite RAG store (`bourbon_rag.db`)
+        if not matched_sources and self.rag_store is not None:
+            rag_res = self.rag_store.query_rag(
+                question=clean_text,
+                top_k=top_k,
+                min_score=0.35,
+                source_type="directive_ue",
+                doc_id=celex_id,
+            )
+            for item in rag_res.get("results", []):
+                matched_sources.append(
+                    MatchedSource(
+                        celex_id=item.get("doc_id") or celex_id or "N/A",
+                        article_id=item.get("article_ref") or "Art.",
+                        title=item.get("titre") or "",
+                        score=float(item.get("score", 0.0)),
+                        text_snippet=str(item.get("chunk_text", ""))[:300],
+                    )
+                )
 
         # 2. Local LLM Evaluation
         try:
@@ -136,7 +177,10 @@ class SurtranspositionChecker:
                 amendment_text=clean_text,
                 matched_sources=matched_sources,
                 target_article=target_article,
-                timeout=timeout
+                timeout=timeout,
+                llm_endpoint=llm_endpoint,
+                model_name=model_name,
+                api_key=api_key,
             )
             if llm_response:
                 parsed_result = self._parse_llm_json(llm_response, matched_sources, target_article)
@@ -198,12 +242,36 @@ Réponds EXCLUSIVEMENT par un objet JSON valide suivant exactement cette structu
         amendment_text: str,
         matched_sources: List[MatchedSource],
         target_article: Optional[str],
-        timeout: int = 12
+        timeout: int = 12,
+        llm_endpoint: Optional[str] = None,
+        model_name: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> Optional[str]:
-        """Call local Ollama endpoint synchronously."""
+        """Call configured OpenAI-compatible local/custom endpoint or fallback to Ollama."""
         prompt = self._format_prompt(amendment_text, matched_sources, target_article)
+        active_model = model_name or self.model_name
+
+        if llm_endpoint:
+            valid_url = validate_endpoint_url(llm_endpoint).rstrip("/")
+            chat_url = f"{valid_url}/chat/completions" if valid_url.endswith("/v1") else f"{valid_url}/v1/chat/completions"
+            headers = {"Content-Type": "application/json"}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            chat_payload = {
+                "model": active_model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1,
+                "max_tokens": 512,
+            }
+            res = requests.post(chat_url, headers=headers, json=chat_payload, timeout=timeout)
+            if res.status_code == 200:
+                choices = res.json().get("choices") or []
+                if choices and isinstance(choices[0], dict):
+                    return (choices[0].get("message") or {}).get("content", "")
+            return None
+
         payload = {
-            "model": self.model_name,
+            "model": active_model,
             "prompt": prompt,
             "stream": False,
             "options": {

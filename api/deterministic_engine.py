@@ -28,7 +28,10 @@ import unicodedata
 from collections import defaultdict
 from typing import Any, Optional, Union
 
-from api.schemas import EnrichedAmendment, PointImpact, StatutMecanique
+try:
+    from api.schemas import EnrichedAmendment, PointImpact, StatutMecanique
+except ModuleNotFoundError:
+    from schemas import EnrichedAmendment, PointImpact, StatutMecanique
 
 try:
     from api.deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII

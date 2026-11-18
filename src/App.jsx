@@ -14,16 +14,14 @@ import { encrypt, decrypt } from './utils/crypto'
 const STORAGE_KEY = 'bourbon_session_amendments'
 
 // Fournisseur d'IA au premier lancement (avant tout choix dans ⚙️ Réglages IA) :
-//  • poste local (localhost) → IA locale, mode souverain ;
-//  • démo publique en ligne → « Groq (Démo) » : le serveur Vercel n'a pas de LLM
-//    local et l'anti-SSRF y bloque localhost, l'IA locale y échouerait toujours.
-// VITE_AI_PROVIDER_DEFAUT force le choix (ex. « local » sur un intranet de l'AN).
-const HOTES_LOCAUX = ['localhost', '127.0.0.1', '[::1]', '::1']
-
+//  • poste local, réseau privé / intranet AN / serveur école → IA locale, mode souverain ;
+//  • démo publique en ligne (*.vercel.app) → « Groq (Démo) » : le serveur Vercel
+//    n'a pas de LLM local.
+// VITE_AI_PROVIDER_DEFAUT force le choix si défini.
 function fournisseurIAParDefaut() {
   const force = import.meta.env.VITE_AI_PROVIDER_DEFAUT
   if (['local', 'groq', 'groq_auto'].includes(force)) return force
-  return HOTES_LOCAUX.includes(window.location.hostname) ? 'local' : 'groq_auto'
+  return 'local'
 }
 
 export default function App() {
@@ -295,6 +293,7 @@ export default function App() {
       setCurrentAnalyzing({ uid: '', numero: '...', index: 0, total: amendments.length })
       const v2Results = await classifyAmendmentsV2(amendments, {
         aiSettings,
+        isReasoningMode,
         signal: controller.signal,
         onMechanical: (mecResults) => {
           // Met à jour l'état avec le tri mécanique pur immédiatement
@@ -576,7 +575,7 @@ export default function App() {
 
       <footer className="max-w-[95%] mx-auto px-6 pb-8 text-center">
         <p className="text-sm text-neutre dark:text-ink-400 max-w-5xl mx-auto leading-relaxed">
-          💡 Note technique : Par défaut, cette démonstration publique utilise le mode Groq (Llama 3.3) pour la fluidité web. L'application reste 100 % conçue pour une exécution souveraine, locale et hors-ligne (sélectionnable dans les ⚙️ Réglages IA).
+          💡 Note technique : L'application s'exécute par défaut en mode 100 % souverain et local (Ollama / LM Studio / Serveur Intranet). Sur la démo publique Vercel uniquement, un repli Cloud (GPT-OSS-20B via Groq) est activé à titre de démonstration.
         </p>
       </footer>
 
@@ -660,7 +659,7 @@ export default function App() {
 
       <div className="absolute bottom-4 left-0 right-0 text-center text-xs text-slate-500 px-6 max-w-2xl mx-auto">
         <p>
-          💡 Note technique : Par défaut, cette démonstration publique utilise le mode Groq (Llama 3.3) pour la fluidité web. L'application reste 100 % conçue pour une exécution souveraine, locale et hors-ligne (sélectionnable dans les ⚙️ Réglages IA).
+          💡 Note technique : L'application s'exécute par défaut en mode 100 % souverain et local (Ollama / LM Studio / Serveur Intranet). Sur la démo publique Vercel uniquement, un repli Cloud (GPT-OSS-20B via Groq) est activé à titre de démonstration.
         </p>
       </div>
 

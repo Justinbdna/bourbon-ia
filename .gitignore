@@ -31,6 +31,9 @@ backend/venv/
 # Données (trop lourdes pour Git)
 data/raw/
 data/clean/
+data/*.db
+data/*.db-*
+*.db
 
 # Variables d'environnement
 .env*

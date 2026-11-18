@@ -21,7 +21,8 @@ export async function normalizeAmendments(amendements) {
  * Interroge l'endpoint FastAPI /api/v2/surtransposition avec fallback gracieux.
  */
 export async function analyzeSurtransposition(amendement, options = {}) {
-  const { signal } = options
+  const { signal, aiSettings } = options
+  const aiPayload = aiSettings ? reglagesLLM(aiSettings) : {}
   try {
     const response = await postJSON('/api/v2/surtransposition', {
       amendement_uid: amendement.id || amendement.uid,
@@ -29,6 +30,7 @@ export async function analyzeSurtransposition(amendement, options = {}) {
       expose_sommaire: amendement.expose_sommaire || amendement.exposeSommaire || '',
       article_vise: amendement.article_vise || amendement.article || '',
       celex_id: amendement.celex_id || null,
+      ...aiPayload,
     }, { signal })
     if (!response.ok) {
       return null
@@ -100,7 +102,6 @@ export async function trierSansIA(amendements, options = {}) {
 async function getImportDossier(chemin, params = {}, options = {}) {
   const query = new URLSearchParams(params).toString()
   const response = await fetch(`${apiBase()}${chemin}${query ? `?${query}` : ''}`, {
-    headers: { 'ngrok-skip-browser-warning': 'true' },
     signal: options.signal,
   })
   if (!response.ok) {
@@ -140,6 +141,7 @@ export async function chargerLiasse(dossierUid, etape, options = {}) {
 export async function classifyAmendmentsV2(amendements, options = {}) {
   const {
     aiSettings = {},
+    isReasoningMode = false,
     signal,
     onProgress = () => {},
     onMechanical = () => {},
@@ -149,7 +151,7 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
     amendements,
     ...reglagesLLM(aiSettings),
     temperature: 0.1,
-    max_tokens: 1024,
+    max_tokens: isReasoningMode ? 2048 : 1024,
   }
 
   // 1. Tri mécanique immédiat (sans LLM)
@@ -175,8 +177,14 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
       throw new DOMException('Aborted', 'AbortError')
     }
 
+    // Optimisation O(N) par article : n'envoyer que les amendements du même article que la cible
+    const contexteArticle = mecaniques.filter(
+      (m) => m.id === amd.id || (m.article || '') === (amd.article || '')
+    )
+
     const singlePayload = {
       ...payload,
+      amendements: contexteArticle.length > 0 ? contexteArticle : [amd],
       target_uid: amd.id
     }
 

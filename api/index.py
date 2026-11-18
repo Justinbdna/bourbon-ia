@@ -33,7 +33,7 @@ try:
         detect_gage_financier,
         calculate_priorite_appel,
     )
-    from api.schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
+    from api.schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest, RAGIngestRequest, RAGQueryRequest
     from api.llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
     from api.cache_manager import get_cached_classification, save_classification
     from api.deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII, get_depute_info
@@ -52,7 +52,7 @@ except ModuleNotFoundError:
         detect_gage_financier,
         calculate_priorite_appel,
     )
-    from schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest
+    from schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest, RAGIngestRequest, RAGQueryRequest
     from llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
     from cache_manager import get_cached_classification, save_classification
     try:
@@ -246,6 +246,59 @@ def _enrichir_a_import(resultat: dict, source: dict, signataires=None) -> dict:
         )
 
         # ── Groupe politique et rôle (référentiel local des députés) ──
+        auteur_block = signataires.get("auteur", {}) if isinstance(signataires, dict) else {}
+        if isinstance(auteur_block, list) and auteur_block:
+            auteur_block = auteur_block[0] if isinstance(auteur_block[0], dict) else {}
+        if not isinstance(auteur_block, dict):
+            auteur_block = {}
+
+        auteur_ref = (
+            auteur_block.get("acteurRef")
+            or source.get("auteur_ref")
+            or resultat.get("auteur_ref")
+            or ""
+        )
+        if auteur_ref:
+            resultat["auteur_ref"] = str(auteur_ref)
+            fiche = get_depute_info(str(auteur_ref)) or {}
+            nom_complet = fiche.get("nom", "")
+            if nom_complet and not resultat.get("auteur_nom"):
+                parts = nom_complet.strip().split(" ", 1)
+                if len(parts) == 2:
+                    resultat.setdefault("auteur_prenom", parts[0])
+                    resultat.setdefault("prenom", parts[0])
+                    resultat["auteur_nom"] = parts[1]
+                else:
+                    resultat["auteur_nom"] = nom_complet
+                trig = "".join(p[0].upper() for p in nom_complet.split() if p)[:3]
+                resultat.setdefault("auteur_trigramme", trig)
+                resultat.setdefault("trigramme", trig)
+            org_ref = auteur_block.get("groupePolitiqueRef") or fiche.get("organeRef") or ""
+            if org_ref and not resultat.get("groupRef"):
+                resultat["groupRef"] = str(org_ref)
+                resultat["groupe_politique_ref"] = str(org_ref)
+
+        # Repli pour auteur_nom / prenom / trigramme depuis le libellé d'auteur si non résolu par PA...
+        if not resultat.get("auteur_nom") and resultat.get("auteur"):
+            clean_aut = re.sub(r"\s*\([^)]*\)\s*$", "", str(resultat["auteur"])).strip()
+            clean_aut = re.sub(r"^(M\.|Mme|Mmes|MM\.)\s+", "", clean_aut, flags=re.IGNORECASE).strip()
+            if clean_aut and clean_aut != "Inconnu":
+                parts = clean_aut.split(" ", 1)
+                if len(parts) == 2:
+                    resultat.setdefault("auteur_prenom", parts[0])
+                    resultat.setdefault("prenom", parts[0])
+                    resultat["auteur_nom"] = parts[1]
+                else:
+                    resultat["auteur_nom"] = clean_aut
+                trig = "".join(p[0].upper() for p in clean_aut.split() if p)[:3]
+                resultat.setdefault("auteur_trigramme", trig)
+                resultat.setdefault("trigramme", trig)
+        else:
+            if resultat.get("auteur_prenom") and not resultat.get("prenom"):
+                resultat["prenom"] = resultat["auteur_prenom"]
+            if resultat.get("auteur_trigramme") and not resultat.get("trigramme"):
+                resultat["trigramme"] = resultat["auteur_trigramme"]
+
         source_sig = (
             signataires
             or source.get("auteurs")
@@ -372,6 +425,7 @@ def normaliser_amendement(data, index: int = 0) -> dict:
 
             resultat = {
                 "id": uid or f"amdt-{index}",
+                "uid": uid or f"amdt-{index}",
                 "numero": numero,
                 "article": article,
                 "auteurs": [auteur] if auteur else [],
@@ -385,16 +439,59 @@ def normaliser_amendement(data, index: int = 0) -> dict:
                 "est_rapporteur": False,
                 "est_gouvernement": False,
             }
+            # Préservation des métadonnées structurelles AN pour le pipeline V2 (_build_enriched & tri déterministe)
+            for raw_key in (
+                "identification",
+                "pointeurFragmentTexte",
+                "signataires",
+                "discussionIdentique",
+                "idDiscussionIdentique",
+                "estIdentique",
+                "amendementParentRef",
+                "cycleDeVie",
+                "sort",
+                "texteLegislatifRef",
+                "dossier_ref",
+                "dossier_titre",
+                "title",
+            ):
+                if am.get(raw_key) is not None:
+                    resultat[raw_key] = am[raw_key]
+
+            corps_dict = am.get("corps") if isinstance(am.get("corps"), dict) else {}
+            cartouche_info = corps_dict.get("cartoucheInformatif") or am.get("cartoucheInformatif")
+            if cartouche_info:
+                resultat["corps"] = {"cartoucheInformatif": cartouche_info}
+                resultat["cartoucheInformatif"] = cartouche_info
+
+            ident_dict = am.get("identification") if isinstance(am.get("identification"), dict) else {}
+            if ident_dict.get("numeroOrdreDepot") is not None:
+                resultat["numeroOrdreDepot"] = ident_dict["numeroOrdreDepot"]
+            elif am.get("numeroOrdreDepot") is not None:
+                resultat["numeroOrdreDepot"] = am["numeroOrdreDepot"]
+
+            est_id_off = bool(am.get("discussionIdentique") or am.get("estIdentique") or am.get("est_identique_officiel"))
+            id_disc_off = am.get("idDiscussionIdentique") or am.get("id_discussion_identique")
+            resultat["est_identique_officiel"] = est_id_off
+            resultat["isIdentical"] = est_id_off
+            if id_disc_off:
+                resultat["id_discussion_identique"] = str(id_disc_off)
+                resultat["discussionId"] = str(id_disc_off)
+
+            if am.get("texteLegislatifRef") and not resultat.get("dossier_ref"):
+                resultat["dossier_ref"] = am["texteLegislatifRef"]
+
             # Commission saisie au fond (import « Depuis l'Assemblée ») : conservée
             # pour que le tri retrouve les thèmes des amendements de séance plénière.
             if am.get("commissionFondRef"):
                 resultat["commissionFondRef"] = am["commissionFondRef"]
-            # Date de dépôt (tri chronologique du tableau) : à la racine pour
+            # Date de dépôt (tri chronologique du tableau et fiche détail) : à la racine pour
             # l'import « Depuis l'Assemblée », sous cycleDeVie dans les exports AN.
             cycle = am.get("cycleDeVie") if isinstance(am.get("cycleDeVie"), dict) else {}
-            date_depot = am.get("dateDepot") or cycle.get("dateDepot")
+            date_depot = am.get("dateDepot") or am.get("date_depot") or cycle.get("dateDepot")
             if isinstance(date_depot, str) and date_depot:
                 resultat["dateDepot"] = date_depot
+                resultat["date_depot"] = date_depot
             return _enrichir_a_import(resultat, am, signataires)
 
         # Données déjà plates (ex: sampleAmendments.json)
@@ -407,6 +504,10 @@ def normaliser_amendement(data, index: int = 0) -> dict:
             data["expose_sommaire"] = extract_expose_sommaire(data)
         if data.get("article"):
             data["article"] = format_article_title(data["article"])
+        if data.get("dateDepot") and not data.get("date_depot"):
+            data["date_depot"] = data["dateDepot"]
+        elif data.get("date_depot") and not data.get("dateDepot"):
+            data["dateDepot"] = data["date_depot"]
         return _enrichir_a_import(data, data, data.get("signataires"))
     except Exception as e:
         import traceback
@@ -743,6 +844,23 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
 
     role = "Gouvernement" if is_gouvernement else ("Rapporteur" if is_rapporteur else "Député")
 
+    auteur_nom = am.get("auteur_nom", "") or raw.get("auteur_nom", "") or ""
+    auteur_prenom = am.get("auteur_prenom", "") or raw.get("auteur_prenom", "") or ""
+    auteur_trigramme = am.get("auteur_trigramme", "") or raw.get("auteur_trigramme", "") or ""
+    if auteur_ref and not auteur_nom:
+        fiche_dep = get_depute_info(str(auteur_ref)) or {}
+        nom_complet = fiche_dep.get("nom", "")
+        if nom_complet:
+            parts = nom_complet.strip().split(" ", 1)
+            if len(parts) == 2:
+                auteur_prenom = auteur_prenom or parts[0]
+                auteur_nom = parts[1]
+            else:
+                auteur_nom = nom_complet
+            auteur_trigramme = auteur_trigramme or "".join(p[0].upper() for p in nom_complet.split() if p)[:3]
+        if not groupe_ref and fiche_dep.get("organeRef"):
+            groupe_ref = fiche_dep["organeRef"]
+
     return EnrichedAmendment(
         amendement_uid=str(uid),
         numero_long=numero,
@@ -750,9 +868,9 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
         expose_sommaire=str(expose) if expose else "",
         article_vise=str(article) if article else "",
         auteur_ref=str(auteur_ref),
-        auteur_nom=am.get("auteur_nom", "") or raw.get("auteur_nom", "") or "",
-        auteur_prenom=am.get("auteur_prenom", "") or raw.get("auteur_prenom", "") or "",
-        auteur_trigramme=am.get("auteur_trigramme", "") or raw.get("auteur_trigramme", "") or "",
+        auteur_nom=auteur_nom,
+        auteur_prenom=auteur_prenom,
+        auteur_trigramme=auteur_trigramme,
         auteurs_raw=am.get("auteurs", []) or raw.get("auteurs", []),
         groupe_politique_ref=str(groupe_ref),
         groupe_politique=groupe_nom or am.get("groupe_politique", "") or raw.get("groupe_politique", "") or raw.get("groupe", "") or "",
@@ -852,6 +970,20 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         "alerte_art45": getattr(amend, "alerte_art45", None),
     }
 
+    raw_d = amend.raw_dict if isinstance(amend.raw_dict, dict) else {}
+    raw_am = raw_d.get("amendement", raw_d) if isinstance(raw_d, dict) else {}
+    cycle_d = raw_am.get("cycleDeVie") if isinstance(raw_am.get("cycleDeVie"), dict) else {}
+    date_dep = (
+        raw_d.get("date_depot")
+        or raw_d.get("dateDepot")
+        or raw_am.get("dateDepot")
+        or cycle_d.get("dateDepot")
+        or ""
+    )
+    if date_dep:
+        base["dateDepot"] = date_dep
+        base["date_depot"] = date_dep
+
     # ── Résultat LLM sémantique (si disponible) ──
     if llm_result:
         statut_llm = llm_result.get("statut", "NOUVEAU")
@@ -864,13 +996,22 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
             couleur = "vert"
         else:
             couleur = "gris" # Isolé
+
+        cible_id = llm_result.get("id_discussion_cible")
+        groupe_obj = None
+        if statut_llm in ("Discussion commune", "Similaire") and cible_id:
+            groupe_obj = {"type": "discussion_commune", "groupe_id": str(cible_id)}
+        elif statut_llm == "Identique":
+            gid = amend.groupe_identique_id or cible_id or amend.cluster_id or amend.amendement_uid
+            groupe_obj = {"type": "identiques", "groupe_id": str(gid)}
             
         base["resultat_ia"] = {
             "id": amend.amendement_uid,
             "statut": statut_llm,
+            "groupe": groupe_obj,
             "analyse_intention": llm_result.get("analyse_intention", ""),
             "analyse_politique": llm_result.get("analyse_politique", ""),
-            "id_discussion_cible": llm_result.get("id_discussion_cible"),
+            "id_discussion_cible": cible_id,
             "niveau_confiance": llm_result.get("niveau_confiance", 0.0),
             "justification": llm_result.get("analyse_intention", ""),
             "alerte_couleur": couleur,
@@ -879,6 +1020,7 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
 
     # ── Résultat déterministe injecté comme resultat_ia si pas de LLM ──
     if not base.get("resultat_ia") and amend.statut_mecanique != StatutMecanique.NOUVEAU:
+        groupe_obj = None
         if amend.statut_mecanique == StatutMecanique.ISOLE_MECANIQUE:
             statut_display = "Isolé"
             couleur = "gris"
@@ -899,16 +1041,24 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
             intention = f"Détecté mécaniquement : {amend.justification_mecanique}"
             politique = "Classement par règle (séance plénière), sans IA."
             confiance = 1.0
+            groupe_obj = {
+                "type": "discussion_commune",
+                "groupe_id": str(amend.cluster_id or f"SEANCE-{amend.article_vise or 'ART'}"),
+            }
         else:
             statut_display = "Identique" # Strict mapping anti-jargon
             couleur = amend.alerte_couleur or "rouge"
             intention = f"Détecté mécaniquement : {amend.justification_mecanique}"
             politique = "Classification déterministe (100 % fiable, sans IA)."
             confiance = 1.0
+            gid = amend.groupe_identique_id or amend.id_discussion_identique or amend.cluster_id
+            if gid:
+                groupe_obj = {"type": "identiques", "groupe_id": str(gid)}
 
         base["resultat_ia"] = {
             "id": amend.amendement_uid,
             "statut": statut_display,
+            "groupe": groupe_obj,
             "justification": amend.justification_mecanique,
             "alerte_couleur": couleur,
             "analyse_intention": intention,
@@ -919,6 +1069,7 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         base["resultat_ia"] = {
             "id": amend.amendement_uid,
             "statut": "Isolé",
+            "groupe": None,
             "justification": "En attente d'analyse IA...",
             "alerte_couleur": "gris",
             "analyse_intention": "",
@@ -934,8 +1085,10 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
     # ── Whitelist et filtrage de sécurité (C-03) ──
     # Ne préserver que les clés inoffensives provenant des données d'origine
     WHITELIST_RAW_KEYS = {
-        "rapporteur", "sort", "dateDepot", "dateSort", "statut", "signataires", "coSignataires",
-        "texte", "numOrdre", "dossierRef", "triAmendement"
+        "rapporteur", "sort", "dateDepot", "date_depot", "dateSort", "statut", "signataires", "coSignataires",
+        "texte", "numOrdre", "dossierRef", "triAmendement", "identification", "pointeurFragmentTexte",
+        "discussionIdentique", "idDiscussionIdentique", "estIdentique", "amendementParentRef",
+        "cycleDeVie", "corps", "texteLegislatifRef", "commissionFondRef",
     }
 
     filtered_raw = {}
@@ -1041,7 +1194,27 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
             llm_data = None
             if amend.statut_mecanique == StatutMecanique.NOUVEAU:
                 processed_llm[0] += 1
-                cached = get_cached_classification(amend.amendement_uid)
+                candidats = [
+                    {
+                        "id_discussion": a.amendement_uid,
+                        "amendement": {
+                            "divisionArticleDesignation": a.article_vise,
+                            "dispositif": a.dispositif_raw,
+                        },
+                        "auteur": {"groupePolitiqueRef": {"libelle": a.groupe_politique}},
+                    }
+                    for a in enriched
+                    if a.amendement_uid != amend.amendement_uid
+                    and a.article_vise == amend.article_vise
+                    and a.statut_mecanique == StatutMecanique.NOUVEAU
+                ]
+                cache_ctx = f"{_modele_llm(payload)}|{len(candidats)}|{','.join(sorted(c['id_discussion'] for c in candidats[:12]))}"
+                cached = get_cached_classification(
+                    amend.amendement_uid,
+                    context_key=cache_ctx,
+                    model=_modele_llm(payload),
+                    candidats=candidats,
+                )
                 if cached:
                     cached["cached"] = True
                     llm_data = cached
@@ -1049,34 +1222,41 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                 else:
                     logging.info(f"🧠 LLM START {amend.amendement_uid} ({processed_llm[0]}/{nouveaux_count})")
                     contexte_rag = ""
-                    try:
-                        from api.tricoteuses_client import fetch_amendements
-                        def fetch_rag():
-                            res = fetch_amendements(uid=amend.amendement_uid, timeout=1.9)
-                            if not res: return ""
-                            
-                            auteur_dict = res.get("auteur", {}) or {}
-                            nom = auteur_dict.get("nom", "")
-                            prenom = auteur_dict.get("prenom", "")
-                            groupe = (auteur_dict.get("groupePolitiqueRef") or {}).get("libelle", "Inconnu")
-                            nom_auteur = f"{prenom} {nom}".strip() or "Inconnu"
-                            
-                            dossier = res.get("dossierRef", {}) or {}
-                            statut_texte = dossier.get("titre", "Non renseigné")
-                            
-                            cosign = res.get("coSignataires", []) or []
-                            signataires = ", ".join([f"{s.get('prenom', '')} {s.get('nom', '')}".strip() for s in cosign]) if cosign else "Aucun"
-                            
-                            return (
-                                f"\n## CONTEXTE POLITIQUE (RAG API)\n"
-                                f"- Auteur : {nom_auteur} ({groupe})\n"
-                                f"- Co-signataires : {signataires}\n"
-                                f"- Statut du texte : {statut_texte}\n"
-                            )
-                        
-                        contexte_rag = await asyncio.to_thread(fetch_rag)
-                    except Exception as e:
-                        logging.warning(f"RAG echoué pour {amend.amendement_uid}: {e}")
+                    distants_actifs = os.getenv("BOURBON_TEXTES_DISTANTS", "0").strip() == "1"
+                    if distants_actifs and not amend.auteur_nom and str(amend.amendement_uid).startswith("AM"):
+                        try:
+                            try:
+                                from api.tricoteuses_client import fetch_amendements
+                            except ModuleNotFoundError:
+                                from tricoteuses_client import fetch_amendements
+
+                            def fetch_rag():
+                                res = fetch_amendements(uid=amend.amendement_uid, timeout=1.9)
+                                if not res:
+                                    return ""
+                                amend_data = res.get("data", {}) if isinstance(res.get("data"), dict) else res
+                                auteur_dict = amend_data.get("auteur", {}) or {}
+                                nom = auteur_dict.get("nom", "")
+                                prenom = auteur_dict.get("prenom", "")
+                                groupe = (auteur_dict.get("groupeParlementaire") or auteur_dict.get("groupePolitiqueRef") or {}).get("libelle", "Inconnu")
+                                nom_auteur = f"{prenom} {nom}".strip() or "Inconnu"
+
+                                dossier = amend_data.get("dossierRef", {}) or {}
+                                statut_texte = dossier.get("titre", "Non renseigné")
+
+                                cosign = amend_data.get("coSignataires", []) or []
+                                signataires = ", ".join([f"{s.get('prenom', '')} {s.get('nom', '')}".strip() for s in cosign if isinstance(s, dict)]) if cosign else "Aucun"
+
+                                return (
+                                    f"\n## CONTEXTE POLITIQUE (RAG API)\n"
+                                    f"- Auteur : {nom_auteur} ({groupe})\n"
+                                    f"- Co-signataires : {signataires}\n"
+                                    f"- Statut du texte : {statut_texte}\n"
+                                )
+
+                            contexte_rag = await asyncio.to_thread(fetch_rag)
+                        except Exception as e:
+                            logging.warning(f"RAG echoué pour {amend.amendement_uid}: {e}")
 
                     amend_dict = {
                         "amendement": {
@@ -1096,21 +1276,7 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                         "contexte_rag": contexte_rag,
                         "texte_loi_reference": amend.texte_loi_reference,
                     }
-                    candidats = [
-                        {
-                            "id_discussion": a.amendement_uid,
-                            "amendement": {
-                                "divisionArticleDesignation": a.article_vise,
-                                "dispositif": a.dispositif_raw,
-                            },
-                            "auteur": {"groupePolitiqueRef": {"libelle": a.groupe_politique}},
-                        }
-                        for a in enriched
-                        if a.amendement_uid != amend.amendement_uid
-                        and a.article_vise == amend.article_vise
-                        and a.statut_mecanique == StatutMecanique.NOUVEAU
-                    ]
-                    
+
                     async with semaphore:
                         try:
                             endpoint_llm, cle_llm = _parametres_llm(payload)  # groq_auto : clé serveur
@@ -1124,13 +1290,19 @@ async def v2_analyser(raw_request: Request, payload: V2AnalyzeRequest):
                                 texte_loi_reference=amend.texte_loi_reference,
                             )
                             llm_data = resultat.model_dump()
-                            save_classification(amend.amendement_uid, llm_data)
+                            save_classification(
+                                amend.amendement_uid,
+                                llm_data,
+                                context_key=cache_ctx,
+                                model=_modele_llm(payload),
+                                candidats=candidats,
+                            )
                         except Exception as exc:
                             clean_exc = sanitize_log_message(str(exc), cle_llm)
                             logging.error(f"❌ LLM FAIL {amend.amendement_uid} : {clean_exc}")
                             llm_data = {
                                 "statut": "Erreur IA",
-                                "analyse_intention": "⚠️ Impossible de joindre l'IA (Serveur local ou tunnel Ngrok hors-ligne). Vérifiez vos réglages IA.",
+                                "analyse_intention": "⚠️ Impossible de joindre l'IA (Serveur local hors-ligne ou injoignable). Vérifiez vos réglages IA.",
                                 "analyse_politique": "Analyse sémantique indisponible.",
                                 "id_discussion_cible": None,
                                 "niveau_confiance": 0.0,
@@ -1207,58 +1379,93 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
 
         llm_data = None
         if target.statut_mecanique == StatutMecanique.NOUVEAU:
-            cached = get_cached_classification(target.amendement_uid)
+            candidats = [
+                {
+                    "id_discussion": a.amendement_uid,
+                    "amendement": {
+                        "divisionArticleDesignation": a.article_vise,
+                        "dispositif": a.dispositif_raw,
+                    },
+                    "auteur": {"groupePolitiqueRef": {"libelle": a.groupe_politique}},
+                }
+                for a in enriched
+                if a.amendement_uid != target.amendement_uid
+                and a.article_vise == target.article_vise
+                and a.statut_mecanique == StatutMecanique.NOUVEAU
+            ]
+            cache_ctx = f"{_modele_llm(payload)}|{len(candidats)}|{','.join(sorted(c['id_discussion'] for c in candidats[:12]))}"
+            cached = get_cached_classification(
+                target.amendement_uid,
+                context_key=cache_ctx,
+                model=_modele_llm(payload),
+                candidats=candidats,
+            )
             if cached:
                 cached["cached"] = True
                 llm_data = cached
             else:
                 contexte_rag = ""
-                try:
-                    from api.tricoteuses_client import fetch_amendements, fetch_acteurs
-                    def fetch_rag():
-                        res = fetch_amendements(uid=target.amendement_uid, timeout=1.9)
-                        if not res: return "", "Inconnu", "", "Inconnu"
-                        
-                        amend_data = res.get("data", {})
-                        acteur_ref = amend_data.get("signataires", {}).get("auteur", {}).get("acteurRef")
-                        
-                        nom_auteur = "Inconnu"
-                        prenom_auteur = ""
-                        groupe = "Inconnu"
-                        
-                        if acteur_ref:
-                            try:
-                                acteur_res = fetch_acteurs(uid=acteur_ref, timeout=1.5)
-                                if acteur_res:
-                                    acteur_data = acteur_res.get("data", {})
-                                    ident = acteur_data.get("etatCivil", {}).get("ident", {})
-                                    nom_auteur = ident.get("nom", "Inconnu")
-                                    prenom_auteur = ident.get("prenom", "")
-                                    groupe = (acteur_data.get("groupePolitiqueRef") or acteur_data.get("groupe") or {}).get("libelle", "Inconnu")
-                            except Exception as e:
-                                logging.warning(f"RAG fetch_acteurs echoué pour {acteur_ref}: {e}")
-                        
-                        nom_complet = f"{prenom_auteur} {nom_auteur}".strip() or "Inconnu"
-                        dossier = amend_data.get("dossierRef", {}) or {}
-                        statut_texte = dossier.get("titre", "Non renseigné")
-                        cosign = amend_data.get("signataires", {}).get("cosignataires", []) or []
-                        signataires = f"{len(cosign)} cosignataires" if cosign else "Aucun"
-                        
-                        contexte = (
-                            f"\n## CONTEXTE POLITIQUE (RAG API)\n"
-                            f"- Auteur : {nom_complet} ({groupe})\n"
-                            f"- Co-signataires : {signataires}\n"
-                            f"- Statut du texte : {statut_texte}\n"
-                        )
-                        return contexte, nom_auteur, prenom_auteur, groupe
-                        
-                    contexte_rag, req_nom, req_prenom, req_groupe = await asyncio.to_thread(fetch_rag)
-                    if req_nom != "Inconnu":
-                        target.auteur_nom = req_nom
-                        target.auteur_prenom = req_prenom
-                        target.groupe_politique = req_groupe
-                except Exception as e:
-                    logging.warning(f"RAG global echoué pour {target.amendement_uid}: {e}")
+                distants_actifs = os.getenv("BOURBON_TEXTES_DISTANTS", "0").strip() == "1"
+                if distants_actifs and not target.auteur_nom and str(target.amendement_uid).startswith("AM"):
+                    try:
+                        try:
+                            from api.tricoteuses_client import fetch_amendements, fetch_acteurs
+                        except ModuleNotFoundError:
+                            from tricoteuses_client import fetch_amendements, fetch_acteurs
+
+                        def fetch_rag():
+                            res = fetch_amendements(uid=target.amendement_uid, timeout=1.9)
+                            if not res:
+                                return "", "Inconnu", "", "Inconnu"
+
+                            amend_data = res.get("data", {}) if isinstance(res.get("data"), dict) else res
+                            acteur_ref = (
+                                amend_data.get("acteurRefUid")
+                                or (amend_data.get("signataires", {}) or {}).get("auteur", {}).get("acteurRef")
+                            )
+
+                            nom_auteur = "Inconnu"
+                            prenom_auteur = ""
+                            groupe = "Inconnu"
+
+                            if acteur_ref:
+                                try:
+                                    acteur_res = fetch_acteurs(uid=acteur_ref, timeout=1.5)
+                                    if acteur_res:
+                                        acteur_data = acteur_res.get("data", {}) if isinstance(acteur_res.get("data"), dict) else acteur_res
+                                        ident = (acteur_data.get("etatCivil", {}) or {}).get("ident", {}) or {}
+                                        nom_auteur = ident.get("nom") or acteur_data.get("nom") or "Inconnu"
+                                        prenom_auteur = ident.get("prenom") or acteur_data.get("prenom") or ""
+                                        groupe = (
+                                            acteur_data.get("groupeParlementaire")
+                                            or acteur_data.get("groupePolitiqueRef")
+                                            or acteur_data.get("groupe")
+                                            or {}
+                                        ).get("libelle", "Inconnu")
+                                except Exception as e:
+                                    logging.warning(f"RAG fetch_acteurs echoué pour {acteur_ref}: {e}")
+
+                            nom_complet = f"{prenom_auteur} {nom_auteur}".strip() or "Inconnu"
+                            dossier = amend_data.get("dossierRef", {}) or {}
+                            statut_texte = dossier.get("titre", "Non renseigné")
+                            cosign = (amend_data.get("signataires", {}) or {}).get("cosignataires", []) or amend_data.get("coSignataires", []) or []
+                            signataires = f"{len(cosign)} cosignataires" if cosign else "Aucun"
+
+                            contexte = (
+                                f"\n## CONTEXTE POLITIQUE (RAG API)\n"
+                                f"- Auteur : {nom_complet} ({groupe})\n"
+                                f"- Co-signataires : {signataires}\n"
+                                f"- Statut du texte : {statut_texte}\n"
+                            )
+                            return contexte, nom_auteur, prenom_auteur, groupe
+
+                        contexte_rag, req_nom, req_prenom, req_groupe = await asyncio.to_thread(fetch_rag)
+                        if req_nom != "Inconnu":
+                            target.auteur_nom = req_nom
+                            target.auteur_prenom = req_prenom
+                            target.groupe_politique = req_groupe
+                    except Exception as e:
+                        logging.warning(f"RAG global echoué pour {target.amendement_uid}: {e}")
 
                 amend_dict = {
                     "amendement": {
@@ -1278,21 +1485,7 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                     "contexte_rag": contexte_rag,
                     "texte_loi_reference": target.texte_loi_reference,
                 }
-                candidats = [
-                    {
-                        "id_discussion": a.amendement_uid,
-                        "amendement": {
-                            "divisionArticleDesignation": a.article_vise,
-                            "dispositif": a.dispositif_raw,
-                        },
-                        "auteur": {"groupePolitiqueRef": {"libelle": a.groupe_politique}},
-                    }
-                    for a in enriched
-                    if a.amendement_uid != target.amendement_uid
-                    and a.article_vise == target.article_vise
-                    and a.statut_mecanique == StatutMecanique.NOUVEAU
-                ]
-                
+
                 try:
                     endpoint_llm, cle_llm = _parametres_llm(payload)  # groq_auto : clé serveur
                     valid_endpoint = validate_endpoint_url(endpoint_llm)
@@ -1305,7 +1498,13 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                         texte_loi_reference=target.texte_loi_reference,
                     )
                     llm_data = resultat.model_dump()
-                    save_classification(target.amendement_uid, llm_data)
+                    save_classification(
+                        target.amendement_uid,
+                        llm_data,
+                        context_key=cache_ctx,
+                        model=_modele_llm(payload),
+                        candidats=candidats,
+                    )
                 except Exception as exc:
                     clean_exc = sanitize_log_message(str(exc), cle_llm)
                     logging.error(f"❌ LLM FAIL {target.amendement_uid} : {clean_exc}")
@@ -1314,7 +1513,7 @@ async def v2_analyser_llm(payload: V2AnalyzeSingleRequest):
                     if "AuthenticationError" in exc_name or "401" in exc_str or "Invalid API Key" in exc_str or "invalid_api_key" in exc_str:
                         error_msg = "⚠️ Clé API invalide ou expirée. Veuillez vérifier et mettre à jour votre clé dans les Réglages IA."
                     else:
-                        error_msg = "⚠️ Impossible de joindre l'IA (Serveur local ou tunnel Ngrok hors-ligne). Vérifiez vos réglages IA."
+                        error_msg = "⚠️ Impossible de joindre l'IA (Serveur local hors-ligne ou injoignable). Vérifiez vos réglages IA."
 
                     llm_data = {
                         "statut": "Erreur IA",
@@ -1351,9 +1550,12 @@ def get_surtransposition_checker():
     if _SURTRANSPOSITION_CHECKER is None:
         try:
             from api.services.analysis.surtransposition_checker import SurtranspositionChecker
+            from api.services.rag_store import get_default_rag_store
         except ModuleNotFoundError:
             from services.analysis.surtransposition_checker import SurtranspositionChecker
-        _SURTRANSPOSITION_CHECKER = SurtranspositionChecker()
+            from services.rag_store import get_default_rag_store
+        store = get_default_rag_store()
+        _SURTRANSPOSITION_CHECKER = SurtranspositionChecker(rag_store=store)
     return _SURTRANSPOSITION_CHECKER
 
 
@@ -1392,11 +1594,21 @@ async def v2_resumer(payload: ResumeRequest):
 async def v2_surtransposition(payload: SurtranspositionRequest):
     """
     Analyse de conformité européenne et détection de surtransposition.
-    Effectue une comparaison RAG en local contre les directives européennes (indexées depuis EUR-Lex)
-    avec détection heuristique et évaluation LLM déterministe.
+    Effectue une comparaison RAG en local contre le Vector Store SQLite persistant
+    (`bourbon_rag.db`) avec détection heuristique et évaluation LLM.
     """
     try:
         checker = get_surtransposition_checker()
+        llm_endpoint = None
+        api_key = None
+        model_name = payload.model
+        if payload.provider == "groq_auto" and _cle_groq_serveur():
+            llm_endpoint = GROQ_ENDPOINT
+            api_key = _cle_groq_serveur()
+            model_name = os.getenv("GROQ_MODEL", "").strip() or GROQ_DEMO_MODEL_DEFAUT
+        elif payload.llm_endpoint:
+            llm_endpoint = payload.llm_endpoint
+            api_key = _nettoyer_cle_api(payload.api_key)
 
         # Cas 1 : Batch de plusieurs amendements
         if payload.amendements:
@@ -1413,6 +1625,9 @@ async def v2_surtransposition(payload: SurtranspositionRequest):
                     amendment_text=full_text,
                     target_article=art,
                     celex_id=celex,
+                    llm_endpoint=llm_endpoint,
+                    model_name=model_name,
+                    api_key=api_key,
                 )
                 res_dict = res.model_dump()
                 res_dict["amendement_uid"] = am.get("uid") or am.get("id") or am.get("amendement_uid")
@@ -1433,6 +1648,9 @@ async def v2_surtransposition(payload: SurtranspositionRequest):
                 amendment_text=full_text,
                 target_article=art,
                 celex_id=celex,
+                llm_endpoint=llm_endpoint,
+                model_name=model_name,
+                api_key=api_key,
             )
             res_dict = res.model_dump()
             res_dict["amendement_uid"] = am.get("uid") or am.get("id") or am.get("amendement_uid")
@@ -1445,6 +1663,9 @@ async def v2_surtransposition(payload: SurtranspositionRequest):
             amendment_text=full_text,
             target_article=payload.article_vise,
             celex_id=payload.celex_id,
+            llm_endpoint=llm_endpoint,
+            model_name=model_name,
+            api_key=api_key,
         )
         res_dict = res.model_dump()
         if payload.amendement_uid:
@@ -1457,3 +1678,67 @@ async def v2_surtransposition(payload: SurtranspositionRequest):
         clean_msg = sanitize_log_message(str(exc))
         logging.error(f"❌ Erreur surtransposition : {clean_msg}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Erreur d'analyse de surtransposition : {clean_msg}")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ROUTES V2 — Vector Store RAG Persistant (Ingestion, Statut & Recherche)
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/v2/rag/status")
+async def v2_rag_status():
+    """Retourne l'état du store vectoriel SQLite persistant (nombre de chunks et documents)."""
+    try:
+        try:
+            from api.services.rag_store import get_default_rag_store
+        except ModuleNotFoundError:
+            from services.rag_store import get_default_rag_store
+        store = get_default_rag_store()
+        return {"status": "ok", **store.list_sources_summary()}
+    except Exception as exc:
+        logging.error(f"❌ Erreur /api/v2/rag/status : {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/v2/rag/ingest")
+async def v2_rag_ingest(payload: RAGIngestRequest):
+    """Ingère des documents, directives ou règles d'irrecevabilité dans `data/bourbon_rag.db`."""
+    try:
+        try:
+            from api.services.rag_store import get_default_rag_store
+        except ModuleNotFoundError:
+            from services.rag_store import get_default_rag_store
+        store = get_default_rag_store()
+        inserted = await asyncio.to_thread(
+            store.ingest_documents,
+            payload.documents,
+            payload.try_remote_embedding,
+        )
+        return {
+            "status": "ok",
+            "inserted_chunks": inserted,
+            **store.list_sources_summary(),
+        }
+    except Exception as exc:
+        logging.error(f"❌ Erreur /api/v2/rag/ingest : {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/v2/rag/query")
+async def v2_rag_query(payload: RAGQueryRequest):
+    """Interroge le store RAG persistant avec grounding strict (seuil 0.45 par défaut)."""
+    try:
+        try:
+            from api.services.rag_store import query_rag
+        except ModuleNotFoundError:
+            from services.rag_store import query_rag
+        return await asyncio.to_thread(
+            query_rag,
+            question=payload.question,
+            top_k=payload.top_k,
+            min_score=payload.min_score,
+            source_type=payload.source_type,
+            doc_id=payload.doc_id,
+        )
+    except Exception as exc:
+        logging.error(f"❌ Erreur /api/v2/rag/query : {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))

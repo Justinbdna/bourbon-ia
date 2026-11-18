@@ -53,4 +53,12 @@ describe('crypto.js — Chiffrement AES-256-GCM', () => {
     const corrupted = encrypted.slice(0, -4) + 'AAAA'
     await expect(decrypt(corrupted)).rejects.toThrow()
   })
+
+  it('chiffre et déchiffre un payload massif (>200 Ko) sans débordement de pile (RangeError)', async () => {
+    const bigPayload = 'A'.repeat(250_000)
+    const encrypted = await encrypt(bigPayload)
+    const decrypted = await decrypt(encrypted)
+    expect(decrypted.length).toBe(250_000)
+    expect(decrypted).toBe(bigPayload)
+  })
 })

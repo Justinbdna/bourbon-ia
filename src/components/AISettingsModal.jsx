@@ -105,7 +105,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
 
       if (isMounted) setIsFetchingModels(true)
       try {
-        let headers = { 'ngrok-skip-browser-warning': 'true' }
+        let headers = {}
         if (provider === 'groq') {
           if (!apiKey) {
             if (isMounted) { setModelsList([]); setIsFetchingModels(false); }
@@ -168,7 +168,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
             const unloadEndpoint = `${localUrl.replace(/\/+$/, '').replace(/\/[vV]1$/, '')}/v1/models/unload`
             await fetch(unloadEndpoint, { 
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' }
+              headers: { 'Content-Type': 'application/json' }
             })
           } catch (e) {
             console.warn("Échec du déchargement du modèle", e)
@@ -181,7 +181,6 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
 
         let headers = {
           'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true'
         }
         if (provider === 'groq') headers['Authorization'] = `Bearer ${apiKey}`
 
@@ -369,8 +368,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                   className="w-full px-3 py-2 border border-ink-300 dark:border-ink-600 rounded-md bg-transparent text-ink-900 dark:text-plume focus:ring-2 focus:ring-slate-500 focus:border-slate-500 transition-all outline-none"
                 />
                 <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-3 bg-neutral-100 dark:bg-neutral-800/50 p-3 rounded-md space-y-2 border border-neutral-200 dark:border-neutral-700/50">
-                  <p>💡 <strong>Navigateur recommandé :</strong> Google Chrome ou Edge (basés sur Chromium).</p>
-                  <p className="text-amber-700 dark:text-amber-400/90">⚠️ <strong>Attention Sécurité (CORS) :</strong> Votre adresse locale DOIT obligatoirement commencer par <strong>https://</strong> (utilisez un tunnel sécurisé comme Ngrok pour convertir votre port local http://127.0.0.1:1234).</p>
+                  <p>💡 <strong>Mode 100 % Local & Souverain :</strong> Utilisez Ollama (<code className="font-mono">http://localhost:11434/v1</code>) ou LM Studio (<code className="font-mono">http://localhost:1234/v1</code>), ou un serveur GPU sur votre réseau local/intranet.</p>
                 </div>
                 
                 {provider === 'local' && (modelsList.length > 0 || isFetchingModels) && (
@@ -416,7 +414,7 @@ export default function AISettingsModal({ isOpen, onClose, onSave, currentSettin
                   <li>Télécharger un modèle d'IA local recommandé : Meta-Llama-3.1-8B-Instruct ou Mistral-7B-Instruct-v0.3.</li>
                   <li><strong>ACTIVER IMPÉRATIVEMENT LE CORS</strong> (Cross-Origin Resource Sharing) dans les paramètres du serveur local.</li>
                   <li>Démarrer le serveur local de l'application.</li>
-                  <li>Copier-coller l'adresse IP (ex: <code className="bg-slate-800 text-emerald-400 dark:bg-slate-900 dark:text-emerald-300 px-2 py-0.5 rounded text-xs font-mono break-all">http://localhost:1234/v1</code>). Si votre navigateur bloque les requêtes (CORS/HTTP), utilisez un tunnel Ngrok pour obtenir un lien sécurisé HTTPS.</li>
+                  <li>Copier-coller l'adresse de votre serveur local ou intranet (ex: <code className="bg-slate-800 text-emerald-400 dark:bg-slate-900 dark:text-emerald-300 px-2 py-0.5 rounded text-xs font-mono break-all">http://localhost:1234/v1</code> ou <code className="bg-slate-800 text-emerald-400 dark:bg-slate-900 dark:text-emerald-300 px-2 py-0.5 rounded text-xs font-mono break-all">http://localhost:11434/v1</code>).</li>
                 </ol>
               </div>
             </div>
