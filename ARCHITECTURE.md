@@ -1,76 +1,56 @@
-# 🏛️ BOURBON.IA - Architecture & Guide Intégral
+# 🏛️ BOURBON.IA — Architecture Technique (v2.0)
 
-Ce document est le pilier technique de Bourbon.IA, l'assistant législatif souverain conçu pour le hackathon de l'Assemblée nationale.
-
----
-
-## 1️⃣ LE CONCEPT
-Bourbon.IA adopte une approche **hybride "Air-Gapped"** garantissant 100% de souveraineté :
-- **Tri Algorithmique Infaillible (Python) :** Avant toute analyse sémantique, un moteur déterministe (`sorting_engine.py`) classe les amendements en respectant scrupuleusement la *Théorie du classement* de l'Assemblée (1. Suppression de l'article > 2. Rédaction globale > 3. Alinéas). L'IA ne peut jamais outrepasser ou halluciner cette hiérarchie légale.
-- **Analyse Sémantique (LLM Local) :** Un processeur IA léger (`llm_processor.py` couplé au point d'entrée FastAPI) identifie exclusivement les relations complexes : Doublons (même auteur, même fond), Amendements identiques (auteurs différents), et Incompatibilités (chutes).
-
-L'architecture est un monolithe assumé pour itérer rapidement durant ce sprint.
+Ce document décrit l'architecture de production de **Bourbon.IA**, conçue pour fonctionner en environnement **Air-Gapped** (`BOURBON_TEXTES_DISTANTS=0` par défaut) avec inférence locale (Ollama / LM Studio) et passage à l'échelle sur serveur GPU.
 
 ---
 
-## 2️⃣ INSTALLATION & DÉPENDANCES
+## 1️⃣ Vue d'Ensemble du Pipeline
 
-**Prérequis :**
-- Python 3.10+
-- Node.js 18+
-- LM Studio / Ollama (Port `1234`) avec un modèle chargé (ex: Mistral 7B Instruct).
-
-**Dépendances Backend (Python) :**
-- `fastapi`, `uvicorn`, `pydantic` (Pour l'API REST asynchrone).
-- `openai` (Pour dialoguer avec le serveur local LM Studio via le standard OpenAI).
-
-**Lancement du Serveur Backend (FastAPI) :**
-```bash
-# Activation de l'environnement virtuel et installation
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r backend/requirements.txt
-
-# Lancement (port 8000)
-uvicorn backend.app.main:app --reload
-```
-
-**Lancement du Serveur Frontend (React/Vite) :**
-```bash
-# Installation et lancement (port 5173)
-npm install
-npm run dev
+```text
+  [ React / Vite UI ]  <── HTTP / GZip ──>  [ FastAPI (api/index.py) ]
+         │                                           │
+         │                                  ┌────────┴────────┐
+         │                                  ▼                 ▼
+         │                       Moteur Déterministe    Services SQLite (data/bourbon_rag.db)
+         │                       (< 150ms, 0 LLM)       • RAG Store (rag_store.py)
+         │                                  │           • 384 Règles (rules_engine.py)
+         │                                  │           • Graphe HATVP (hatvp_graph.py)
+         │                                  │           • Debunker (chrono_debunker.py)
+         │                                  ▼
+         │                       File Batch GPU (batch_job_queue.py) & LLM Local
+         │
+  [ Client MCP Local ] <── stdio JSON-RPC ──> [ mcp_server.py ]
 ```
 
 ---
 
-## 3️⃣ LE FLUX LOGIQUE (DATA FLOW)
-Voici le parcours exact d'une analyse massive d'amendements :
-1. **Upload & Parsing (React) :** L'utilisateur glisse un fichier JSON brut de l'Assemblée. `App.jsx` parse le JSON et extrait un tableau d'objets.
-2. **Transfert (HTTP POST) :** React envoie le payload `{ "amendements": [...], "model": "..." }` vers `POST /api/analyze`.
-3. **Réception (FastAPI) :** Le modèle Pydantic valide la structure des données de façon stricte.
-4. **Moteur de tri (Python) :** `sorting_engine.py` applique la doctrine de l'Assemblée et trie mécaniquement la liste.
-5. **Préparation du contexte (LLM Processor) :** Pour éviter la surcharge mémoire (`n_keep > n_ctx`), FastAPI utilise `extraire_texte_brut()` pour tronquer et nettoyer les balises HTML, gardant uniquement l'auteur, le dispositif et l'exposé.
-6. **Inférence & Sécurisation (LLM) :** Le texte est envoyé au modèle via LM Studio. Le retour est scanné par une **expression régulière stricte** (`re.search(r'\[.*\]|\{.*\}')`) pour prévenir les crashs liés au formatage capricieux de l'IA. Un `try/except` agit comme fallback ultime.
-7. **Interruption asynchrone :** À chaque itération, le backend vérifie `await request.is_disconnected()`. Si l'utilisateur clique sur "Stop", la boucle s'interrompt instantanément.
-8. **Rendu (React) :** FastAPI retourne le JSON structuré final. React affiche visuellement les badges (Doublon 🔴, Identique 🟠, Nouveau 🟢).
+## 2️⃣ Composants Backend (`api/`)
 
----
-
-## 4️⃣ INVENTAIRE DES FICHIERS (CORE MVP)
-
-| Fichier / Dossier | Rôle Technique |
+| Module | Rôle |
 | :--- | :--- |
-| **`backend/app/main.py`** | Cœur du serveur API. Expose `POST /api/analyze`, orchestre le tri, l'extraction, et la boucle LLM asynchrone avec gestion de l'interruption (Stop). |
-| **`backend/llm_processor.py`** | Librairie utilitaire contenant `extraire_texte_brut()` (parsing anti-surcharge) et la configuration réseau du LLM (`resolve_model_and_url()`). |
-| **`backend/sorting_engine.py`** | Moteur déterministe appliquant la hiérarchie légale (Théorie du classement) par regex sur les chapeaux d'amendements. |
-| **`src/App.jsx`** | Composant React principal. Gère l'upload, la requête `fetch()` asynchrone stricte, et le rendu Markdown visuel. |
-| **`backend/requirements.txt`** | Liste stricte des paquets Python nécessaires (FastAPI, Uvicorn, OpenAI). |
-| **`.env`** | Configuration réseau locale (`LLM_API_URL`). |
+| `api/index.py` | Point d'entrée FastAPI : normalisation AN, routes V2 (`/api/v2/mecanique`, `/api/v2/classer-regles`, `/api/v2/analyser-llm`, `/api/v2/resumer`, `/api/v2/surtransposition`, `/api/v2/rag/*`, `/api/v2/rules/*`, `/api/v2/hatvp/*`, `/api/v2/debunker/*`, `/api/v2/jobs/*`, `/api/v2/export-prejaune`). |
+| `api/services/deterministic_classifier.py` | Classement légistique ultra-rapide (`Identique`, `Discussion commune`, `Isolé`), détection des plages d'alinéas, des amendements tombants (`tombe_si_adoption_de`) et calcul d'empreinte. |
+| `api/deterministic_engine.py` | Pipeline déterministe enrichi, résolution des sous-amendements, qualification des irrecevabilités et tri parlementaire. |
+| `api/legal_chapeau_parser.py` & `api/legal_typography.py` | Analyse syntaxique des chapeaux AN/Sénat, priorité au dérouleur, audit Art. 40, détection des dispositions non normatives (Art. 6 DDHC) et normalisation typographique DILA. |
+| `api/services/rag_store.py` | Store vectoriel & lexical persistant SQLite (`data/bourbon_rag.db`), embeddings locaux (`/v1/embeddings`), repli BM25/TF-IDF et grounding strict (`"Information non disponible dans les sources"`). |
+| `api/services/rules_engine.py` | Catalogue SQLite extensible des 384 règles d'irrecevabilité : Art. 40 C., Art. 45 C. (proximité cavalier législatif) et Art. 98 RAN (priorité d'appel 1 à 5). |
+| `api/services/hatvp_graph.py` | Base locale des déclarations HATVP et scoring de proximité thématique sourcé. |
+| `api/services/chrono_debunker.py` | Historique daté des scrutins et interventions par `acteur_ref` / groupe avec détection de contradictions et repli `no_history`. |
+| `api/services/batch_job_queue.py` | File de jobs asynchrone (`BatchJobManager`) levant la limite jusqu'à `BOURBON_MAX_AMENDEMENTS` (25 000). |
+| `api/llm_semantic_engine.py` | Inférence LLM locale/custom avec protection anti-SSRF (résolution DNS), masquage des clés API et validation Pydantic Chain-of-Thought. |
+| `mcp_server.py` | Serveur Model Context Protocol exposant 7 outils métier locaux aux clients MCP. |
 
 ---
 
-## 5️⃣ ROADMAP DU SPRINT FINAL
-- [ ] Remplacement de l'interface actuelle par l'intégration HTML/CSS finale (Thème Institutionnel).
-- [ ] Câblage visuel avancé des badges dynamiques (Doublon, Identique, Valide) directement dans l'interface de tri.
-- [ ] Démonstration live sur le jeu d'essai "crash-test" final de 50 amendements complexes.
+## 3️⃣ Composants Frontend (`src/`)
+
+- **Tableau & Recherche (`src/components/AmendmentTable.jsx`, `AmendmentSearchBar.jsx`)** : filtres multicritères (Article, Groupe politique, Thème, Auteur), badges `⚠️ Tombe si adoption de ...`, `✍️ Arbitré manuellement`, pagination et réordonnancement.
+- **Volet Détail & Comparateur (`src/components/AmendmentDetail.jsx`)** : comparateur mot-à-mot **Loi initiale vs Amendement** (`computeWordDiff`), sélecteur rapide d'arbitrage manuel, résumé IA à la demande et panneau de conformité européenne.
+- **Exports & Sécurité (`src/utils/exportRtf.js`, `exportEloi.js`, `crypto.js`)** : génération RTF Préjaune respectant l'arbitrage manuel, export Éloi JSON, chiffrement AES-GCM par blocs dans `sessionStorage`/`localStorage`.
+
+---
+
+## 4️⃣ Déploiement & Tests
+
+- **Docker Air-Gapped** : `Dockerfile` multi-stage (build Vite + runtime Python 3.12) et `docker-compose.yml` (FastAPI + Ollama avec volume persistant `/app/data`).
+- **Tests** : `python3 -m pytest -W error::DeprecationWarning` (162 tests) et `npm test -- --run` (43 tests).

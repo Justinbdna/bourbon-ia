@@ -48,8 +48,11 @@ Tricoteuses APLATIT le JSON brut de l'Assemblée. Les chemins ci-dessous ont
 from __future__ import annotations
 
 import json
+import os
 import sys
 from typing import Any, Optional
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from api.tricoteuses_client import (
     BASE_URL,
