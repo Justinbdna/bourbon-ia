@@ -31,6 +31,54 @@ except ModuleNotFoundError:
     from services.rag_store import DEFAULT_DB_PATH, STRICT_NO_SOURCE_MESSAGE, _tokenize_lexical  # type: ignore
 
 
+DEFAULT_PARLIAMENTARY_HISTORY: list[dict[str, Any]] = [
+    {
+        "entry_id": "HIST-REF-JOP-001",
+        "acteur_ref": "PA-REF-EPR-01",
+        "auteur_nom": "Groupe Ensemble pour la République",
+        "groupe_acronyme": "EPR",
+        "date_seance": "2023-03-23",
+        "type_entree": "scrutin",
+        "sujet": "Jeux Olympiques et Paralympiques — Sécurité et vidéosurveillance algorithmique",
+        "position_vote": "pour",
+        "resume_position": "Soutien majoritaire du groupe EPR à l'expérimentation encadrée de la vidéosurveillance algorithmique pour les grands événements sportifs.",
+    },
+    {
+        "entry_id": "HIST-REF-JOP-002",
+        "acteur_ref": "PA-REF-SOC-01",
+        "auteur_nom": "Groupe Socialistes et apparentés",
+        "groupe_acronyme": "SOC",
+        "date_seance": "2024-04-11",
+        "type_entree": "intervention",
+        "sujet": "Jeux Olympiques 2030 — Mobilités ferroviaires alpines et transition écologique",
+        "position_vote": "pour",
+        "resume_position": "Prise de position en faveur du conditionnement des investissements olympiques aux dessertes ferroviaires alpines et à la gestion de l'eau en montagne.",
+    },
+    {
+        "entry_id": "HIST-REF-JOP-003",
+        "acteur_ref": "PA-REF-DR-01",
+        "auteur_nom": "Groupe Droite Républicaine",
+        "groupe_acronyme": "DR",
+        "date_seance": "2024-05-14",
+        "type_entree": "scrutin",
+        "sujet": "Garantie financière de l'État et infrastructures des Jeux Olympiques et Paralympiques 2030",
+        "position_vote": "pour",
+        "resume_position": "Vote favorable à l'octroi de la garantie financière de l'État sous réserve d'un contrôle budgétaire strict des dépenses publiques.",
+    },
+    {
+        "entry_id": "HIST-REF-JOP-004",
+        "acteur_ref": "PA-REF-ECOS-01",
+        "auteur_nom": "Groupe Écologiste et Social",
+        "groupe_acronyme": "EcoS",
+        "date_seance": "2024-06-05",
+        "type_entree": "scrutin",
+        "sujet": "Neige de culture, ressources en eau et aménagement en montagne (JOP 2030)",
+        "position_vote": "contre",
+        "resume_position": "Vote défavorable aux dérogations environnementales pour les retenues collinaires et infrastructures alpines sans évaluation climatique préalable.",
+    },
+]
+
+
 def _detect_amendment_stance(dispositif: str, expose: str) -> str:
     """
     Détermine l'orientation normative de l'amendement :
@@ -58,11 +106,19 @@ def _detect_amendment_stance(dispositif: str, expose: str) -> str:
 class ChronoDebunkerStore:
     """Gestionnaire SQLite local de l'historique des scrutins et interventions parlementaires."""
 
-    def __init__(self, db_path: Optional[str | Path] = None):
+    def __init__(self, db_path: Optional[str | Path] = None, auto_seed: bool = True):
         resolved = Path(db_path or os.getenv("BOURBON_RAG_DB_PATH") or DEFAULT_DB_PATH)
         resolved.parent.mkdir(parents=True, exist_ok=True)
         self.db_path = resolved
         self._init_db()
+        if auto_seed:
+            self.ensure_default_seed()
+
+    def ensure_default_seed(self) -> int:
+        """Pré-charge un historique parlementaire de référence si la table est vide."""
+        if self.count_entries() == 0:
+            return self.ingest_history(DEFAULT_PARLIAMENTARY_HISTORY)
+        return 0
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path), timeout=10.0)
@@ -277,6 +333,11 @@ class ChronoDebunkerStore:
 
 
 _DEFAULT_DEBUNKER_STORE: Optional[ChronoDebunkerStore] = None
+
+
+def ensure_default_seed(db_path: Optional[str | Path] = None) -> int:
+    """Garantit l'amorçage initial de la table `parliamentary_history`."""
+    return get_default_debunker_store(db_path=db_path).ensure_default_seed()
 
 
 def get_default_debunker_store(db_path: Optional[str | Path] = None) -> ChronoDebunkerStore:

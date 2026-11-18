@@ -42,6 +42,54 @@ export async function analyzeSurtransposition(amendement, options = {}) {
   }
 }
 
+/**
+ * Contrôle approfondi d'un amendement en 1 clic :
+ * interroge en parallèle les 3 briques d'intelligence parlementaire :
+ *   1. Règles d'irrecevabilité & ordre d'appel (/api/v2/rules/evaluate)
+ *   2. Graphe relationnel HATVP (/api/v2/hatvp/check-influence)
+ *   3. Debunker chronologique des scrutins & interventions (/api/v2/debunker/check-history)
+ */
+export async function runDeepAudit(amendement, options = {}) {
+  const { signal } = options
+  const payloadAmend = {
+    uid: amendement.uid || amendement.id,
+    id: amendement.id || amendement.uid,
+    numero: amendement.numero,
+    article: amendement.article,
+    dispositif: amendement.dispositif_raw || amendement.dispositif || '',
+    expose_sommaire: amendement.expose_sommaire || amendement.exposeSommaire || '',
+    texte_loi_reference: amendement.texte_loi_reference || null,
+    title: amendement.title || amendement.dossier_titre || '',
+    commission: amendement.commission || '',
+    commission_libelle: amendement.commission_libelle || '',
+    commission_mots_cles: amendement.commission_mots_cles || [],
+    auteur_ref: amendement.auteur_ref || '',
+    auteur_nom: amendement.auteur_nom || (amendement.auteurs && amendement.auteurs[0]) || '',
+    groupe_politique: amendement.groupe_politique || amendement.groupe || '',
+  }
+
+  const [resRules, resHatvp, resDebunker] = await Promise.all([
+    postJSON('/api/v2/rules/evaluate', {
+      amendement: payloadAmend,
+      texte_loi_global: payloadAmend.texte_loi_reference || payloadAmend.title || null,
+    }, { signal }),
+    postJSON('/api/v2/hatvp/check-influence', { amendement: payloadAmend }, { signal }),
+    postJSON('/api/v2/debunker/check-history', { amendement: payloadAmend }, { signal }),
+  ])
+
+  if (!resRules.ok || !resHatvp.ok || !resDebunker.ok) {
+    throw new ClassifyError('Erreur lors du contrôle approfondi sur le serveur Bourbon.IA.', 502)
+  }
+
+  const [rules, hatvp, debunker] = await Promise.all([
+    resRules.json(),
+    resHatvp.json(),
+    resDebunker.json(),
+  ])
+
+  return { rules, hatvp, debunker }
+}
+
 // Réglages IA communs au classement et au résumé (cf. ⚙️ Réglages IA).
 function reglagesLLM(aiSettings = {}) {
   const provider = aiSettings.provider || 'local'

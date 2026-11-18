@@ -105,6 +105,33 @@ DEFAULT_RULES_CATALOG: list[dict[str, Any]] = [
         "mots_cles_declencheurs": ["a pour objectif de", "la nation reconnaît", "se donne pour mission"],
         "severite": "MOYENNE",
     },
+    {
+        "rule_id": "IRR-CONST-INJONCTION",
+        "code_article": "Art. 20 & 34 C.",
+        "categorie": "Séparation des pouvoirs",
+        "titre": "Interdiction des injonctions au Gouvernement",
+        "description": "Le législateur ne peut adresser d'injonctions impératives au pouvoir exécutif ni lui prescrire les modalités d'exercice de son pouvoir réglementaire.",
+        "mots_cles_declencheurs": ["enjoint au gouvernement", "il est enjoint au gouvernement", "demande au gouvernement de"],
+        "severite": "HAUTE",
+    },
+    {
+        "rule_id": "IRR-ART41-001",
+        "code_article": "Art. 41 C.",
+        "categorie": "Domaine de la loi",
+        "titre": "Empiètement sur le domaine réglementaire (Art. 37 C.)",
+        "description": "S'il apparaît au cours de la procédure législative qu'une proposition ou un amendement n'est pas du domaine de la loi, le Gouvernement ou le Président de l'assemblée peut opposer l'irrecevabilité.",
+        "mots_cles_declencheurs": ["organigramme interne du ministère", "horaires d'ouverture des guichets"],
+        "severite": "MOYENNE",
+    },
+    {
+        "rule_id": "IRR-CC-CLARTE",
+        "code_article": "Art. 34 C. / Art. 6 DDHC",
+        "categorie": "Précision normative",
+        "titre": "Objectif de clarté et d'intelligibilité de la loi",
+        "description": "Le législateur doit exercer pleinement sa compétence et adopter des dispositions suffisamment précises et dépourvues d'équivoque.",
+        "mots_cles_declencheurs": ["dans des conditions raisonnables non précisées", "selon des modalités indéterminées"],
+        "severite": "MOYENNE",
+    },
 ]
 
 
@@ -189,8 +216,14 @@ class LegislativeRulesEngine:
         resolved.parent.mkdir(parents=True, exist_ok=True)
         self.db_path = resolved
         self._init_db()
-        if auto_seed and self.count_rules() == 0:
-            self.ingest_rules(DEFAULT_RULES_CATALOG)
+        if auto_seed:
+            self.ensure_default_seed()
+
+    def ensure_default_seed(self) -> int:
+        """Pré-charge le socle de règles fondamentales si la table est vide."""
+        if self.count_rules() == 0:
+            return self.ingest_rules(DEFAULT_RULES_CATALOG)
+        return 0
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path), timeout=10.0)
@@ -407,7 +440,6 @@ class LegislativeRulesEngine:
             "recevable": not any(v["severite"] == "BLOQUANTE" for v in violations) and not risque_cavalier,
             "alerte_art40": alerte_art40,
             "gage_detecte": audit_40["gage_detecte"],
-            " motif_art40": audit_40["motif_art40"],
             "motif_art40": audit_40["motif_art40"],
             "risque_cavalier_art45": risque_cavalier,
             "proximite_texte_score": proximite_score,
@@ -420,6 +452,11 @@ class LegislativeRulesEngine:
 
 
 _DEFAULT_RULES_ENGINE: Optional[LegislativeRulesEngine] = None
+
+
+def ensure_default_seed(db_path: Optional[str | Path] = None) -> int:
+    """Garantit l'amorçage initial de la table `legislative_rules`."""
+    return get_default_rules_engine(db_path=db_path).ensure_default_seed()
 
 
 def get_default_rules_engine(db_path: Optional[str | Path] = None) -> LegislativeRulesEngine:

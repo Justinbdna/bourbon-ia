@@ -265,3 +265,51 @@ def test_batch_job_queue_and_mcp_lot3_tools(tmp_path: Path):
     mcp_debunk = mcp_server.debunker_historique_acteur(liasse[0], db_path=str(tmp_path / "mcp_lot3_empty.db"))
     assert mcp_debunk["status"] == "no_history"
     assert mcp_debunk["answer"] == STRICT_NO_SOURCE_MESSAGE
+
+
+def test_auto_seed_reference_tables_when_empty(tmp_path: Path):
+    """
+    Vérifie l'amorçage automatique (`ensure_default_seed`) des 3 tables SQLite
+    lorsqu'une base neuve/vide est initialisée, tout en conservant `no_history`
+    pour un acteur/thème inconnu.
+    """
+    db_file = tmp_path / "autoseed.db"
+
+    rules_engine = LegislativeRulesEngine(db_path=db_file, auto_seed=True)
+    assert rules_engine.count_rules() >= 8
+    assert rules_engine.ensure_default_seed() == 0  # idempotent si déjà amorcé
+
+    hatvp_store = HATVPGraphStore(db_path=db_file, auto_seed=True)
+    assert hatvp_store.count_declarations() >= 6
+    assert hatvp_store.ensure_default_seed() == 0
+
+    # Vérifie que les thématiques JOP 2030 (mobilités ferroviaires alpines / vidéosurveillance) matchent
+    match_ferro = hatvp_store.check_influence({
+        "uid": "AM-FERRO-2030",
+        "dispositif": "Financement des infrastructures ferroviaires alpines et mobilités décarbonées pour les Jeux Olympiques 2030.",
+        "expose_sommaire": "Desserte ferroviaire des sites olympiques en montagne.",
+    })
+    assert match_ferro["total_matches"] >= 1
+
+    debunker_store = ChronoDebunkerStore(db_path=db_file, auto_seed=True)
+    assert debunker_store.count_entries() >= 4
+    assert debunker_store.ensure_default_seed() == 0
+
+    # Thème/groupe présent dans le seed -> cohérence détectée
+    match_hist = debunker_store.check_chronology({
+        "uid": "AM-HIST-EPR",
+        "groupe_politique": "EPR",
+        "dispositif": "Prolongation de la vidéosurveillance algorithmique pour les Jeux Olympiques.",
+    })
+    assert match_hist["status"] in ("consistent", "contradiction_detected")
+    assert len(match_hist["historique"]) >= 1
+
+    # Acteur et sujet inconnus -> retour strict anti-hallucination
+    no_hist = debunker_store.check_chronology({
+        "uid": "AM-INCONNU",
+        "auteur_ref": "PA000000",
+        "groupe_politique": "NI",
+        "dispositif": "Réforme de la pêche pélagique en océan Indien.",
+    })
+    assert no_hist["status"] == "no_history"
+    assert no_hist["answer"] == STRICT_NO_SOURCE_MESSAGE

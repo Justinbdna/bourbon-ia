@@ -9,7 +9,7 @@ import IdentiqueAlert from './amendment/IdentiqueAlert'
 import SkeletonLoader from './amendment/SkeletonLoader'
 import EUCompliancePanel from './amendment/EUCompliancePanel'
 import ResumeIA from './amendment/ResumeIA'
-import { analyzeSurtransposition } from '../api/classify'
+import { analyzeSurtransposition, runDeepAudit } from '../api/classify'
 
 export function formatCleanArticleHeading(article) {
   if (!article) return 'Article —'
@@ -91,8 +91,17 @@ export default function AmendmentDetail({
   const [euCompliance, setEuCompliance] = useState(amendment?.eu_compliance || null)
   const [compareId, setCompareId] = useState(null)
   const [compareWithLaw, setCompareWithLaw] = useState(initialCompareWithLaw)
+  const [deepAudit, setDeepAudit] = useState(null)
+  const [deepAuditLoading, setDeepAuditLoading] = useState(false)
+  const [deepAuditError, setDeepAuditError] = useState(null)
 
   const amendmentKey = amendment?.uid ?? amendment?.id ?? null
+
+  useEffect(() => {
+    setDeepAudit(null)
+    setDeepAuditLoading(false)
+    setDeepAuditError(null)
+  }, [amendmentKey])
 
   useEffect(() => {
     let isCurrent = true
@@ -156,6 +165,20 @@ export default function AmendmentDetail({
     if (!compareWithLaw || !segmentLoiCible || !a.dispositif) return null
     return computeWordDiff(segmentLoiCible, a.dispositif)
   }, [compareWithLaw, segmentLoiCible, a.dispositif])
+
+  async function handleRunDeepAudit() {
+    if (!amendment || deepAuditLoading) return
+    setDeepAuditLoading(true)
+    setDeepAuditError(null)
+    try {
+      const data = await runDeepAudit(amendment)
+      setDeepAudit(data)
+    } catch (err) {
+      setDeepAuditError(err?.message || "Impossible d'exécuter le contrôle approfondi.")
+    } finally {
+      setDeepAuditLoading(false)
+    }
+  }
 
   // ── Safe Rendering : Skeleton si en cours de chargement ──
   if (isLoading) {
@@ -321,6 +344,117 @@ export default function AmendmentDetail({
 
         {/* ── Conformité européenne (surtransposition) — panneau dépliable ── */}
         <EUCompliancePanel result={euCompliance || a.eu_compliance} />
+
+        {/* ── Contrôle approfondi (Règles Art. 40/45/98, HATVP & Debunker chronologique) ── */}
+        <section
+          className="rounded-md bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700/80 p-3.5 space-y-3"
+          data-testid="deep-audit-section"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="font-display text-sm uppercase tracking-wide text-slate-900 dark:text-plume">
+              🛡️ CONTRÔLE APPROFONDI (RÈGLES, HATVP & HISTORIQUE)
+            </h4>
+            <button
+              type="button"
+              data-testid="btn-deep-audit"
+              onClick={handleRunDeepAudit}
+              disabled={deepAuditLoading}
+              className="rounded-md bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 px-3 py-1.5 text-xs font-semibold hover:bg-slate-800 dark:hover:bg-white transition-colors disabled:opacity-50"
+            >
+              {deepAuditLoading ? '⏳ Audit en cours...' : "🔍 Lancer l'audit approfondi"}
+            </button>
+          </div>
+
+          {deepAuditError && (
+            <p className="text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded px-2.5 py-2">
+              {deepAuditError}
+            </p>
+          )}
+
+          {deepAudit && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs" data-testid="deep-audit-cards">
+              {/* Carte 1 — Recevabilité & Ordre d'appel (Art. 40 / 45 / 98) */}
+              <div className="rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#12131A] p-3 space-y-1.5">
+                <p className="font-bold text-slate-900 dark:text-plume">
+                  ⚖️ Recevabilité & Ordre d'appel
+                </p>
+                <p className="text-slate-700 dark:text-slate-300">
+                  <span className="font-semibold">Art. 98 RAN :</span> Priorité {deepAudit.rules?.priorite_appel_art98 ?? '—'}/5
+                  {deepAudit.rules?.libelle_appel_art98 ? ` (${deepAudit.rules.libelle_appel_art98})` : ''}
+                </p>
+                <p className={deepAudit.rules?.alerte_art40 ? 'text-rose-700 dark:text-rose-300 font-semibold' : 'text-emerald-700 dark:text-emerald-300'}>
+                  {deepAudit.rules?.alerte_art40
+                    ? `⚠️ Art. 40 : ${deepAudit.rules?.motif_art40 || 'Risque financier détecté'}`
+                    : `✓ Art. 40 : ${deepAudit.rules?.gage_detecte ? `Gagé (${deepAudit.rules.gage_detecte})` : 'Aucune charge non gagée'}`}
+                </p>
+                <p className={deepAudit.rules?.risque_cavalier_art45 ? 'text-purple-700 dark:text-purple-300 font-semibold' : 'text-slate-600 dark:text-slate-400'}>
+                  {deepAudit.rules?.risque_cavalier_art45
+                    ? `⚠️ Art. 45 : Risque de cavalier législatif (proximité ${deepAudit.rules?.proximite_texte_score ?? 0})`
+                    : `✓ Art. 45 : Lien texte conforme (score ${deepAudit.rules?.proximite_texte_score ?? 1})`}
+                </p>
+                {Array.isArray(deepAudit.rules?.violations) && deepAudit.rules.violations.length > 0 && (
+                  <ul className="pt-1 border-t border-slate-100 dark:border-slate-800 space-y-1 text-[11px] text-slate-600 dark:text-slate-400">
+                    {deepAudit.rules.violations.map((v, idx) => (
+                      <li key={idx}>• <strong>{v.code_article}</strong> : {v.motif}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Carte 2 — Croisement d'intérêt (HATVP) */}
+              <div className="rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#12131A] p-3 space-y-1.5">
+                <p className="font-bold text-slate-900 dark:text-plume">
+                  🕸️ Croisement d'intérêt (HATVP)
+                </p>
+                {Array.isArray(deepAudit.hatvp?.matches) && deepAudit.hatvp.matches.length > 0 ? (
+                  <ul className="space-y-2">
+                    {deepAudit.hatvp.matches.map((m) => (
+                      <li key={m.rep_id} className="border-b last:border-b-0 border-slate-100 dark:border-slate-800 pb-1.5 last:pb-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{m.organisation}</span>
+                          <span className="rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 text-[10px] font-bold">
+                            {Math.round((m.score_proximite || 0) * 100)}%
+                          </span>
+                        </div>
+                        {m.secteur && <p className="text-[11px] text-slate-500 dark:text-slate-400">{m.secteur}</p>}
+                        {m.objet_declare && <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">{m.objet_declare}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-slate-500 dark:text-slate-400 italic">
+                    Aucune correspondance déclarée à la HATVP pour cet amendement.
+                  </p>
+                )}
+              </div>
+
+              {/* Carte 3 — Cohérence chronologique (Scrutins & Interventions) */}
+              <div className="rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#12131A] p-3 space-y-1.5">
+                <p className="font-bold text-slate-900 dark:text-plume">
+                  🕰️ Cohérence chronologique
+                </p>
+                {deepAudit.debunker?.status === 'no_history' || !Array.isArray(deepAudit.debunker?.historique) || deepAudit.debunker.historique.length === 0 ? (
+                  <p className="text-slate-500 dark:text-slate-400 italic">
+                    {deepAudit.debunker?.answer || 'Information non disponible dans les sources'}
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    <p className={deepAudit.debunker.status === 'contradiction_detected' ? 'text-rose-700 dark:text-rose-300 font-semibold' : 'text-emerald-700 dark:text-emerald-300 font-medium'}>
+                      {deepAudit.debunker.message}
+                    </p>
+                    <ul className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+                      {deepAudit.debunker.historique.map((h) => (
+                        <li key={h.entry_id} className="text-[11px] text-slate-600 dark:text-slate-300">
+                          <span className="font-semibold">{h.date_seance}</span> ({h.type_entree} · vote « {h.position_vote} ») — {h.sujet}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
 
         {/* ── Résultat IA (avec Chain of Thought & Arbitrage manuel en 1 clic) ── */}
         <section className="rounded-md bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-3.5">

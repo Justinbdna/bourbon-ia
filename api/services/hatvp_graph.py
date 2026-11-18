@@ -48,11 +48,68 @@ DEFAULT_HATVP_DECLARATIONS: list[dict[str, Any]] = [
     },
     {
         "rep_id": "HATVP-REP-003",
-        "nom_organisation": "Comité d'Organisation des Jeux Olympiques et Paralympiques (COJOP / Acteurs du Sport)",
-        "secteur": "Sport, Événementiel & Sécurité",
-        "thematiques": ["jeux olympiques", "sport", "vidéosurveillance algorithmique", "sécurité des grands événements", "infrastructures sportives", "garantie financière"],
-        "actions_menees": "Auditions parlementaires et notes techniques relatives à l'organisation des Jeux Olympiques et Paralympiques 2030.",
+        "nom_organisation": "Comité d'Organisation des Jeux Olympiques et Paralympiques (COJOP / Mouvement Sportif)",
+        "secteur": "Sport, Événementiel & Collectivités Hôtes",
+        "thematiques": [
+            "jeux olympiques",
+            "jeux paralympiques",
+            "sport",
+            "mouvement sportif",
+            "collectivités hôtes",
+            "infrastructures sportives",
+            "garantie financière",
+            "sites olympiques",
+        ],
+        "actions_menees": "Auditions parlementaires et notes techniques relatives à l'organisation des Jeux Olympiques et Paralympiques 2030, aux sites olympiques et aux collectivités hôtes.",
         "cibles_parlementaires": "Commission des affaires culturelles et de l'éducation, Commission des lois",
+    },
+    {
+        "rep_id": "HATVP-REP-004",
+        "nom_organisation": "Groupement des Mobilités et Infrastructures Ferroviaires Alpines",
+        "secteur": "Transports, Mobilités & Infrastructures Alpines",
+        "thematiques": [
+            "mobilité",
+            "infrastructures ferroviaires",
+            "transports alpins",
+            "desserte ferroviaire",
+            "liaison ferroviaire",
+            "montagne",
+            "accessibilité des stations",
+        ],
+        "actions_menees": "Propositions d'amendements sur le financement et la planification des infrastructures ferroviaires alpines et des mobilités décarbonées pour les Jeux d'hiver 2030.",
+        "cibles_parlementaires": "Commission du développement durable et de l'aménagement du territoire, Commission des finances",
+    },
+    {
+        "rep_id": "HATVP-REP-005",
+        "nom_organisation": "Alliance des Technologies de Sécurité et Vidéosurveillance Algorithmique",
+        "secteur": "Sécurité, Sûreté & Technologies Numériques",
+        "thematiques": [
+            "vidéosurveillance algorithmique",
+            "vidéoprotection",
+            "sécurité des grands événements",
+            "drones",
+            "sûreté",
+            "reconnaissance",
+            "forces de l'ordre",
+        ],
+        "actions_menees": "Contributions techniques en faveur de la prolongation et de l'encadrement des dispositifs de vidéoprotection et de vidéosurveillance algorithmique lors des grands événements sportifs.",
+        "cibles_parlementaires": "Commission des lois",
+    },
+    {
+        "rep_id": "HATVP-REP-006",
+        "nom_organisation": "Collectif Montagne Eau & Biodiversité Alpine",
+        "secteur": "Environnement, Eau & Montagne",
+        "thematiques": [
+            "gestion de l'eau",
+            "neige de culture",
+            "biodiversité en montagne",
+            "zones humides",
+            "enneigement artificiel",
+            "étude d'impact environnemental",
+            "alpes",
+        ],
+        "actions_menees": "Sensibilisation des parlementaires sur la préservation des ressources en eau, l'encadrement de la neige de culture et la protection de la biodiversité en montagne.",
+        "cibles_parlementaires": "Commission du développement durable et de l'aménagement du territoire",
     },
 ]
 
@@ -65,8 +122,14 @@ class HATVPGraphStore:
         resolved.parent.mkdir(parents=True, exist_ok=True)
         self.db_path = resolved
         self._init_db()
-        if auto_seed and self.count_declarations() == 0:
-            self.ingest_declarations(DEFAULT_HATVP_DECLARATIONS)
+        if auto_seed:
+            self.ensure_default_seed()
+
+    def ensure_default_seed(self) -> int:
+        """Pré-charge les déclarations HATVP de référence si la table est vide."""
+        if self.count_declarations() == 0:
+            return self.ingest_declarations(DEFAULT_HATVP_DECLARATIONS)
+        return 0
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path), timeout=10.0)
@@ -216,6 +279,11 @@ class HATVPGraphStore:
 
 
 _DEFAULT_HATVP_STORE: Optional[HATVPGraphStore] = None
+
+
+def ensure_default_seed(db_path: Optional[str | Path] = None) -> int:
+    """Garantit l'amorçage initial de la table `hatvp_declarations`."""
+    return get_default_hatvp_store(db_path=db_path).ensure_default_seed()
 
 
 def get_default_hatvp_store(db_path: Optional[str | Path] = None) -> HATVPGraphStore:

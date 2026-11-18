@@ -137,4 +137,14 @@ describe('AmendmentDetail.jsx — Stabilité Hooks, Métadonnées & Comparateur 
     expect(rtf).toContain('[Id.]')
     expect(rtf).toContain('Tombe si adoption de 10, 11')
   })
+
+  it('affiche le panneau Contrôle Approfondi et le bouton Lancer l’audit approfondi', () => {
+    const html = renderToStaticMarkup(
+      <AmendmentDetail amendment={sampleWithLaw} allAmendments={[sampleWithLaw]} />
+    )
+    expect(html).toContain('data-testid="deep-audit-section"')
+    expect(html).toContain('CONTRÔLE APPROFONDI (RÈGLES, HATVP &amp; HISTORIQUE)')
+    expect(html).toContain('data-testid="btn-deep-audit"')
+    expect(html).toContain("Lancer l&#x27;audit approfondi")
+  })
 })
