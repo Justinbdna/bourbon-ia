@@ -318,17 +318,23 @@ def test_auto_seed_reference_tables_when_empty(tmp_path: Path):
 def test_resolve_sqlite_db_path_vercel_fallback(monkeypatch, tmp_path: Path):
     """
     Vérifie que `resolve_sqlite_db_path()` bascule automatiquement sur `/tmp/bourbon_rag.db`
-    lorsque `VERCEL="1"` est défini ou si le dossier parent est en lecture seule,
-    et respecte `BOURBON_DB_PATH` s'il est configuré.
+    (ou le répertoire temporaire OS sous Windows) lorsque `VERCEL="1"` est défini ou si le
+    dossier parent est en lecture seule, et respecte `BOURBON_DB_PATH` s'il est configuré.
     """
-    from api.services.rag_store import resolve_sqlite_db_path
+    import os
+    from api.services.rag_store import VERCEL_FALLBACK_DB_PATH, resolve_sqlite_db_path
 
     monkeypatch.delenv("BOURBON_DB_PATH", raising=False)
     monkeypatch.delenv("BOURBON_RAG_DB_PATH", raising=False)
 
-    # 1. Environnement Vercel Serverless -> fallback automatique vers /tmp/bourbon_rag.db
+    # 1. Environnement Vercel Serverless -> fallback automatique vers /tmp/bourbon_rag.db (POSIX)
     monkeypatch.setenv("VERCEL", "1")
-    assert str(resolve_sqlite_db_path()) == "/tmp/bourbon_rag.db"
+    resolved_vercel = resolve_sqlite_db_path()
+    if os.name == "nt" and not Path("/tmp").exists():
+        assert resolved_vercel == VERCEL_FALLBACK_DB_PATH
+        assert resolved_vercel.name == "bourbon_rag.db"
+    else:
+        assert resolved_vercel.as_posix() == "/tmp/bourbon_rag.db"
 
     # Les routes API doivent fonctionner sans erreur 500 sous VERCEL="1"
     r_rules = client.post("/api/v2/rules/evaluate", json={"amendement": {"uid": "AM-V", "dispositif": "Supprimer cet article."}})

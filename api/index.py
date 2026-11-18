@@ -16,14 +16,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ==========================================
-# GESTION DES IMPORTS POUR VERCEL SERVERLESS
-# ==========================================
-try:
-    from api.sorting_engine import trier_amendements
-except ModuleNotFoundError:
-    from sorting_engine import trier_amendements
-
 # ── Imports V2 (Pipeline enrichi) ──
 try:
     from api.deterministic_engine import (

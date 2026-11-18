@@ -22,6 +22,7 @@ import math
 import os
 import re
 import sqlite3
+import tempfile
 import unicodedata
 from collections import Counter
 from datetime import datetime, timezone
@@ -41,7 +42,17 @@ STRICT_NO_SOURCE_MESSAGE = "Information non disponible dans les sources"
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_DB_PATH = WORKSPACE_ROOT / "data" / "bourbon_rag.db"
-VERCEL_FALLBACK_DB_PATH = Path("/tmp/bourbon_rag.db")
+
+
+def _resolve_tmp_fallback_path() -> Path:
+    """Retourne `/tmp/bourbon_rag.db` sur POSIX (Vercel/Linux/macOS) ou le dossier temp OS sous Windows."""
+    posix_tmp = Path("/tmp")
+    if os.name != "nt" or posix_tmp.exists():
+        return posix_tmp / "bourbon_rag.db"
+    return Path(tempfile.gettempdir()) / "bourbon_rag.db"
+
+
+VERCEL_FALLBACK_DB_PATH = _resolve_tmp_fallback_path()
 
 
 def resolve_sqlite_db_path(default_path: str | Path = "data/bourbon_rag.db") -> Path:
@@ -49,7 +60,8 @@ def resolve_sqlite_db_path(default_path: str | Path = "data/bourbon_rag.db") -> 
     Résout le chemin SQLite accessible en écriture pour Bourbon.IA :
       1. Si `BOURBON_DB_PATH` (ou `BOURBON_RAG_DB_PATH`) est défini dans l'environnement, l'utiliser.
       2. Sinon, si `VERCEL` est présent dans l'environnement ou si le dossier parent
-         de `default_path` n'est pas accessible en écriture, basculer sur `/tmp/bourbon_rag.db`.
+         de `default_path` n'est pas accessible en écriture, basculer sur `/tmp/bourbon_rag.db`
+         (ou le répertoire temporaire OS sous Windows).
     """
     env_path = os.environ.get("BOURBON_DB_PATH") or os.environ.get("BOURBON_RAG_DB_PATH")
     if env_path and env_path.strip():
@@ -62,6 +74,10 @@ def resolve_sqlite_db_path(default_path: str | Path = "data/bourbon_rag.db") -> 
             return VERCEL_FALLBACK_DB_PATH
 
     if os.environ.get("VERCEL"):
+        try:
+            VERCEL_FALLBACK_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
         return VERCEL_FALLBACK_DB_PATH
 
     if str(default_path) == "data/bourbon_rag.db":

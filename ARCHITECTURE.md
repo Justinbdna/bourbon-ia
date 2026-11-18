@@ -53,4 +53,4 @@ Ce document décrit l'architecture de production de **Bourbon.IA**, conçue pour
 ## 4️⃣ Déploiement & Tests
 
 - **Docker Air-Gapped** : `Dockerfile` multi-stage (build Vite + runtime Python 3.12) et `docker-compose.yml` (FastAPI + Ollama avec volume persistant `/app/data`).
-- **Tests** : `python3 -m pytest -W error::DeprecationWarning` (162 tests) et `npm test -- --run` (43 tests).
+- **Tests** : `python3 -m pytest -W error::DeprecationWarning` (165 tests) et `npm test -- --run` (44 tests).
