@@ -41,6 +41,43 @@ STRICT_NO_SOURCE_MESSAGE = "Information non disponible dans les sources"
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_DB_PATH = WORKSPACE_ROOT / "data" / "bourbon_rag.db"
+VERCEL_FALLBACK_DB_PATH = Path("/tmp/bourbon_rag.db")
+
+
+def resolve_sqlite_db_path(default_path: str | Path = "data/bourbon_rag.db") -> Path:
+    """
+    Résout le chemin SQLite accessible en écriture pour Bourbon.IA :
+      1. Si `BOURBON_DB_PATH` (ou `BOURBON_RAG_DB_PATH`) est défini dans l'environnement, l'utiliser.
+      2. Sinon, si `VERCEL` est présent dans l'environnement ou si le dossier parent
+         de `default_path` n'est pas accessible en écriture, basculer sur `/tmp/bourbon_rag.db`.
+    """
+    env_path = os.environ.get("BOURBON_DB_PATH") or os.environ.get("BOURBON_RAG_DB_PATH")
+    if env_path and env_path.strip():
+        candidate = Path(env_path.strip())
+        try:
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            if os.access(candidate.parent, os.W_OK):
+                return candidate
+        except OSError:
+            return VERCEL_FALLBACK_DB_PATH
+
+    if os.environ.get("VERCEL"):
+        return VERCEL_FALLBACK_DB_PATH
+
+    if str(default_path) == "data/bourbon_rag.db":
+        candidate = DEFAULT_DB_PATH
+    else:
+        candidate = Path(default_path)
+
+    try:
+        candidate.parent.mkdir(parents=True, exist_ok=True)
+        if not os.access(candidate.parent, os.W_OK):
+            return VERCEL_FALLBACK_DB_PATH
+        if candidate.exists() and not os.access(candidate, os.W_OK):
+            return VERCEL_FALLBACK_DB_PATH
+        return candidate
+    except OSError:
+        return VERCEL_FALLBACK_DB_PATH
 
 DEFAULT_EMBEDDING_ENDPOINT = "http://localhost:1234/v1"
 DEFAULT_EMBEDDING_MODEL = "text-embedding-nomic-embed-text-v1.5"
@@ -170,12 +207,27 @@ class PersistentRAGStore:
         embedding_model: Optional[str] = None,
         api_key: str = "local-key",
     ):
-        resolved_path = Path(db_path or os.getenv("BOURBON_RAG_DB_PATH") or DEFAULT_DB_PATH)
-        resolved_path.parent.mkdir(parents=True, exist_ok=True)
+        if db_path is not None:
+            resolved_path = resolve_sqlite_db_path(default_path=db_path) if os.environ.get("VERCEL") else Path(db_path)
+            try:
+                resolved_path.parent.mkdir(parents=True, exist_ok=True)
+                if not os.access(resolved_path.parent, os.W_OK):
+                    resolved_path = VERCEL_FALLBACK_DB_PATH
+            except OSError:
+                resolved_path = VERCEL_FALLBACK_DB_PATH
+        else:
+            resolved_path = resolve_sqlite_db_path()
         self.db_path = resolved_path
 
-        raw_endpoint = embedding_endpoint or os.getenv("BOURBON_EMBEDDING_ENDPOINT", DEFAULT_EMBEDDING_ENDPOINT)
-        self.embedding_endpoint = validate_endpoint_url(raw_endpoint)
+        explicit_endpoint = embedding_endpoint or os.getenv("BOURBON_EMBEDDING_ENDPOINT")
+        if explicit_endpoint:
+            self.embedding_endpoint = validate_endpoint_url(explicit_endpoint)
+        else:
+            try:
+                self.embedding_endpoint = validate_endpoint_url(DEFAULT_EMBEDDING_ENDPOINT)
+            except ValueError:
+                # Sur Vercel Serverless sans endpoint distant configuré, le RAG fonctionne en mode lexical pur.
+                self.embedding_endpoint = None
         self.embedding_model = embedding_model or os.getenv("BOURBON_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
         self.api_key = api_key
         self._init_db()
@@ -211,7 +263,7 @@ class PersistentRAGStore:
         pour LM Studio / Ollama) et retourne le vecteur float, ou `[]` si hors-ligne.
         """
         clean = (text or "").strip()
-        if not clean:
+        if not clean or not self.embedding_endpoint:
             return []
         base = self.embedding_endpoint.rstrip("/")
         url = f"{base}/embeddings" if base.endswith("/v1") else f"{base}/v1/embeddings"
@@ -569,8 +621,9 @@ def get_default_rag_store(db_path: Optional[str | Path] = None) -> PersistentRAG
     global _DEFAULT_STORE
     if db_path is not None:
         return PersistentRAGStore(db_path=db_path)
-    if _DEFAULT_STORE is None:
-        _DEFAULT_STORE = PersistentRAGStore()
+    resolved = resolve_sqlite_db_path()
+    if _DEFAULT_STORE is None or _DEFAULT_STORE.db_path != resolved:
+        _DEFAULT_STORE = PersistentRAGStore(db_path=resolved)
         _DEFAULT_STORE.seed_default_corpus()
     return _DEFAULT_STORE
 

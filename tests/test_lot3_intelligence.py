@@ -313,3 +313,83 @@ def test_auto_seed_reference_tables_when_empty(tmp_path: Path):
     })
     assert no_hist["status"] == "no_history"
     assert no_hist["answer"] == STRICT_NO_SOURCE_MESSAGE
+
+
+def test_resolve_sqlite_db_path_vercel_fallback(monkeypatch, tmp_path: Path):
+    """
+    Vérifie que `resolve_sqlite_db_path()` bascule automatiquement sur `/tmp/bourbon_rag.db`
+    lorsque `VERCEL="1"` est défini ou si le dossier parent est en lecture seule,
+    et respecte `BOURBON_DB_PATH` s'il est configuré.
+    """
+    from api.services.rag_store import resolve_sqlite_db_path
+
+    monkeypatch.delenv("BOURBON_DB_PATH", raising=False)
+    monkeypatch.delenv("BOURBON_RAG_DB_PATH", raising=False)
+
+    # 1. Environnement Vercel Serverless -> fallback automatique vers /tmp/bourbon_rag.db
+    monkeypatch.setenv("VERCEL", "1")
+    assert str(resolve_sqlite_db_path()) == "/tmp/bourbon_rag.db"
+
+    # Les routes API doivent fonctionner sans erreur 500 sous VERCEL="1"
+    r_rules = client.post("/api/v2/rules/evaluate", json={"amendement": {"uid": "AM-V", "dispositif": "Supprimer cet article."}})
+    assert r_rules.status_code == 200
+    r_hatvp = client.post("/api/v2/hatvp/check-influence", json={"amendement": {"uid": "AM-V", "dispositif": "Jeux olympiques 2030."}})
+    assert r_hatvp.status_code == 200
+    r_debunk = client.post("/api/v2/debunker/check-history", json={"amendement": {"uid": "AM-V", "dispositif": "Test."}})
+    assert r_debunk.status_code == 200
+
+    # 2. Override explicite via BOURBON_DB_PATH
+    custom_db = tmp_path / "custom_bourbon.db"
+    monkeypatch.setenv("BOURBON_DB_PATH", str(custom_db))
+    assert resolve_sqlite_db_path() == custom_db
+
+
+def test_cli_ingest_corpus_status_and_ingestion(tmp_path: Path, capsys):
+    """
+    Vérifie l'exécution de `scripts/ingest_corpus.py --status` ainsi que l'ingestion
+    CLI de règles, fiches HATVP, historique et documents Markdown/JSON.
+    """
+    import subprocess
+    from scripts.ingest_corpus import main as ingest_main
+
+    db_file = tmp_path / "cli_rag.db"
+    rules_file = tmp_path / "regles.json"
+    rules_file.write_text(
+        '[{"rule_id": "R-CLI-01", "code_article": "Art. 40 C.", "titre": "Règle CLI", "description": "Test CLI.", "mots_cles_declencheurs": ["cli"], "severite": "HAUTE"}]',
+        encoding="utf-8",
+    )
+    docs_dir = tmp_path / "docs_corpus"
+    docs_dir.mkdir()
+    (docs_dir / "reglement_an.md").write_text(
+        "# Article 98\nLes amendements sont discutés dans l'ordre du dérouleur.\n",
+        encoding="utf-8",
+    )
+
+    rc = ingest_main([
+        "--db-path", str(db_file),
+        "--rules", str(rules_file),
+        "--docs", str(docs_dir),
+        "--status",
+    ])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "rag_chunks" in out
+    assert "legislative_rules" in out
+    assert "hatvp_declarations" in out
+    assert "parliamentary_history" in out
+
+    # Vérification par appel CLI direct en sous-processus avec `--status`
+    env = os.environ.copy()
+    env["BOURBON_DB_PATH"] = str(db_file)
+    proc = subprocess.run(
+        [sys.executable, "scripts/ingest_corpus.py", "--status"],
+        cwd=str(Path(__file__).resolve().parent.parent),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "rag_chunks" in proc.stdout
+    assert "legislative_rules" in proc.stdout
+    assert "hatvp_declarations" in proc.stdout
+    assert "parliamentary_history" in proc.stdout

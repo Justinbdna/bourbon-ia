@@ -24,9 +24,9 @@ from pathlib import Path
 from typing import Any, Optional
 
 try:
-    from api.services.rag_store import DEFAULT_DB_PATH, _tokenize_lexical
+    from api.services.rag_store import DEFAULT_DB_PATH, _tokenize_lexical, resolve_sqlite_db_path
 except ModuleNotFoundError:
-    from services.rag_store import DEFAULT_DB_PATH, _tokenize_lexical  # type: ignore
+    from services.rag_store import DEFAULT_DB_PATH, _tokenize_lexical, resolve_sqlite_db_path  # type: ignore
 
 
 DEFAULT_HATVP_DECLARATIONS: list[dict[str, Any]] = [
@@ -118,8 +118,16 @@ class HATVPGraphStore:
     """Gestionnaire SQLite local des déclarations de représentants d'intérêts HATVP."""
 
     def __init__(self, db_path: Optional[str | Path] = None, auto_seed: bool = True):
-        resolved = Path(db_path or os.getenv("BOURBON_RAG_DB_PATH") or DEFAULT_DB_PATH)
-        resolved.parent.mkdir(parents=True, exist_ok=True)
+        if db_path is not None:
+            resolved = Path(db_path)
+            try:
+                resolved.parent.mkdir(parents=True, exist_ok=True)
+                if not os.access(resolved.parent, os.W_OK):
+                    resolved = resolve_sqlite_db_path()
+            except OSError:
+                resolved = resolve_sqlite_db_path()
+        else:
+            resolved = resolve_sqlite_db_path()
         self.db_path = resolved
         self._init_db()
         if auto_seed:
@@ -290,8 +298,9 @@ def get_default_hatvp_store(db_path: Optional[str | Path] = None) -> HATVPGraphS
     global _DEFAULT_HATVP_STORE
     if db_path is not None:
         return HATVPGraphStore(db_path=db_path)
-    if _DEFAULT_HATVP_STORE is None:
-        _DEFAULT_HATVP_STORE = HATVPGraphStore()
+    resolved = resolve_sqlite_db_path()
+    if _DEFAULT_HATVP_STORE is None or _DEFAULT_HATVP_STORE.db_path != resolved:
+        _DEFAULT_HATVP_STORE = HATVPGraphStore(db_path=resolved)
     return _DEFAULT_HATVP_STORE
 
 
