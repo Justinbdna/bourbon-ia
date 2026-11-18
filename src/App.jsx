@@ -455,7 +455,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-white dark:bg-[#0B0C10]">
       <header className="bg-[#F8F9FA] dark:bg-[#1A1B22] text-slate-800 dark:text-white border-b border-neutral-200/80 dark:border-gray-800 transition-colors">
-        <div className="max-w-[95%] mx-auto px-4 sm:px-6 py-4 sm:py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 py-4 sm:py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           {/* Logo seul à gauche (double source light/dark) */}
           <img src="/bourbon-logo-black.svg" alt="Bourbon.IA Logo" className="h-16 sm:h-24 w-auto object-contain shrink-0 dark:hidden block" />
           <img src="/bourbon-logo-white.svg" alt="Bourbon.IA Logo" className="h-16 sm:h-24 w-auto object-contain shrink-0 hidden dark:block" />
@@ -499,7 +499,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-[95%] mx-auto px-3 sm:px-6 py-4 sm:py-8 space-y-6">
+      <main className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 py-4 sm:py-8 space-y-6">
         <ImportPanel onImport={handleImport} />
 
         {amendments.length === 0 && (
@@ -541,8 +541,8 @@ export default function App() {
           </div>
         )}
 
-        <div className="flex flex-col gap-6 items-start">
-          <div className="w-full">
+        <div className="w-full min-w-0 block space-y-6">
+          <div className="w-full min-w-0 block">
             <AmendmentTable
               amendments={amendments}
               source={sourceLabel}
@@ -556,7 +556,7 @@ export default function App() {
               onExportJson={handleExport}
             />
           </div>
-          <div className="w-full">
+          <div className="w-full min-w-0 block">
             <AmendmentDetail
               amendment={selected}
               allAmendments={amendments}
@@ -571,7 +571,7 @@ export default function App() {
               Granularité au dossier (200+ personnes) → panneau dédié et non
               une colonne du tableau d'amendements. */}
           {(dossierRefCourant || premierUidAmendement) && (
-            <div className="w-full">
+            <div className="w-full min-w-0 block">
               <LawParticipants
                 dossierRef={dossierRefCourant}
                 amendementUid={premierUidAmendement}
@@ -589,7 +589,7 @@ export default function App() {
         />
       </main>
 
-      <footer className="max-w-[95%] mx-auto px-6 pb-8 text-center">
+      <footer className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 pb-8 text-center">
         <p className="text-sm text-neutre dark:text-ink-400 max-w-5xl mx-auto leading-relaxed">
           💡 Note technique : L'application s'exécute par défaut en mode 100 % souverain et local (Ollama / LM Studio / Serveur Intranet). Sur la démo publique Vercel uniquement, un repli Cloud (GPT-OSS-20B via Groq) est activé à titre de démonstration.
         </p>

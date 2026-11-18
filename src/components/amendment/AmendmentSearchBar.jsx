@@ -49,11 +49,11 @@ export default function AmendmentSearchBar({
       onSubmit={soumettre}
       role="search"
       aria-label="Rechercher des amendements"
-      className="border-b border-ink-200 dark:border-ink-700 bg-white dark:bg-surface px-4 py-3"
+      className="w-full min-w-0 border-b border-ink-200 dark:border-ink-700 bg-white dark:bg-surface px-4 py-3"
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
         {/* 1. Article */}
-        <label className="flex flex-col gap-1">
+        <label className="flex flex-col gap-1 min-w-0">
           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Article</span>
           <select
             data-testid="filter-select-article"
@@ -65,7 +65,7 @@ export default function AmendmentSearchBar({
                 onRechercher({ article: val, groupe: groupe.trim(), motCle, auteur: auteur.trim() });
               }
             }}
-            className="h-9 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] px-2.5 py-1.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#D91227]/40"
+            className="w-full min-w-0 h-9 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] px-2.5 py-1.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#D91227]/40"
           >
             <option value="">Tous les articles</option>
             {articles.map(({ article: artNom, nb }) => (
@@ -77,7 +77,7 @@ export default function AmendmentSearchBar({
         </label>
 
         {/* 2. Groupe politique */}
-        <label className="flex flex-col gap-1">
+        <label className="flex flex-col gap-1 min-w-0">
           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Groupe</span>
           <select
             data-testid="filter-select-groupe"
@@ -89,7 +89,7 @@ export default function AmendmentSearchBar({
                 onRechercher({ article: article.trim(), groupe: val, motCle, auteur: auteur.trim() });
               }
             }}
-            className="h-9 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] px-2.5 py-1.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#D91227]/40"
+            className="w-full min-w-0 h-9 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] px-2.5 py-1.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#D91227]/40"
           >
             <option value="">Tous les groupes</option>
             {groupes.map(({ groupe: grpNom, nb }) => (
@@ -101,12 +101,12 @@ export default function AmendmentSearchBar({
         </label>
 
         {/* 3. Thème */}
-        <label className="flex flex-col gap-1">
+        <label className="flex flex-col gap-1 min-w-0">
           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Thème (Commission)</span>
           <select
             value={motCle}
             onChange={(e) => setMotCle(e.target.value)}
-            className="h-9 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] px-2.5 py-1.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#D91227]/40"
+            className="w-full min-w-0 h-9 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] px-2.5 py-1.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#D91227]/40"
           >
             <option value="">Tous les thèmes</option>
             {motsCles.map(({ mot, nb }) => (
@@ -118,7 +118,7 @@ export default function AmendmentSearchBar({
         </label>
 
         {/* 4. Auteur */}
-        <label className="flex flex-col gap-1">
+        <label className="flex flex-col gap-1 min-w-0">
           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Auteur</span>
           <input
             type="search"
@@ -127,7 +127,7 @@ export default function AmendmentSearchBar({
             placeholder="Nom de l'auteur…"
             list="amendment-search-auteurs"
             autoComplete="off"
-            className="h-9 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] px-2.5 py-1.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#D91227]/40"
+            className="w-full min-w-0 h-9 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] px-2.5 py-1.5 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#D91227]/40"
           />
           <datalist id="amendment-search-auteurs">
             {auteurs.map((nom) => (
