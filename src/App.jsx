@@ -272,8 +272,9 @@ export default function App() {
     setWarnings([])
     abortRef.current = false
 
-    // Nettoyer les anciens résultats avant de démarrer
+    // Nettoyer les anciens résultats avant de démarrer (sauf amendements arbitrés manuellement)
     setAmendments(prev => prev.map(a => {
+      if (a.arbitrage_manuel || a.arbitre_manuellement) return a
       const copy = { ...a }
       delete copy.resultat_ia
       return copy
@@ -362,17 +363,31 @@ export default function App() {
     if (aRetirer.has(selectedId)) setSelectedId(null)
   }
 
-  function handleArbitrage(id, nouveauStatut) {
+  function handleArbitrage(id, nouveauStatut, cibleNumero = null) {
     setAmendments((prev) =>
       prev.map((a) => {
         if (a.id === id || a.uid === id) {
           const resIa = a.resultat_ia ? { ...a.resultat_ia } : {}
+          const cible = cibleNumero !== null ? cibleNumero : (a.cible_numero || resIa.cible_numero || null)
+          let groupeObj = null
+          if (nouveauStatut === 'Identique') {
+            groupeObj = { type: 'identiques', groupe_id: `id_manuel_${cible || a.numero || a.id}` }
+          } else if (nouveauStatut === 'Discussion commune') {
+            groupeObj = { type: 'discussion_commune', groupe_id: `dc_manuel_${cible || a.article || a.id}` }
+          }
           resIa.statut = nouveauStatut
-          resIa.analyse_intention = `✍️ Statut requalifié manuellement en « ${nouveauStatut} » par l'administrateur.`
+          resIa.groupe = groupeObj
+          resIa.cible_numero = nouveauStatut === 'Isolé' ? null : cible
+          resIa.id_discussion_cible = nouveauStatut === 'Isolé' ? null : cible
+          resIa.arbitrage_manuel = true
+          resIa.analyse_intention = `✍️ Statut requalifié manuellement en « ${nouveauStatut} »${cible && nouveauStatut !== 'Isolé' ? ` (cible : ${cible})` : ''} par l'administrateur.`
+          resIa.justification = resIa.analyse_intention
           return {
             ...a,
             statut: nouveauStatut,
             statut_mecanique: nouveauStatut,
+            cible_numero: nouveauStatut === 'Isolé' ? null : cible,
+            arbitrage_manuel: true,
             arbitre_manuellement: true,
             date_arbitrage: new Date().toISOString(),
             resultat_ia: resIa,
@@ -548,6 +563,7 @@ export default function App() {
               onClose={() => setSelectedId(null)}
               isLoading={isClassifying && selected && !selected.resultat_ia}
               aiSettings={aiSettings}
+              onArbitrage={handleArbitrage}
             />
           </div>
 

@@ -33,17 +33,17 @@ export function rtfEscape(str) {
 // glyphe de crochet (╓ premier, ║ milieu, ╙ dernier) à afficher.
 // Les doublons et additionnels ne sont pas mis entre crochets dans le
 // préjaune officiel : seuls Dc. et Id. le sont.
-function extractGroupInfo(a) {
+export function extractGroupInfo(a) {
   const g = a.resultat_ia?.groupe
   if (g?.groupe_id && GROUP_LABELS[g.type]) {
     return g
   }
-  const statut = a.resultat_ia?.statut || a.statut
+  const statut = a.arbitrage_manuel ? (a.statut || a.resultat_ia?.statut) : (a.resultat_ia?.statut || a.statut)
   if (statut === 'Identique' || statut === 'Identiques') {
-    const gid = a.groupe_identique_id || a.discussionId || a.id_discussion_identique || a.cluster_id
+    const gid = a.groupe_conflit_id || a.groupe_identique_id || a.cible_numero || a.discussionId || a.id_discussion_identique || a.cluster_id
     if (gid) return { type: 'identiques', groupe_id: String(gid) }
   } else if (statut === 'Discussion commune' || statut === 'Similaire' || statut === 'Incompatible') {
-    const cid = a.resultat_ia?.id_discussion_cible || a.cluster_id
+    const cid = a.groupe_conflit_id || a.cible_numero || a.resultat_ia?.cible_numero || a.resultat_ia?.id_discussion_cible || a.cluster_id
     if (cid) return { type: 'discussion_commune', groupe_id: String(cid) }
   }
   return null
@@ -133,15 +133,20 @@ export function generateRtfPrejaune(amendments) {
     const deco = decos[idx]
     const auteursText = a.auteurs && a.auteurs.length ? a.auteurs.join(', ') : 'la commission'
     
-    const statut = a.resultat_ia?.statut || a.statut
+    const statut = a.arbitrage_manuel ? (a.statut || a.resultat_ia?.statut) : (a.resultat_ia?.statut || a.statut)
     let prefix = ''
-    if (statut === 'Discussion commune' || statut === 'Incompatible') {
+    if (statut === 'Discussion commune' || statut === 'Incompatible' || statut === 'Similaire') {
       prefix = '\\b [Dc.]\\b0  '
     } else if (statut === 'Identique' || statut === 'Identiques') {
       prefix = '\\b [Id.]\\b0  '
     }
     
-    const mentionTombant = a.alerte_tombant ? ` (${a.alerte_tombant})` : (a.tombe_si_adoption ? ` (⚠️ Tombe si adoption de ${a.parent_suppression_numero || 'suppression'})` : '')
+    const tombantNums = Array.isArray(a.tombe_si_adoption_de) && a.tombe_si_adoption_de.length > 0
+      ? a.tombe_si_adoption_de.join(', ')
+      : a.parent_suppression_numero
+    const mentionTombant = a.alerte_tombant
+      ? ` (${a.alerte_tombant})`
+      : ((a.tombe_si_adoption || tombantNums) ? ` (⚠️ Tombe si adoption de ${tombantNums || 'suppression'})` : '')
     const rawContent = `Adt n\u00b0 ${a.numero}${a.rectification ? ' ' + a.rectification : ''} de ${auteursText}${mentionTombant}`
     const escapedContent = prefix + rtfEscape(rawContent)
     

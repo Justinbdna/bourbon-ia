@@ -34,6 +34,19 @@ except ModuleNotFoundError:
     from schemas import EnrichedAmendment, PointImpact, StatutMecanique
 
 try:
+    from api.legal_chapeau_parser import (
+        auditer_recevabilite_art40,
+        calculer_priorite_derouleur,
+        parse_chapeau,
+    )
+except ModuleNotFoundError:
+    from legal_chapeau_parser import (
+        auditer_recevabilite_art40,
+        calculer_priorite_derouleur,
+        parse_chapeau,
+    )
+
+try:
     from api.deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII
 except ModuleNotFoundError:
     try:
@@ -574,8 +587,27 @@ def process_deterministic_sorting(
             amend.est_cavalier_art45 = True
             amend.alerte_art45 = "⚠️ Risque Art. 45 (Lien indirect douteux)"
 
-        # Détection du gage financier Art. 40
-        amend.est_gage = detect_gage_financier(amend.dispositif_raw or amend.dispositif_clean, amend.raw_dict)
+        # Détection du gage financier Art. 40 et analyse syntaxique du chapeau (AN / Sénat)
+        texte_source = amend.dispositif_raw or amend.dispositif_clean
+        chapeau_info = parse_chapeau(texte_source)
+        amend.verbe_action = chapeau_info.verbe_action or None
+        amend.cible_type = chapeau_info.cible_type or None
+        amend.alinea_num = chapeau_info.alinea_num
+        amend.rang_phrase = chapeau_info.rang_phrase
+        amend.occurrence_mots = chapeau_info.occurrence_mots
+        amend.alerte_non_normatif = bool(chapeau_info.alerte_non_normatif)
+        amend.motif_non_normatif = chapeau_info.motif_non_normatif
+        if chapeau_info.alinea_num is not None and not amend.alinea_vise:
+            amend.alinea_vise = str(chapeau_info.alinea_num)
+
+        prio_tuple = calculer_priorite_derouleur(amend)
+        amend.priorite_derouleur = prio_tuple[0]
+
+        audit_40 = auditer_recevabilite_art40(texte_source, amend.raw_dict)
+        amend.alerte_recevabilite_art40 = bool(audit_40["alerte_recevabilite_art40"])
+        amend.motif_art40 = audit_40["motif_art40"]
+        amend.gage_detecte = audit_40["gage_detecte"]
+        amend.est_gage = bool(audit_40["gage_detecte"]) or detect_gage_financier(texte_source, amend.raw_dict)
 
         # Extraction du rattachement de sous-amendement si présent dans raw_dict
         if not amend.amendement_parent_ref and amend.raw_dict:
@@ -768,20 +800,20 @@ def process_deterministic_sorting(
         amends_par_article[art_key].append(a)
 
     for art_key, art_amends in amends_par_article.items():
-        suppr_amend = next(
-            (
-                a for a in art_amends
-                if a.priorite_appel == 1 or a.point_impact == PointImpact.SUPPRESSION_ARTICLE
-            ),
-            None
-        )
-        if suppr_amend:
+        suppr_amends = [
+            a for a in art_amends
+            if a.priorite_appel == 1 or a.point_impact == PointImpact.SUPPRESSION_ARTICLE
+        ]
+        if suppr_amends:
+            suppr_nums = [str(s.numero_long or s.amendement_uid) for s in suppr_amends]
+            suppr_label = ", ".join(suppr_nums)
             for other in art_amends:
-                if other.amendement_uid != suppr_amend.amendement_uid and other.priorite_appel > 1:
-                    other.parent_suppression_id = suppr_amend.amendement_uid
-                    other.parent_suppression_numero = suppr_amend.numero_long or suppr_amend.amendement_uid
+                if other.priorite_appel > 1 and other.point_impact != PointImpact.SUPPRESSION_ARTICLE:
+                    other.parent_suppression_id = suppr_amends[0].amendement_uid
+                    other.parent_suppression_numero = suppr_label
                     other.tombe_si_adoption = True
-                    other.alerte_tombant = f"⚠️ Tombe si adoption de {other.parent_suppression_numero}"
+                    other.tombe_si_adoption_de = list(suppr_nums)
+                    other.alerte_tombant = f"⚠️ Tombe si adoption de {suppr_label}"
 
     # ── Phase 5 : Tri stable officiel (article parlementaire, priorité interne AN, sous-amendements) ──
     amendments.sort(key=lambda a: (

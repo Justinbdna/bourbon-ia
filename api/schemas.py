@@ -12,10 +12,13 @@ Ces schémas servent de contrat de données entre :
 
 from __future__ import annotations
 
+import os
 from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, Field, ConfigDict
+
+MAX_AMENDEMENTS_LIMIT = int(os.getenv("BOURBON_MAX_AMENDEMENTS", "25000"))
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -119,6 +122,10 @@ class EnrichedAmendment(BaseModel):
     parent_suppression_id: Optional[str] = Field(None, description="UID de l'amendement de suppression totale dont dépend la chute")
     parent_suppression_numero: Optional[str] = Field(None, description="Numéro d'affichage de l'amendement de suppression totale (ex: CD50)")
     tombe_si_adoption: bool = Field(False, description="True si cet amendement tombe en cas d'adoption de la suppression totale")
+    tombe_si_adoption_de: list[str] = Field(
+        default_factory=list,
+        description="Liste des numéros d'amendements de suppression totale d'article faisant tomber cet amendement",
+    )
     alerte_tombant: Optional[str] = Field(None, description="Mention d'alerte : ⚠️ Tombe si adoption de CD50")
 
     # ── Ordre d'appel en séance (Règlement AN, Art. 98) ──
@@ -128,6 +135,30 @@ class EnrichedAmendment(BaseModel):
     # ── Cavalier législatif (Article 45 de la Constitution) ──
     est_cavalier_art45: bool = Field(False, description="True si risque avéré de cavalier législatif (absence de lien direct ou indirect)")
     alerte_art45: Optional[str] = Field(None, description="Mention d'alerte : ⚠️ Risque Art. 45 (Lien indirect douteux)")
+
+    # ── Audit constitutionnel de recevabilité financière (Article 40) ──
+    alerte_recevabilite_art40: bool = Field(
+        False,
+        description="True si une perte de recettes ou création de charge est détectée sans gage constitutionnel valide (Art. 40)",
+    )
+    motif_art40: Optional[str] = Field(
+        None,
+        description="Motif détaillé du risque d'irrecevabilité financière au titre de l'Article 40",
+    )
+    gage_detecte: Optional[str] = Field(
+        None,
+        description="Libellé du gage financier constitutionnel détecté (Tabac, Alcool, DGF, Sécurité sociale)",
+    )
+
+    # ── Analyse syntaxique du chapeau et ordre au dérouleur (api/legal_chapeau_parser.py) ──
+    verbe_action: Optional[str] = Field(None, description="Verbe cardinal d'action du chapeau (SUPPRIMER, REDIGER_AINSI, etc.)")
+    cible_type: Optional[str] = Field(None, description="Cible anatomique du chapeau (ARTICLE, ALINEA, PHRASE, MOTS, etc.)")
+    alinea_num: Optional[int] = Field(None, description="Numéro de pastille d'alinéa en marge extrait du chapeau")
+    rang_phrase: Optional[int] = Field(None, description="Rang numérique de la phrase visée")
+    occurrence_mots: Optional[int] = Field(None, description="Nombre ou rang d'occurrences de mots visés")
+    priorite_derouleur: Optional[int] = Field(None, description="Priorité mathématique d'appel au dérouleur de séance")
+    alerte_non_normatif: bool = Field(False, description="True si le dispositif est purement déclaratif (neutron législatif, Art. 6 DDHC)")
+    motif_non_normatif: Optional[str] = Field(None, description="Motif d'alerte de portée normative faible")
     
     raw_dict: dict = Field(default_factory=dict, description="Données d'origine pour préserver les métadonnées")
 
@@ -150,7 +181,7 @@ class SurtranspositionItemInput(BaseModel):
 class SurtranspositionRequest(BaseModel):
     """Payload pour la route /api/v2/surtransposition."""
     model_config = ConfigDict(use_enum_values=True)
-    amendements: Optional[list[dict]] = Field(None, max_length=2000)
+    amendements: Optional[list[dict]] = Field(None, max_length=MAX_AMENDEMENTS_LIMIT)
     amendement: Optional[dict] = None
     dispositif: Optional[str] = Field(None, max_length=500_000)
     expose_sommaire: Optional[str] = Field(None, max_length=500_000)

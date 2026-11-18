@@ -56,8 +56,15 @@ export default function AmendmentSearchBar({
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Article</span>
           <select
+            data-testid="filter-select-article"
             value={article}
-            onChange={(e) => setArticle(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setArticle(val);
+              if (onRechercher) {
+                onRechercher({ article: val, groupe: groupe.trim(), motCle, auteur: auteur.trim() });
+              }
+            }}
             className="h-9 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] px-2.5 py-1.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#D91227]/40"
           >
             <option value="">Tous les articles</option>
@@ -73,8 +80,15 @@ export default function AmendmentSearchBar({
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Groupe</span>
           <select
+            data-testid="filter-select-groupe"
             value={groupe}
-            onChange={(e) => setGroupe(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setGroupe(val);
+              if (onRechercher) {
+                onRechercher({ article: article.trim(), groupe: val, motCle, auteur: auteur.trim() });
+              }
+            }}
             className="h-9 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] px-2.5 py-1.5 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#D91227]/40"
           >
             <option value="">Tous les groupes</option>

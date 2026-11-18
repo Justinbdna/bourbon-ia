@@ -26,7 +26,10 @@ from typing import Any, Callable, Optional
 
 from api.deterministic_engine import process_deterministic_sorting, qualify_irrecevabilite
 from api.index import _build_enriched, _inject_textes_reference, _to_frontend
+from api.services.chrono_debunker import ChronoDebunkerStore, check_actor_chronology, get_default_debunker_store
+from api.services.hatvp_graph import HATVPGraphStore, check_amendment_influence, get_default_hatvp_store
 from api.services.rag_store import STRICT_NO_SOURCE_MESSAGE, PersistentRAGStore, get_default_rag_store, query_rag
+from api.services.rules_engine import LegislativeRulesEngine, evaluate_amendment_rules, get_default_rules_engine
 from api.textes_resolver import extract_texte_ref, get_textes_reference
 
 
@@ -450,6 +453,65 @@ def generer_prejaune_rtf(amendements_json: str | list[dict[str, Any]] | dict[str
 
     parts.append("}")
     return "\n".join(parts)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# OUTIL MCP 5 : evaluer_regles_irrecevabilite
+# ══════════════════════════════════════════════════════════════════════════
+@mcp.tool()
+def evaluer_regles_irrecevabilite(
+    amendement_json: str | dict[str, Any],
+    texte_loi_global: str = "",
+    db_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Évalue un amendement contre le catalogue des 384 règles d'irrecevabilité
+    (Article 40 C., Article 45 C. Cavalier législatif, Article 98 RAN Ordre d'appel).
+    """
+    am = json.loads(amendement_json) if isinstance(amendement_json, str) else amendement_json
+    engine = LegislativeRulesEngine(db_path=db_path) if db_path else get_default_rules_engine()
+    rag = PersistentRAGStore(db_path=db_path) if db_path else get_default_rag_store()
+    return evaluate_amendment_rules(
+        amendement=am,
+        texte_loi_global=texte_loi_global or None,
+        rag_store=rag,
+        engine=engine,
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# OUTIL MCP 6 : verifier_influence_hatvp
+# ══════════════════════════════════════════════════════════════════════════
+@mcp.tool()
+def verifier_influence_hatvp(
+    amendement_json: str | dict[str, Any],
+    db_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Croise un amendement avec le graphe local des déclarations de représentants
+    d'intérêts HATVP et retourne les correspondances sourcées.
+    """
+    am = json.loads(amendement_json) if isinstance(amendement_json, str) else amendement_json
+    store = HATVPGraphStore(db_path=db_path) if db_path else get_default_hatvp_store()
+    return check_amendment_influence(amendement=am, store=store)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# OUTIL MCP 7 : debunker_historique_acteur
+# ══════════════════════════════════════════════════════════════════════════
+@mcp.tool()
+def debunker_historique_acteur(
+    amendement_json: str | dict[str, Any],
+    db_path: Optional[str] = None,
+) -> dict[str, Any]:
+    """
+    Vérifie l'historique des scrutins et interventions de l'auteur ou de son groupe
+    pour détecter les contradictions chronologiques (ou retourne strictement
+    'Information non disponible dans les sources' si aucun historique n'existe).
+    """
+    am = json.loads(amendement_json) if isinstance(amendement_json, str) else amendement_json
+    store = ChronoDebunkerStore(db_path=db_path) if db_path else get_default_debunker_store()
+    return check_actor_chronology(amendement=am, store=store)
 
 
 if __name__ == "__main__":

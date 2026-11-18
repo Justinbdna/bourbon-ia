@@ -6,6 +6,8 @@ import AmendmentDetail, {
   extractTargetedLawSegment,
   formatCleanArticleHeading,
 } from '../components/AmendmentDetail'
+import { filtrerAmendements } from '../components/AmendmentTable'
+import { generateRtfPrejaune } from '../utils/exportRtf'
 
 describe('AmendmentDetail.jsx — Stabilité Hooks, Métadonnées & Comparateur Loi/Amendement', () => {
   const sampleWithLaw = {
@@ -88,5 +90,51 @@ describe('AmendmentDetail.jsx — Stabilité Hooks, Métadonnées & Comparateur 
   it('nettoie les titres d’articles dupliqués via formatCleanArticleHeading', () => {
     expect(formatCleanArticleHeading('Article Article PREMIER')).toBe('Article PREMIER')
     expect(formatCleanArticleHeading('3 bis')).toBe('Article 3 bis')
+  })
+
+  it('filtre dynamiquement les amendements par Article et par Groupe politique', () => {
+    const liasse = [
+      { id: '1', numero: '1', article: 'Article PREMIER', groupe_politique: 'LFI-NFP', dispositif: 'Texte 1' },
+      { id: '2', numero: '2', article: 'Article 3 BIS', groupe_politique: 'EPR', dispositif: 'Texte 2' },
+      { id: '3', numero: '3', article: 'Article 3 BIS', groupe_politique: 'LFI-NFP', dispositif: 'Texte 3' },
+    ]
+
+    const parArt3Bis = filtrerAmendements(liasse, { article: '3 BIS', groupe: '' })
+    expect(parArt3Bis.map((a) => a.id)).toEqual(['2', '3'])
+
+    const parGroupeLfi = filtrerAmendements(liasse, { article: '', groupe: 'LFI-NFP' })
+    expect(parGroupeLfi.map((a) => a.id)).toEqual(['1', '3'])
+
+    const combine = filtrerAmendements(liasse, { article: '3 BIS', groupe: 'EPR' })
+    expect(combine.map((a) => a.id)).toEqual(['2'])
+
+    const reinitialise = filtrerAmendements(liasse, { article: '', groupe: '' })
+    expect(reinitialise.length).toBe(3)
+  })
+
+  it('affiche la pastille d’arbitrage manuel, l’alerte d’amendement tombant et les persiste dans l’export RTF', () => {
+    const amArbitre = {
+      ...sampleWithLaw,
+      statut: 'Identique',
+      cible_numero: '101',
+      arbitrage_manuel: true,
+      tombe_si_adoption_de: ['10', '11'],
+      resultat_ia: {
+        ...sampleWithLaw.resultat_ia,
+        statut: 'Identique',
+        cible_numero: '101',
+        groupe: { type: 'identiques', groupe_id: 'id_manuel_101' },
+      },
+    }
+
+    const html = renderToStaticMarkup(<AmendmentDetail amendment={amArbitre} allAmendments={[amArbitre, sampleWithoutLaw]} />)
+    expect(html).toContain('data-testid="badge-arbitrage-manuel"')
+    expect(html).toContain('Arbitré manuellement')
+    expect(html).toContain('Tombe si adoption de 10, 11')
+    expect(html).toContain('data-testid="select-arbitrage-statut"')
+
+    const rtf = generateRtfPrejaune([amArbitre])
+    expect(rtf).toContain('[Id.]')
+    expect(rtf).toContain('Tombe si adoption de 10, 11')
   })
 })

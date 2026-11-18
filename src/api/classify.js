@@ -81,6 +81,7 @@ export async function resumerAmendement(amendement, aiSettings = {}, options = {
 
 /** Amendement que le tri par règles n'a pas pu classer : il sera envoyé à l'IA. */
 export function doitPasserParIA(a) {
+  if (a.arbitrage_manuel || a.arbitre_manuellement) return false
   return a.statut_mecanique === 'NOUVEAU' && !a._skipLLM && !a.skip_llm
 }
 
@@ -154,8 +155,12 @@ export async function classifyAmendmentsV2(amendements, options = {}) {
     max_tokens: isReasoningMode ? 2048 : 1024,
   }
 
-  // 1. Tri mécanique immédiat (sans LLM)
-  const mecaniques = await trierSansIA(amendements, { signal, payload })
+  // 1. Tri mécanique immédiat (sans LLM), en préservant tout arbitrage manuel existant
+  const rawMecaniques = await trierSansIA(amendements, { signal, payload })
+  const arbitresMap = new Map(
+    amendements.filter((a) => a.arbitrage_manuel || a.arbitre_manuellement).map((a) => [a.id || a.uid, a])
+  )
+  const mecaniques = rawMecaniques.map((m) => arbitresMap.get(m.id || m.uid) || m)
   // Met à jour l'UI instantanément avec le tri mécanique
   onMechanical(mecaniques)
 

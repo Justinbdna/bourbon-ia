@@ -85,6 +85,7 @@ export default function AmendmentDetail({
   onClose,
   isLoading,
   aiSettings,
+  onArbitrage,
   initialCompareWithLaw = false,
 }) {
   const [euCompliance, setEuCompliance] = useState(amendment?.eu_compliance || null)
@@ -213,15 +214,15 @@ export default function AmendmentDetail({
         />
 
         {/* ── Alerte Amendement Tombant (Chute par ricochet) ── */}
-        {(a.tombe_si_adoption || a.alerte_tombant) && (
+        {(a.tombe_si_adoption || a.alerte_tombant || (Array.isArray(a.tombe_si_adoption_de) && a.tombe_si_adoption_de.length > 0)) && (
           <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-900 dark:text-amber-200 text-xs leading-relaxed">
             <span className="text-base shrink-0">⚠️</span>
             <div>
-              <p className="font-bold uppercase tracking-wider text-[11px] text-amber-800 dark:text-amber-300">
-                Amendement tombant (Chute par ricochet)
-              </p>
-              <p className="mt-0.5">
-                {a.alerte_tombant || `Cet amendement tombe automatiquement si l'amendement de suppression ${a.parent_suppression_numero || ''} est adopté en séance.`}
+              <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-200 border border-rose-300 dark:border-rose-700 px-2.5 py-0.5 text-[11px] font-bold">
+                ⚠️ Tombe si adoption de {Array.isArray(a.tombe_si_adoption_de) && a.tombe_si_adoption_de.length > 0 ? a.tombe_si_adoption_de.join(', ') : (a.parent_suppression_numero || 'suppression')}
+              </span>
+              <p className="mt-1">
+                {a.alerte_tombant || `Cet amendement tombe automatiquement si l'amendement de suppression ${Array.isArray(a.tombe_si_adoption_de) && a.tombe_si_adoption_de.length > 0 ? a.tombe_si_adoption_de.join(', ') : (a.parent_suppression_numero || '')} est adopté en séance.`}
               </p>
             </div>
           </div>
@@ -321,16 +322,26 @@ export default function AmendmentDetail({
         {/* ── Conformité européenne (surtransposition) — panneau dépliable ── */}
         <EUCompliancePanel result={euCompliance || a.eu_compliance} />
 
-        {/* ── Résultat IA (avec Chain of Thought) ── */}
+        {/* ── Résultat IA (avec Chain of Thought & Arbitrage manuel en 1 clic) ── */}
         <section className="rounded-md bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800 p-3.5">
-          <h4 className="font-display text-sm uppercase tracking-wide text-slate-900 dark:text-plume mb-2">
-            Résultat du classement
-          </h4>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <h4 className="font-display text-sm uppercase tracking-wide text-slate-900 dark:text-plume">
+              Résultat du classement
+            </h4>
+            {(a.arbitrage_manuel || a.arbitre_manuellement) && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 px-2.5 py-0.5 text-xs font-semibold"
+                data-testid="badge-arbitrage-manuel"
+              >
+                ✍️ Arbitré manuellement
+              </span>
+            )}
+          </div>
           {res ? (
             <div className="space-y-3 text-sm">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-semibold text-slate-900 dark:text-plume">Rang {res.rang}</span>
-                <GroupeBadge statut={res.statut} groupe={res.groupe} />
+                <GroupeBadge statut={res.statut || a.statut} groupe={res.groupe} />
 
                 {/* ── 💡 Tooltip Chain of Thought ── */}
                 {res.analyse_intention && (
@@ -360,6 +371,50 @@ export default function AmendmentDetail({
               Pas encore classé — lance le classement depuis le bouton en haut de page.
             </p>
           )}
+
+          {/* ── Sélecteur rapide d'arbitrage manuel (Human-in-the-Loop) ── */}
+          <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700/70 flex flex-wrap items-center gap-2 text-xs">
+            <label className="font-medium text-slate-700 dark:text-slate-300">
+              ✍️ Requalifier manuellement :
+            </label>
+            <select
+              data-testid="select-arbitrage-statut"
+              value={res?.statut || a.statut || 'Isolé'}
+              onChange={(e) => {
+                if (onArbitrage) {
+                  onArbitrage(a.id ?? a.uid, e.target.value, a.cible_numero || res?.cible_numero || null)
+                }
+              }}
+              className="h-8 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] px-2 py-1 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-[#D91227]"
+            >
+              <option value="Isolé">Isolé</option>
+              <option value="Discussion commune">Discussion commune</option>
+              <option value="Identique">Identique</option>
+            </select>
+
+            {concurrentsTries.length > 0 && ((res?.statut || a.statut) === 'Discussion commune' || (res?.statut || a.statut) === 'Identique') && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-600 dark:text-slate-400">Cible :</span>
+                <select
+                  data-testid="select-arbitrage-cible"
+                  value={a.cible_numero || res?.cible_numero || res?.id_discussion_cible || ''}
+                  onChange={(e) => {
+                    if (onArbitrage) {
+                      onArbitrage(a.id ?? a.uid, res?.statut || a.statut || 'Discussion commune', e.target.value || null)
+                    }
+                  }}
+                  className="h-8 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#12131A] px-2 py-1 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-[#D91227]"
+                >
+                  <option value="">Aucune cible spécifique</option>
+                  {concurrentsTries.map((c) => (
+                    <option key={c.id ?? c.uid} value={c.numero || c.id}>
+                      N° {c.numero || c.id} ({c.article})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
         </section>
 
         {a.texte_loi_reference && (

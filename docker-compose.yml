@@ -1,0 +1,32 @@
+services:
+  bourbon-ia:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bourbon-ia-server
+    ports:
+      - "8000:8000"
+    environment:
+      - BOURBON_TEXTES_DISTANTS=0
+      - BOURBON_MAX_AMENDEMENTS=25000
+      - BOURBON_RAG_DB_PATH=/app/data/bourbon_rag.db
+      - OLLAMA_URL=http://ollama:11434/api/generate
+      - OLLAMA_MODEL=mistral
+      - BOURBON_EMBEDDING_ENDPOINT=http://ollama:11434/v1
+      - BOURBON_EMBEDDING_MODEL=bge-m3
+    volumes:
+      - bourbon_data:/app/data
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: bourbon-ia-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  bourbon_data:
+  ollama_models:

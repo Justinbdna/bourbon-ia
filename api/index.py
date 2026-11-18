@@ -8,7 +8,7 @@ import html
 from typing import List, Dict, Any, Optional
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field, ConfigDict
@@ -32,8 +32,24 @@ try:
         strip_html_for_display,
         detect_gage_financier,
         calculate_priorite_appel,
+        get_article_sort_key,
     )
-    from api.schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest, RAGIngestRequest, RAGQueryRequest
+    from api.legal_chapeau_parser import (
+        parse_chapeau,
+        calculer_priorite_derouleur,
+        auditer_recevabilite_art40,
+        detecter_dispositions_non_normatives,
+    )
+    from api.export_rtf import generer_prejaune_rtf
+    from api.services.deterministic_classifier import classer_par_regles
+    from api.schemas import (
+        EnrichedAmendment,
+        StatutMecanique,
+        SurtranspositionRequest,
+        RAGIngestRequest,
+        RAGQueryRequest,
+        MAX_AMENDEMENTS_LIMIT,
+    )
     from api.llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
     from api.cache_manager import get_cached_classification, save_classification
     from api.deputes_resolver import resolve_signataires, MAPPING_ORGANES_XVII, get_depute_info
@@ -51,8 +67,24 @@ except ModuleNotFoundError:
         strip_html_for_display,
         detect_gage_financier,
         calculate_priorite_appel,
+        get_article_sort_key,
     )
-    from schemas import EnrichedAmendment, StatutMecanique, SurtranspositionRequest, RAGIngestRequest, RAGQueryRequest
+    from legal_chapeau_parser import (
+        parse_chapeau,
+        calculer_priorite_derouleur,
+        auditer_recevabilite_art40,
+        detecter_dispositions_non_normatives,
+    )
+    from export_rtf import generer_prejaune_rtf
+    from services.deterministic_classifier import classer_par_regles
+    from schemas import (
+        EnrichedAmendment,
+        StatutMecanique,
+        SurtranspositionRequest,
+        RAGIngestRequest,
+        RAGQueryRequest,
+        MAX_AMENDEMENTS_LIMIT,
+    )
     from llm_semantic_engine import evaluate_similitude, validate_endpoint_url, sanitize_log_message, resumer_amendement
     from cache_manager import get_cached_classification, save_classification
     try:
@@ -205,7 +237,7 @@ app.add_middleware(ReseauPriveAutorise)
 
 class AnalyzeRequest(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
-    amendements: list = Field(..., max_length=2000)
+    amendements: list = Field(..., max_length=MAX_AMENDEMENTS_LIMIT)
     model: str = "mac_mistral"
     provider: str = "groq"
     api_key: Optional[str] = None
@@ -239,11 +271,27 @@ def _enrichir_a_import(resultat: dict, source: dict, signataires=None) -> dict:
             if resultat.get(champ):
                 resultat[champ] = strip_html_for_display(resultat[champ])
 
-        # ── Détection de gage financier au titre de l'Art. 40 ──
-        resultat["est_gage"] = detect_gage_financier(
-            resultat.get("dispositif", "") or source.get("dispositif", ""),
+        # ── Détection de gage financier et audit recevabilité Art. 40 ──
+        disp_texte = resultat.get("dispositif", "") or source.get("dispositif", "")
+        audit_40 = auditer_recevabilite_art40(disp_texte, source)
+        resultat["alerte_recevabilite_art40"] = bool(audit_40["alerte_recevabilite_art40"])
+        resultat["motif_art40"] = audit_40["motif_art40"]
+        resultat["gage_detecte"] = audit_40["gage_detecte"]
+        resultat["est_gage"] = bool(audit_40["gage_detecte"]) or detect_gage_financier(
+            disp_texte,
             source,
         )
+
+        # ── Analyse syntaxique du chapeau et priorité au dérouleur ──
+        chapeau_info = parse_chapeau(disp_texte)
+        resultat["verbe_action"] = chapeau_info.verbe_action or None
+        resultat["cible_type"] = chapeau_info.cible_type or None
+        resultat["alinea_num"] = chapeau_info.alinea_num
+        resultat["rang_phrase"] = chapeau_info.rang_phrase
+        resultat["occurrence_mots"] = chapeau_info.occurrence_mots
+        resultat["priorite_derouleur"] = calculer_priorite_derouleur(resultat)[0]
+        resultat["alerte_non_normatif"] = bool(chapeau_info.alerte_non_normatif)
+        resultat["motif_non_normatif"] = chapeau_info.motif_non_normatif
 
         # ── Groupe politique et rôle (référentiel local des députés) ──
         auteur_block = signataires.get("auteur", {}) if isinstance(signataires, dict) else {}
@@ -626,7 +674,7 @@ def health():
 class V2AnalyzeRequest(BaseModel):
     """Payload d'entrée pour le pipeline V2."""
     model_config = ConfigDict(use_enum_values=True)
-    amendements: list = Field(..., max_length=2000)
+    amendements: list = Field(..., max_length=MAX_AMENDEMENTS_LIMIT)
     model: str = "local-model"
     llm_endpoint: Optional[str] = None
     base_url: str = "http://localhost:1234/v1" # rétrocompatibilité V1
@@ -840,7 +888,9 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
     elif isinstance(p_ref, str) and p_ref.strip() and p_ref.lower() not in ("none", "null", "false"):
         amendement_parent_ref = p_ref.strip()
 
-    est_gage = detect_gage_financier(dispositif_raw, raw)
+    audit_40 = auditer_recevabilite_art40(dispositif_raw, raw)
+    est_gage = bool(audit_40["gage_detecte"]) or detect_gage_financier(dispositif_raw, raw)
+    chapeau_info = parse_chapeau(dispositif_raw or "")
 
     role = "Gouvernement" if is_gouvernement else ("Rapporteur" if is_rapporteur else "Député")
 
@@ -883,6 +933,16 @@ def _build_enriched(raw: dict, index: int) -> EnrichedAmendment:
         role=role,
         amendement_parent_ref=amendement_parent_ref,
         est_gage=est_gage,
+        alerte_recevabilite_art40=bool(audit_40["alerte_recevabilite_art40"]),
+        motif_art40=audit_40["motif_art40"],
+        gage_detecte=audit_40["gage_detecte"],
+        verbe_action=chapeau_info.verbe_action or None,
+        cible_type=chapeau_info.cible_type or None,
+        alinea_num=chapeau_info.alinea_num,
+        rang_phrase=chapeau_info.rang_phrase,
+        occurrence_mots=chapeau_info.occurrence_mots,
+        alerte_non_normatif=bool(chapeau_info.alerte_non_normatif),
+        motif_non_normatif=chapeau_info.motif_non_normatif,
         # ── Commission + corrélation thématique (résolu hors-ligne) ──
         **_resoudre_commission(am, dispositif_raw, expose),
         raw_dict=raw,
@@ -938,8 +998,19 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         "isIdentical": amend.est_identique_officiel,
         "discussionId": amend.id_discussion_identique,
 
-        # ── Gage financier (Art. 40) et sous-amendements ──
+        # ── Gage financier (Art. 40), chapeau et sous-amendements ──
         "est_gage": amend.est_gage,
+        "alerte_recevabilite_art40": amend.alerte_recevabilite_art40,
+        "motif_art40": amend.motif_art40,
+        "gage_detecte": amend.gage_detecte,
+        "verbe_action": amend.verbe_action,
+        "cible_type": amend.cible_type,
+        "alinea_num": amend.alinea_num,
+        "rang_phrase": amend.rang_phrase,
+        "occurrence_mots": amend.occurrence_mots,
+        "priorite_derouleur": amend.priorite_derouleur,
+        "alerte_non_normatif": amend.alerte_non_normatif,
+        "motif_non_normatif": amend.motif_non_normatif,
         "amendement_parent_ref": amend.amendement_parent_ref,
         "amendementParentRef": amend.amendement_parent_ref,
 
@@ -963,6 +1034,7 @@ def _to_frontend(amend: EnrichedAmendment, llm_result: Optional[dict] = None) ->
         "parent_suppression_id": getattr(amend, "parent_suppression_id", None),
         "parent_suppression_numero": getattr(amend, "parent_suppression_numero", None),
         "tombe_si_adoption": getattr(amend, "tombe_si_adoption", False),
+        "tombe_si_adoption_de": getattr(amend, "tombe_si_adoption_de", []),
         "alerte_tombant": getattr(amend, "alerte_tombant", None),
 
         # ── Cavalier législatif (Article 45 de la Constitution) ──
@@ -1742,3 +1814,303 @@ async def v2_rag_query(payload: RAGQueryRequest):
     except Exception as exc:
         logging.error(f"❌ Erreur /api/v2/rag/query : {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ROUTES V2 — Export Préjaune RTF & Moteur Déterministe Pur (/api/v2/classer-regles)
+# ══════════════════════════════════════════════════════════════════════════
+
+_LAST_SESSION_AMENDMENTS: list[dict] = []
+
+_DEFAULT_PREJAUNE_AMENDMENTS: list[dict] = [
+    {
+        "id": "AM-101",
+        "numero": "101",
+        "article": "Article 1er",
+        "auteurs": ["M. Jean Dupont"],
+        "groupe_politique": "EPR",
+        "dispositif": "Supprimer cet article.",
+        "expose_sommaire": "Amendement de suppression de l'article 1er.",
+    },
+    {
+        "id": "AM-102",
+        "numero": "102",
+        "article": "Article 1er",
+        "auteurs": ["Mme Marie Martin"],
+        "groupe_politique": "LFI-NFP",
+        "dispositif": "Supprimer cet article.",
+        "expose_sommaire": "Amendement identique de suppression de l'article 1er.",
+    },
+    {
+        "id": "AM-103",
+        "numero": "103",
+        "article": "Article 1er",
+        "auteurs": ["M. Pierre Durand"],
+        "groupe_politique": "DR",
+        "dispositif": "À l'alinéa 3, substituer au montant : « 10 000 € » le montant : « 25 000 € ».",
+        "expose_sommaire": "Relèvement du plafond prévu à l'alinéa 3.",
+    },
+]
+
+
+@app.get("/api/v2/export-prejaune")
+@app.post("/api/v2/export-prejaune")
+async def v2_export_prejaune(request: Request):
+    """Génère et renvoie le fichier RTF officiel de dérouleur de séance (`prejaune_seance.rtf`)."""
+    amendements_cibles: list[Any] = []
+    titre_texte: Optional[str] = request.query_params.get("titre")
+
+    try:
+        raw_body = await request.body()
+        if raw_body and raw_body.strip():
+            parsed_body = json.loads(raw_body.decode("utf-8"))
+            if isinstance(parsed_body, list):
+                amendements_cibles = parsed_body
+            elif isinstance(parsed_body, dict):
+                amendements_cibles = parsed_body.get("amendements") or []
+                titre_texte = titre_texte or parsed_body.get("titre")
+    except Exception:
+        pass
+
+    if not amendements_cibles and request.query_params.get("amendements"):
+        try:
+            q_parsed = json.loads(request.query_params["amendements"])
+            if isinstance(q_parsed, list):
+                amendements_cibles = q_parsed
+        except Exception:
+            pass
+
+    if not amendements_cibles:
+        amendements_cibles = _LAST_SESSION_AMENDMENTS if _LAST_SESSION_AMENDMENTS else _DEFAULT_PREJAUNE_AMENDMENTS
+
+    rtf_content = generer_prejaune_rtf(amendements_cibles, titre_texte=titre_texte)
+    return Response(
+        content=rtf_content,
+        media_type="application/rtf",
+        headers={
+            "Content-Disposition": 'attachment; filename="prejaune_seance.rtf"',
+        },
+    )
+
+
+@app.post("/api/v2/classer-regles")
+async def v2_classer_regles(request: Request):
+    """
+    Moteur déterministe légistique ultra-rapide (< 200 ms pour 341 amendements),
+    100 % reproductible et sans appel LLM.
+    """
+    global _LAST_SESSION_AMENDMENTS
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Corps JSON invalide.")
+
+    if isinstance(body, list):
+        raw_amendements = body
+    elif isinstance(body, dict):
+        raw_amendements = body.get("amendements")
+        if not isinstance(raw_amendements, list):
+            raise HTTPException(status_code=422, detail="Le champ 'amendements' doit être une liste.")
+    else:
+        raise HTTPException(status_code=422, detail="Payload JSON attendu : {'amendements': [...]} ou liste.")
+
+    if len(raw_amendements) > MAX_AMENDEMENTS_LIMIT:
+        raise HTTPException(status_code=422, detail=f"Nombre maximal d'amendements dépassé (max {MAX_AMENDEMENTS_LIMIT}).")
+
+    result = classer_par_regles(raw_amendements)
+    _LAST_SESSION_AMENDMENTS = result.get("amendements", [])
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ROUTES V2 — Lot 3 : Règles d'Irrecevabilité (384 règles), HATVP, Debunker & Batch Jobs
+# ══════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/v2/rules/ingest")
+async def v2_rules_ingest(request: Request):
+    """Importe en masse un catalogue de règles d'irrecevabilité (JSON, CSV ou Markdown)."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Corps JSON invalide.")
+
+    try:
+        from api.services.rules_engine import get_default_rules_engine
+    except ModuleNotFoundError:
+        from services.rules_engine import get_default_rules_engine
+
+    engine = get_default_rules_engine()
+    rules_payload = body.get("rules") if isinstance(body, dict) and "rules" in body else body
+    inserted = await asyncio.to_thread(engine.ingest_rules, rules_payload)
+    return {
+        "status": "ok",
+        "inserted_rules": inserted,
+        "total_rules": engine.count_rules(),
+    }
+
+
+@app.post("/api/v2/rules/evaluate")
+async def v2_rules_evaluate(request: Request):
+    """Évalue un amendement ou une liasse contre le catalogue des 384 règles (Art. 40, Art. 45, Art. 98)."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Corps JSON invalide.")
+
+    try:
+        from api.services.rules_engine import get_default_rules_engine
+        from api.services.rag_store import get_default_rag_store
+    except ModuleNotFoundError:
+        from services.rules_engine import get_default_rules_engine
+        from services.rag_store import get_default_rag_store
+
+    engine = get_default_rules_engine()
+    rag_store = get_default_rag_store()
+    texte_loi_global = body.get("texte_loi_global") if isinstance(body, dict) else None
+
+    if isinstance(body, dict) and isinstance(body.get("amendements"), list):
+        evals = [
+            await asyncio.to_thread(engine.evaluate_amendment, am, texte_loi_global, rag_store)
+            for am in body["amendements"]
+        ]
+        return {"status": "ok", "total": len(evals), "evaluations": evals}
+
+    target_am = body.get("amendement", body) if isinstance(body, dict) else body
+    res = await asyncio.to_thread(engine.evaluate_amendment, target_am, texte_loi_global, rag_store)
+    return {"status": "ok", **res}
+
+
+@app.post("/api/v2/hatvp/ingest")
+async def v2_hatvp_ingest(request: Request):
+    """Ingère des déclarations Open Data HATVP dans la base SQLite locale."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Corps JSON invalide.")
+
+    try:
+        from api.services.hatvp_graph import get_default_hatvp_store
+    except ModuleNotFoundError:
+        from services.hatvp_graph import get_default_hatvp_store
+
+    store = get_default_hatvp_store()
+    declarations = body.get("declarations") if isinstance(body, dict) and "declarations" in body else body
+    inserted = await asyncio.to_thread(store.ingest_declarations, declarations)
+    return {
+        "status": "ok",
+        "inserted_declarations": inserted,
+        "total_declarations": store.count_declarations(),
+    }
+
+
+@app.post("/api/v2/hatvp/check-influence")
+async def v2_hatvp_check_influence(request: Request):
+    """Croise un amendement avec le graphe local des déclarations HATVP."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Corps JSON invalide.")
+
+    try:
+        from api.services.hatvp_graph import get_default_hatvp_store
+    except ModuleNotFoundError:
+        from services.hatvp_graph import get_default_hatvp_store
+
+    store = get_default_hatvp_store()
+    target_am = body.get("amendement", body) if isinstance(body, dict) else body
+    res = await asyncio.to_thread(store.check_influence, target_am)
+    return {"status": "ok", **res}
+
+
+@app.post("/api/v2/debunker/ingest")
+async def v2_debunker_ingest(request: Request):
+    """Ingère un historique de scrutins et interventions parlementaires en base SQLite locale."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Corps JSON invalide.")
+
+    try:
+        from api.services.chrono_debunker import get_default_debunker_store
+    except ModuleNotFoundError:
+        from services.chrono_debunker import get_default_debunker_store
+
+    store = get_default_debunker_store()
+    entries = body.get("entries") if isinstance(body, dict) and "entries" in body else body
+    inserted = await asyncio.to_thread(store.ingest_history, entries)
+    return {
+        "status": "ok",
+        "inserted_entries": inserted,
+        "total_entries": store.count_entries(),
+    }
+
+
+@app.post("/api/v2/debunker/check-history")
+async def v2_debunker_check_history(request: Request):
+    """Vérifie la cohérence chronologique des positions de l'auteur ou de son groupe sur le sujet."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Corps JSON invalide.")
+
+    try:
+        from api.services.chrono_debunker import get_default_debunker_store
+    except ModuleNotFoundError:
+        from services.chrono_debunker import get_default_debunker_store
+
+    store = get_default_debunker_store()
+    target_am = body.get("amendement", body) if isinstance(body, dict) else body
+    return await asyncio.to_thread(store.check_chronology, target_am)
+
+
+@app.post("/api/v2/jobs/submit")
+async def v2_jobs_submit(request: Request):
+    """Lance un job de traitement massif en lot et retourne immédiatement son `job_id`."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Corps JSON invalide.")
+
+    amendements = body.get("amendements") if isinstance(body, dict) else (body if isinstance(body, list) else [])
+    if not isinstance(amendements, list):
+        raise HTTPException(status_code=422, detail="Le champ 'amendements' doit être une liste.")
+    if len(amendements) > MAX_AMENDEMENTS_LIMIT:
+        raise HTTPException(status_code=422, detail=f"Nombre maximal d'amendements dépassé ({MAX_AMENDEMENTS_LIMIT}).")
+
+    texte_loi_global = body.get("texte_loi_global") if isinstance(body, dict) else None
+    evaluer_regles = bool(body.get("evaluer_regles", True)) if isinstance(body, dict) else True
+    run_async = bool(body.get("run_async", False)) if isinstance(body, dict) else False
+
+    try:
+        from api.services.batch_job_queue import get_default_job_manager
+    except ModuleNotFoundError:
+        from services.batch_job_queue import get_default_job_manager
+
+    manager = get_default_job_manager()
+    job_id = manager.submit_job(
+        amendements=amendements,
+        texte_loi_global=texte_loi_global,
+        evaluer_regles=evaluer_regles,
+        run_async=run_async,
+    )
+    job_info = manager.get_job(job_id) or {"job_id": job_id, "status": "pending"}
+    return {
+        "job_id": job_id,
+        "status": job_info.get("status", "pending"),
+        "total_count": job_info.get("total_count", len(amendements)),
+    }
+
+
+@app.get("/api/v2/jobs/{job_id}")
+async def v2_jobs_status(job_id: str):
+    """Retourne l'état d'avancement et les résultats d'un job batch."""
+    try:
+        from api.services.batch_job_queue import get_default_job_manager
+    except ModuleNotFoundError:
+        from services.batch_job_queue import get_default_job_manager
+
+    manager = get_default_job_manager()
+    job = manager.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job introuvable : {job_id}")
+    return job

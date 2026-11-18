@@ -58,11 +58,41 @@ function auteursEnListe(a) {
   return a.auteurs ? [String(a.auteurs)] : []
 }
 
-function formaterArticle(art) {
+export function formaterArticle(art) {
   if (!art) return '—'
   const texte = String(art).trim()
   if (/^article\s+premier$/i.test(texte) || /^premier$/i.test(texte)) return '1er'
   return texte.replace(/^article\s+/i, '')
+}
+
+export function filtrerAmendements(amendments = [], filtre = {}) {
+  const auteurCherche = normaliser(filtre.auteur)
+  const articleCherche = normaliser(filtre.article)
+  const groupeCherche = normaliser(filtre.groupe)
+
+  return amendments.filter((a) => {
+    if (filtre.motCle && !(a.commission_mots_cles || []).includes(filtre.motCle)) return false
+    if (auteurCherche && !normaliser(auteursEnListe(a).join(', ')).includes(auteurCherche)) return false
+    if (articleCherche) {
+      const artNorm = normaliser(a.article)
+      const artFormate = normaliser(formaterArticle(a.article))
+      const chercheSansPrefixe = articleCherche.replace(/^article\s+/i, '').trim()
+      const chercheUnifie = chercheSansPrefixe === 'premier' ? '1er' : chercheSansPrefixe
+      if (
+        artNorm !== articleCherche &&
+        artFormate !== articleCherche &&
+        artFormate !== chercheUnifie &&
+        !artNorm.includes(chercheSansPrefixe)
+      ) {
+        return false
+      }
+    }
+    if (groupeCherche) {
+      const grpAmd = normaliser(a.groupe_politique || a.groupe || a.groupRef || '')
+      if (grpAmd !== groupeCherche && !grpAmd.includes(groupeCherche)) return false
+    }
+    return true
+  })
 }
 
 export default function AmendmentTable({ amendments, source, selectedId, onSelect, onReorder, onDelete, onDeleteDoublons, onArbitrage, isClassifying, onExportJson }) {
@@ -370,12 +400,12 @@ export default function AmendmentTable({ amendments, source, selectedId, onSelec
                             : (a.point_impact?.type || '')
                         }
                       />
-                      {a.alerte_tombant && (
+                      {(a.alerte_tombant || (Array.isArray(a.tombe_si_adoption_de) && a.tombe_si_adoption_de.length > 0)) && (
                         <span
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800 shadow-xs"
-                          title={`Cet amendement devient sans objet (tombe) si l'amendement ${a.parent_suppression_numero || 'de suppression'} est adopté.`}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800 shadow-xs"
+                          title={`Cet amendement devient sans objet (tombe) si l'amendement ${Array.isArray(a.tombe_si_adoption_de) && a.tombe_si_adoption_de.length > 0 ? a.tombe_si_adoption_de.join(', ') : (a.parent_suppression_numero || 'de suppression')} est adopté.`}
                         >
-                          <span aria-hidden="true">⚠️</span> {a.alerte_tombant}
+                          <span aria-hidden="true">⚠️</span> {a.alerte_tombant || `Tombe si adoption de ${(a.tombe_si_adoption_de || []).join(', ')}`}
                         </span>
                       )}
                       {a.est_cavalier_art45 && (
@@ -465,12 +495,12 @@ export default function AmendmentTable({ amendments, source, selectedId, onSelec
                       </div>
 
                       {/* Pastille Arbitré manuellement */}
-                      {a.arbitre_manuellement && (
+                      {(a.arbitrage_manuel || a.arbitre_manuellement) && (
                         <span
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 shadow-xs"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 shadow-xs"
                           title="Statut arbitré manuellement par l'administrateur"
                         >
-                          <span>✍️</span> Arbitré
+                          <span>✍️</span> Arbitré manuellement
                         </span>
                       )}
                     </div>
