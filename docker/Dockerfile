@@ -29,7 +29,6 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY api ./api
-COPY mcp_server.py ./mcp_server.py
 COPY --from=frontend-builder /app/frontend/dist ./dist
 
 RUN mkdir -p /app/data

@@ -19,7 +19,7 @@
 
 Utilisez l'un des canaux privés suivants :
 - **GitHub Security Advisories (recommandé)** : [Créer un avis de sécurité privé](https://github.com/Justinbdna/bourbon-ia/security/advisories/new)
-- **Contenu souhaité** : description de la faille, composant ou endpoint concerné (`api/`, `mcp_server.py`, `src/`), scénario de reproduction et impact potentiel.
+- **Contenu souhaité** : description de la faille, composant ou endpoint concerné (`api/`, `api/mcp_server.py`, `src/`), scénario de reproduction et impact potentiel.
 
 Nous nous engageons à :
 - Accuser réception sous **48 heures ouvrées**.
@@ -72,4 +72,4 @@ La fonction `validate_endpoint_url()` contrôle tout endpoint personnalisé four
 
 - Laissez `BOURBON_TEXTES_DISTANTS=0` et `VITE_AI_PROVIDER_DEFAUT=local` en production interne.
 - Ne commitez jamais de fichier `.env` ou de base `.db` contenant des amendements non publiés (`.gitignore` exclut déjà `.env*` et `*.db`).
-- Préférez le déploiement conteneurisé via `docker-compose.yml` sur un réseau isolé sans passerelle Internet sortante pour l'analyse de liasses confidentielles.
+- Préférez le déploiement conteneurisé via `docker/docker-compose.yml` sur un réseau isolé sans passerelle Internet sortante pour l'analyse de liasses confidentielles.

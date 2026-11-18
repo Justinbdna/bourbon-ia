@@ -1,6 +1,6 @@
 """
-mcp_server.py — Serveur Model Context Protocol (MCP) 100 % Local & Souverain pour Bourbon.IA
-=============================================================================================
+api/mcp_server.py — Serveur Model Context Protocol (MCP) 100 % Local & Souverain pour Bourbon.IA
+=================================================================================================
 Permet à tout client MCP local (Antigravity, Claude Desktop, IDE) de piloter Bourbon.IA
 sans passer par le navigateur ni exposer de données vers des services Cloud externes.
 
@@ -22,7 +22,12 @@ import inspect
 import json
 import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Callable, Optional
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from api.deterministic_engine import process_deterministic_sorting, qualify_irrecevabilite
 from api.index import _build_enriched, _inject_textes_reference, _to_frontend

@@ -3,11 +3,15 @@ updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
       day: "monday"
       time: "08:00"
       timezone: "Europe/Paris"
     open-pull-requests-limit: 5
+    groups:
+      all-pip-dependencies:
+        patterns:
+          - "*"
     commit-message:
       prefix: "chore(deps)"
     labels:
@@ -18,11 +22,15 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
       day: "monday"
       time: "08:00"
       timezone: "Europe/Paris"
     open-pull-requests-limit: 5
+    groups:
+      all-npm-dependencies:
+        patterns:
+          - "*"
     commit-message:
       prefix: "chore(deps)"
     labels:

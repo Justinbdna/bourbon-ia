@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import mcp_server
+import api.mcp_server as mcp_server
 from api.index import app
 from api.services.chrono_debunker import ChronoDebunkerStore
 from api.services.deterministic_classifier import classer_par_regles

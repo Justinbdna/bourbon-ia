@@ -1,5 +1,5 @@
 """
-tests/test_mcp_server.py — Tests unitaires du Serveur MCP Souverain (`mcp_server.py`)
+tests/test_mcp_server.py — Tests unitaires du Serveur MCP Souverain (`api/mcp_server.py`)
 =====================================================================================
 Vérifie :
   1. L'enregistrement des 4 outils MCP (`classer_liasse_mecanique`, `inspecter_amendement`,
@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-import mcp_server
+import api.mcp_server as mcp_server
 from api.services.rag_store import STRICT_NO_SOURCE_MESSAGE, PersistentRAGStore
 
 LIASSE_EXEMPLE = [

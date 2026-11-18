@@ -1,8 +1,8 @@
 services:
   bourbon-ia:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: bourbon-ia-server
     ports:
       - "8000:8000"
